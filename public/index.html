@@ -32,6 +32,15 @@
   <button onclick="finishSetup()">Finish Setup</button>
 </div>
 
+<div id="dailyPlanner" style="margin-bottom:20px;">
+  <h2>Morning Planner</h2>
+  Hours Available Today:
+  <input type="number" id="dailyHours">
+  <button onclick="generatePlan()">Generate Plan</button>
+
+  <div id="planOutput" style="margin-top:15px;"></div>
+</div>
+ 
 <div id="statusSection" style="display:none;">
   <h2>Subjects Overview</h2>
   <div id="subjectsContainer"></div>
