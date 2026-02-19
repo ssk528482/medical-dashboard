@@ -265,4 +265,5 @@ document.addEventListener("DOMContentLoaded", function () {
   renderSavedPlan();
 }
     populateAllEveningSelectors();
+    renderHeatmap();
 });
