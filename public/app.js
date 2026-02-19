@@ -200,6 +200,5 @@ document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
     renderSubjects();
   }
-    populateEveningSelectors();
     populateAllEveningSelectors();
 });
