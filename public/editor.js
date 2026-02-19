@@ -3,7 +3,14 @@ function renderEditor() {
   container.innerHTML = "";
 
   Object.keys(studyData.subjects).forEach(subjectName => {
-    let subject = studyData.subjects[subjectName];
+  div.innerHTML = `
+    <div class="subject-header">
+      <strong>${subjectName}</strong>
+      <button class="delete-btn" onclick="deleteSubject('${subjectName}')">
+        Delete
+      </button>
+    </div>
+  `;
 
     let div = document.createElement("div");
     div.className = "subject-card";
