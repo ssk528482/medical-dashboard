@@ -1,0 +1,39 @@
+const SUPABASE_URL = "https://alrkpctsjmvspybrgdfy.supabase.co
+SUPABASE_PUBLISHABLE_DEFAULT_KEY=sb_publishable_L5clOqOK5zDXk_D1AK86uA_bDWGGlO5";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFscmtwY3Rzam12c3B5YnJnZGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjAxODcsImV4cCI6MjA4NzA5NjE4N30.TLSmuCaKCnZ99QUcwL9w7yUGJHrMMj-BWXnqNG7OTwU";
+
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+async function saveToCloud() {
+
+  const user = (await supabaseClient.auth.getUser()).data.user;
+  if (!user) return;
+
+  await supabaseClient
+    .from("study_data")
+    .upsert({
+      user_id: user.id,
+      data: studyData,
+      updated_at: new Date().toISOString()
+    });
+}
+
+async function loadFromCloud() {
+
+  const user = (await supabaseClient.auth.getUser()).data.user;
+  if (!user) return;
+
+  const { data } = await supabaseClient
+    .from("study_data")
+    .select("data")
+    .eq("user_id", user.id)
+    .single();
+
+  if (data && data.data) {
+    studyData = data.data;
+    localStorage.setItem("studyData", JSON.stringify(studyData));
+  }
+}
