@@ -6,6 +6,8 @@ function renderEditor() {
     let subject = studyData.subjects[subjectName];
 
     let div = document.createElement("div");
+    div.className = "subject-card";
+
     div.style.border = "1px solid #ccc";
     div.style.padding = "10px";
     div.style.marginBottom = "15px";
