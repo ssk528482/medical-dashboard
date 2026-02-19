@@ -1,269 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Medical Exam Command Center</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body { font-family: Arial; background:#f4f6f9; padding:20px; transition:.3s;}
-.dark { background:#111; color:white;}
-.card { background:white; padding:20px; border-radius:12px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
-.dark .card { background:#1c1c1c;}
-input,select { padding:5px; margin:3px;}
-button { padding:6px 12px; border:none; border-radius:8px; cursor:pointer;}
-.grid { display:grid; gap:15px;}
-.two { grid-template-columns:repeat(auto-fit,minmax(300px,1fr));}
-h1 { margin-bottom:25px;}
-.progress { height:10px; background:#ddd; border-radius:5px;}
-.bar { height:10px; background:#3b82f6; border-radius:5px;}
-</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Study OS</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<h1>Medical Exam Command Center</h1>
+<h1>Medical Study OS</h1>
 
-<div class="grid two">
+<div id="setupSection">
+  <h2>Initial Setup</h2>
+  <p>Add subjects and topics (one subject at a time)</p>
 
-<div class="card">
-<h3>Exam Countdown</h3>
-<p id="countdown"></p>
+  <input id="subjectName" placeholder="Subject Name">
+  
+  <select id="subjectSize">
+    <option value="large">Large</option>
+    <option value="medium">Medium</option>
+    <option value="small">Small</option>
+  </select>
+
+  <br><br>
+
+  <textarea id="topicsInput" rows="8" cols="50"
+    placeholder="Paste topics here (one per line)"></textarea>
+
+  <br><br>
+
+  <button onclick="addSubject()">Add Subject</button>
+  <button onclick="finishSetup()">Finish Setup</button>
 </div>
 
-<div class="card">
-<h3>Overall Phase Completion</h3>
-<div class="progress"><div id="phaseBar" class="bar"></div></div>
-<p id="phasePercent"></p>
+<div id="statusSection" style="display:none;">
+  <h2>Setup Complete</h2>
+  <p id="summary"></p>
 </div>
 
-</div>
-
-<div class="card">
-<h3>Qbank Entry</h3>
-Subject:
-<select id="subjectSelect"></select><br>
-Total Questions: <input type="number" id="total"><br>
-Correct Answers: <input type="number" id="correct"><br>
-<button onclick="updateQbank()">Update</button>
-<p id="accuracyDisplay"></p>
-</div>
-
-<div class="grid two">
-
-<div class="card">
-<h3>Revision Phases</h3>
-<div id="revisionSection"></div>
-</div>
-
-<div class="card">
-<h3>Weak Zone Priority (Auto)</h3>
-<ul id="weakList"></ul>
-</div>
-
-</div>
-
-<div class="card">
-<h3>Smart Weekly Auto-Scheduler</h3>
-<ul id="schedule"></ul>
-</div>
-
-<div class="grid two">
-
-<div class="card">
-<h3>Accuracy Chart</h3>
-<canvas id="accChart"></canvas>
-</div>
-
-<div class="card">
-<h3>Retention Trend</h3>
-Retention %: <input type="number" id="retInput">
-<button onclick="addRetention()">Add</button>
-<canvas id="retChart"></canvas>
-</div>
-
-</div>
-
-<button onclick="toggleDark()">Toggle Dark Mode</button>
-
-<script>
-
-// SUBJECT CLASSIFICATION
-const subjects = {
-Medicine:"large", Surgery:"large", Pathology:"large", Pharmacology:"large", PSM:"large",
-Microbiology:"medium", OBGYN:"medium", Pediatrics:"medium", Orthopedics:"medium",
-Anatomy:"medium", Physiology:"medium", Biochemistry:"medium",
-ENT:"small", Ophthalmology:"small", Dermatology:"small",
-Radiology:"small", Anesthesia:"small", Psychiatry:"small", "Forensic Medicine":"small"
-};
-
-// SIZE WEIGHT
-const sizeWeight = { large:10, medium:5, small:0 };
-
-let data = JSON.parse(localStorage.getItem("medData")) || {};
-
-Object.keys(subjects).forEach(s=>{
-if(!data[s]){
-data[s]={ total:0, correct:0, retention:60, p1:false, p2:false, p3:false };
-}
-});
-
-// EXAM COUNTDOWN
-const examDate = new Date("2026-12-01");
-document.getElementById("countdown").innerText =
-Math.ceil((examDate-new Date())/(1000*60*60*24))+" days remaining";
-
-// DROPDOWN
-let select=document.getElementById("subjectSelect");
-Object.keys(subjects).forEach(s=>{
-let opt=document.createElement("option");
-opt.value=s; opt.text=s;
-select.appendChild(opt);
-});
-
-// UPDATE QBANK
-function updateQbank(){
-let s=select.value;
-let total=parseInt(document.getElementById("total").value);
-let correct=parseInt(document.getElementById("correct").value);
-if(total>0){
-data[s].total+=total;
-data[s].correct+=correct;
-save();
-renderAll();
-}
-}
-
-// ACCURACY
-function accuracy(s){
-return data[s].total>0 ? (data[s].correct/data[s].total*100) : 0;
-}
-
-// PRIORITY SCORE
-function priorityScore(s){
-let acc=accuracy(s);
-let ret=data[s].retention;
-let mistakes=data[s].total-data[s].correct;
-let phaseIncomplete = (!data[s].p1||!data[s].p2||!data[s].p3)?1:0;
-return (100-acc)*0.35 +
-(100-ret)*0.25 +
-(mistakes/data[s].total||0)*20*0.20 +
-phaseIncomplete*10 +
-sizeWeight[subjects[s]];
-}
-
-// WEAK ZONES
-function renderWeak(){
-let sorted=Object.keys(data).sort((a,b)=>priorityScore(b)-priorityScore(a));
-let ul=document.getElementById("weakList");
-ul.innerHTML="";
-sorted.slice(0,5).forEach(s=>{
-let li=document.createElement("li");
-li.innerText=s+" | Score: "+priorityScore(s).toFixed(1);
-ul.appendChild(li);
-});
-}
-
-// AUTO SCHEDULE
-function renderSchedule(){
-let sorted=Object.keys(data).sort((a,b)=>priorityScore(b)-priorityScore(a));
-let ul=document.getElementById("schedule");
-ul.innerHTML="";
-sorted.slice(0,7).forEach((s,i)=>{
-let li=document.createElement("li");
-li.innerText="Day "+(i+1)+": "+s;
-ul.appendChild(li);
-});
-}
-
-// REVISION SECTION
-function renderRevision(){
-let div=document.getElementById("revisionSection");
-div.innerHTML="";
-Object.keys(data).forEach(s=>{
-let block=document.createElement("div");
-block.innerHTML=`${s}
-<label><input type="checkbox" ${data[s].p1?"checked":""} onchange="togglePhase('${s}','p1')">1</label>
-<label><input type="checkbox" ${data[s].p2?"checked":""} onchange="togglePhase('${s}','p2')">2</label>
-<label><input type="checkbox" ${data[s].p3?"checked":""} onchange="togglePhase('${s}','p3')">3</label><br>`;
-div.appendChild(block);
-});
-updatePhaseProgress();
-}
-
-function togglePhase(s,p){
-data[s][p]=!data[s][p];
-save();
-renderAll();
-}
-
-// PHASE PROGRESS
-function updatePhaseProgress(){
-let totalPhases=Object.keys(data).length*3;
-let done=0;
-Object.values(data).forEach(d=>{
-if(d.p1) done++;
-if(d.p2) done++;
-if(d.p3) done++;
-});
-let percent=(done/totalPhases*100).toFixed(1);
-document.getElementById("phaseBar").style.width=percent+"%";
-document.getElementById("phasePercent").innerText=percent+"% completed";
-}
-
-// CHARTS
-const accChart=new Chart(document.getElementById("accChart"),{
-type:"bar",
-data:{ labels:Object.keys(data), datasets:[{label:"Accuracy %",data:Object.keys(data).map(s=>accuracy(s))}]}
-});
-
-function updateChart(){
-accChart.data.datasets[0].data=Object.keys(data).map(s=>accuracy(s));
-accChart.update();
-}
-
-// RETENTION
-let retentionData=JSON.parse(localStorage.getItem("retTrend"))||[];
-
-const retChart=new Chart(document.getElementById("retChart"),{
-type:"line",
-data:{ labels:[], datasets:[{label:"Retention %",data:[]}]}
-});
-
-function addRetention(){
-let val=parseInt(document.getElementById("retInput").value);
-if(val){
-retentionData.push(val);
-localStorage.setItem("retTrend",JSON.stringify(retentionData));
-renderRetention();
-}
-}
-
-function renderRetention(){
-retChart.data.labels=retentionData.map((_,i)=>"W"+(i+1));
-retChart.data.datasets[0].data=retentionData;
-retChart.update();
-}
-
-// DARK MODE
-function toggleDark(){ document.body.classList.toggle("dark"); }
-
-// SAVE
-function save(){
-localStorage.setItem("medData",JSON.stringify(data));
-}
-
-// RENDER ALL
-function renderAll(){
-renderWeak();
-renderSchedule();
-renderRevision();
-updateChart();
-}
-
-// INIT
-renderAll();
-renderRetention();
-
-</script>
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
