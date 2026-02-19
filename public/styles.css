@@ -171,3 +171,22 @@ input, select {
   border-radius: 8px;
   padding: 4px 8px;
 }
+
+.accuracy-badge {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: white;
+}
+
+.accuracy-low { background: #ef4444; }
+.accuracy-mid { background: #eab308; }
+.accuracy-high { background: #16a34a; }
+
+.topic-qbank-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
