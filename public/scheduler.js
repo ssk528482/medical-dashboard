@@ -75,3 +75,61 @@ function generatePlan() {
   document.getElementById("planOutput").innerHTML = output;
 }
 
+function submitEvening() {
+  let subjectName = document.getElementById("eveningSubject").value;
+  let topicIndex = parseInt(document.getElementById("eveningTopic").value);
+
+  let studyCompleted = document.getElementById("studyDone").checked;
+  let qbankCompleted = document.getElementById("qbankDone").checked;
+  let revisionCompleted = document.getElementById("revisionDone").checked;
+
+  let subject = studyData.subjects[subjectName];
+  let topic = subject.topics[topicIndex];
+
+  // STUDY
+  if (studyCompleted) {
+    topic.status = "completed";
+    topic.completedOn = today();
+
+    topic.revisionDates = [
+      addDays(today(), 1),
+      addDays(today(), 3),
+      addDays(today(), 7),
+      addDays(today(), 21),
+      addDays(today(), 45)
+    ];
+
+    topic.revisionIndex = 0;
+    topic.nextRevision = topic.revisionDates[0];
+
+    fixPointer(subjectName);
+  }
+
+  // QBANK
+  if (qbankCompleted) {
+    let total = parseInt(document.getElementById("eveningTotal").value);
+    let correct = parseInt(document.getElementById("eveningCorrect").value);
+
+    if (!topic.qbankStats) {
+      topic.qbankStats = { total: 0, correct: 0 };
+    }
+
+    topic.qbankStats.total += total || 0;
+    topic.qbankStats.correct += correct || 0;
+    topic.qbankDone = true;
+  }
+
+  // REVISION
+  if (revisionCompleted && topic.nextRevision === today()) {
+    topic.revisionIndex++;
+    if (topic.revisionIndex < topic.revisionDates.length) {
+      topic.nextRevision = topic.revisionDates[topic.revisionIndex];
+    } else {
+      topic.nextRevision = null;
+    }
+  }
+
+  saveData();
+  renderSubjects();
+  alert("Evening update saved.");
+}
