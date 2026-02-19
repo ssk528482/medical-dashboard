@@ -56,48 +56,6 @@ function getRevisionsDueToday() {
   return due;
 }
 
-function submitEvening() {
-  let studyCompleted = document.getElementById("studyDone").checked;
-  let qbankCompleted = document.getElementById("qbankDone").checked;
-  let revisionCompleted = document.getElementById("revisionDone").checked;
-
-  let subjectsSorted = Object.keys(studyData.subjects).sort(
-    (a, b) => subjectPriority(b) - subjectPriority(a)
-  );
-
-  let topSubject = subjectsSorted[0];
-  let subject = studyData.subjects[topSubject];
-
-  // STUDY LOGIC
-  if (studyCompleted && subject.pointer < subject.topics.length) {
-    completeTopic(topSubject);
-  }
-
-  // QBANK LOGIC
-  if (qbankCompleted) {
-    let total = parseInt(document.getElementById("eveningTotal").value);
-    let correct = parseInt(document.getElementById("eveningCorrect").value);
-
-    if (total && total > 0) {
-      subject.qbank.total += total;
-      subject.qbank.correct += correct;
-    }
-  }
-
-  // REVISION LOGIC
-  if (revisionCompleted) {
-    let due = getRevisionsDueToday();
-    due.forEach(item => {
-      markRevisionDone(item.subjectName, item.topicIndex);
-    });
-  }
-
-  saveData();
-  renderSubjects();
-
-  alert("Evening update saved.");
-}
-
 function detectPhaseStatus(subjectName) {
   let subject = studyData.subjects[subjectName];
 
