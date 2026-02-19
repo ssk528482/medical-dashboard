@@ -139,6 +139,22 @@ function calculateConsistencyForDays(days) {
   return (totalScore / maxScore) * 100;
 }
 
+function calculateAverageDailyCompletion() {
+
+  if (!studyData.dailyHistory) return 0;
+
+  let days = Object.keys(studyData.dailyHistory).length;
+  if (days === 0) return 0;
+
+  let completedCount = 0;
+
+  Object.keys(studyData.dailyHistory).forEach(date => {
+    if (studyData.dailyHistory[date].study) completedCount++;
+  });
+
+  return completedCount / days;
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
     renderStatus();
