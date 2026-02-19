@@ -27,6 +27,16 @@ function subjectPriority(subjectName) {
 
 function generatePlan() {
 
+  if (
+    studyData.dailyPlan &&
+    studyData.dailyPlan.date === today()
+  ) {
+    renderSavedPlan();
+    document.getElementById("generateButton").disabled = true;
+    return;
+  }
+
+  
   let hours = parseFloat(document.getElementById("dailyHours").value);
   if (!hours || hours <= 0) {
     alert("Enter valid hours.");
@@ -100,9 +110,6 @@ function generatePlan() {
 }
 
 
-
-
-
 function submitEvening() {
 
   // STUDY
@@ -172,6 +179,26 @@ function submitEvening() {
   ) {
     studyData.dailyPlan.completed = true;
   }
+
+  let todayDate = today();
+  
+  if (!studyData.dailyHistory[todayDate]) {
+    studyData.dailyHistory[todayDate] = {
+      study: false,
+      qbank: false,
+      revision: false
+    };
+  }
+  
+  if (document.getElementById("studyDone").checked)
+    studyData.dailyHistory[todayDate].study = true;
+  
+  if (document.getElementById("qbankDone").checked)
+    studyData.dailyHistory[todayDate].qbank = true;
+  
+  if (revisionCheckboxes.length > 0)
+    studyData.dailyHistory[todayDate].revision = true;
+
   
   saveData();
   renderSubjects();
