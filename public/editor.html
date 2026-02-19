@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Syllabus Editor</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav style="margin-bottom:20px;">
+  <a href="index.html">Daily Planner</a> |
+  <a href="editor.html">Edit Syllabus</a> |
+  <a href="qbank.html">Qbank Tracker</a> |
+  <a href="analytics.html">Analytics</a>
+</nav>
+
+<h1>Syllabus Editor</h1>
+
+<h2>Add New Subject</h2>
+<input id="newSubjectName" placeholder="Subject Name">
+<select id="newSubjectSize">
+  <option value="large">Large</option>
+  <option value="medium">Medium</option>
+  <option value="small">Small</option>
+</select>
+<button onclick="addNewSubject()">Add Subject</button>
+
+<hr>
+
+<div id="subjectsEditorContainer"></div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="editor.js"></script>
+
+</body>
+</html>
