@@ -176,36 +176,4 @@ function renderAnalytics() {
 }
 
 
-function calculateWeeklyConsistency() {
-  return calculateConsistencyForDays(7);
-}
-
-function calculateMonthlyConsistency() {
-  return calculateConsistencyForDays(30);
-}
-
-function calculateConsistencyForDays(days) {
-
-  if (!studyData.dailyHistory) return 0;
-
-  let totalScore = 0;
-  let maxScore = days * 3;
-
-  for (let i = 0; i < days; i++) {
-    let d = new Date();
-    d.setDate(d.getDate() - i);
-    let key = d.toISOString().split("T")[0];
-
-    if (studyData.dailyHistory[key]) {
-      let entry = studyData.dailyHistory[key];
-      totalScore +=
-        (entry.study ? 1 : 0) +
-        (entry.qbank ? 1 : 0) +
-        (entry.revision ? 1 : 0);
-    }
-  }
-
-  return (totalScore / maxScore) * 100;
-}
-
 document.addEventListener("DOMContentLoaded", renderAnalytics);
