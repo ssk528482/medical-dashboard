@@ -135,10 +135,14 @@ function populateTopicSelector() {
 }
 
 function populateAllEveningSelectors() {
+
+  if (!document.getElementById("studySubject")) return;
+
   populateSelector("studySubject", "studyTopic");
   populateSelector("qbankSubject", "qbankTopic");
   renderRevisionCheckboxList();
 }
+
 
 function populateSelector(subjectId, topicId) {
   let subjectSelect = document.getElementById(subjectId);
