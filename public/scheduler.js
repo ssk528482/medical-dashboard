@@ -113,9 +113,14 @@ function generatePlan() {
 function submitEvening() {
 
   // STUDY
-  if (document.getElementById("studyDone").checked) {
-    let subjectName = document.getElementById("studySubject").value;
-    let topicIndex = parseInt(document.getElementById("studyTopic").value);
+if (document.getElementById("studyDone").checked) {
+  let subjectName = document.getElementById("studySubject").value;
+  let topicIndex = parseInt(document.getElementById("studyTopic").value);
+
+  if (
+    studyData.subjects[subjectName] &&
+    studyData.subjects[subjectName].topics[topicIndex]
+  ) {
     let topic = studyData.subjects[subjectName].topics[topicIndex];
 
     topic.status = "completed";
@@ -134,6 +139,8 @@ function submitEvening() {
 
     fixPointer(subjectName);
   }
+}
+
 
   // QBANK
   if (document.getElementById("qbankDone").checked) {
