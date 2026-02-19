@@ -1,0 +1,69 @@
+function subjectAccuracy(subject) {
+  let q = subject.qbank;
+  if (q.total === 0) return 50;
+  return (q.correct / q.total) * 100;
+}
+
+function subjectPriority(subjectName) {
+  let subject = studyData.subjects[subjectName];
+
+  let accuracy = subjectAccuracy(subject);
+  let incompleteTopics =
+    subject.topics.length - subject.topics.filter(t => t.status === "completed").length;
+
+  let overdueCount = subject.topics.filter(t =>
+    t.nextRevision && isPast(t.nextRevision)
+  ).length;
+
+  let sizeWeight = { large: 10, medium: 5, small: 0 };
+
+  return (
+    (100 - accuracy) * 0.4 +
+    incompleteTopics * 0.3 +
+    overdueCount * 5 +
+    sizeWeight[subject.size]
+  );
+}
+
+function generatePlan() {
+  let hours = parseFloat(document.getElementById("dailyHours").value);
+  if (!hours || hours <= 0) {
+    alert("Enter valid hours.");
+    return;
+  }
+
+  let revisionDue = getRevisionsDueToday();
+  let revisionLoad = revisionDue.length;
+
+  let subjectsSorted = Object.keys(studyData.subjects).sort(
+    (a, b) => subjectPriority(b) - subjectPriority(a)
+  );
+
+  let topSubject = subjectsSorted[0];
+  let subjectObj = studyData.subjects[topSubject];
+
+  let nextTopic =
+    subjectObj.pointer < subjectObj.topics.length
+      ? subjectObj.topics[subjectObj.pointer].name
+      : "All topics completed";
+
+  let studyTime, qbankTime, revisionTime;
+
+  if (revisionLoad > 5) {
+    revisionTime = hours * 0.5;
+    studyTime = hours * 0.3;
+    qbankTime = hours * 0.2;
+  } else {
+    studyTime = hours * 0.5;
+    qbankTime = hours * 0.3;
+    revisionTime = hours * 0.2;
+  }
+
+  let output = `
+    <strong>Study:</strong> ${studyTime.toFixed(1)} hrs – ${topSubject} – ${nextTopic}<br>
+    <strong>Qbank:</strong> ${qbankTime.toFixed(1)} hrs – ${topSubject}<br>
+    <strong>Revision:</strong> ${revisionTime.toFixed(1)} hrs – ${revisionLoad} topics due
+  `;
+
+  document.getElementById("planOutput").innerHTML = output;
+}
