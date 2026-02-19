@@ -8,22 +8,22 @@ function subjectPriority(subjectName) {
   let subject = studyData.subjects[subjectName];
 
   let accuracy = subjectAccuracy(subject);
-  let incompleteTopics =
-    subject.topics.length - subject.topics.filter(t => t.status === "completed").length;
+  let incomplete =
+    subject.topics.length -
+    subject.topics.filter(t => t.status === "completed").length;
 
-  let overdueCount = subject.topics.filter(t =>
-    t.nextRevision && isPast(t.nextRevision)
-  ).length;
+  let overdue = getOverdueCount(subjectName);
 
   let sizeWeight = { large: 10, medium: 5, small: 0 };
 
   return (
-    (100 - accuracy) * 0.4 +
-    incompleteTopics * 0.3 +
-    overdueCount * 5 +
+    (100 - accuracy) * 0.35 +
+    incomplete * 0.25 +
+    overdue * 10 +
     sizeWeight[subject.size]
   );
 }
+
 
 function generatePlan() {
   let hours = parseFloat(document.getElementById("dailyHours").value);
@@ -32,8 +32,7 @@ function generatePlan() {
     return;
   }
 
-  let revisionDue = getRevisionsDueToday();
-  let revisionLoad = revisionDue.length;
+  let revisionDue = getRevisionsDueToday().length;
 
   let subjectsSorted = Object.keys(studyData.subjects).sort(
     (a, b) => subjectPriority(b) - subjectPriority(a)
@@ -47,23 +46,32 @@ function generatePlan() {
       ? subjectObj.topics[subjectObj.pointer].name
       : "All topics completed";
 
-  let studyTime, qbankTime, revisionTime;
+  let daysLeft = Math.ceil(
+    (new Date("2026-12-01") - new Date()) / (1000 * 60 * 60 * 24)
+  );
 
-  if (revisionLoad > 5) {
-    revisionTime = hours * 0.5;
-    studyTime = hours * 0.3;
-    qbankTime = hours * 0.2;
-  } else {
-    studyTime = hours * 0.5;
-    qbankTime = hours * 0.3;
-    revisionTime = hours * 0.2;
+  let revisionWeight = revisionDue > 8 ? 0.6 : 0.3;
+
+  if (daysLeft < 120) revisionWeight += 0.1;
+  if (daysLeft < 60) revisionWeight += 0.1;
+
+  let studyWeight = 0.5 - (revisionWeight - 0.3);
+  let qbankWeight = 1 - studyWeight - revisionWeight;
+
+  let studyTime = hours * studyWeight;
+  let qbankTime = hours * qbankWeight;
+  let revisionTime = hours * revisionWeight;
+
+  if (revisionDue > 10) {
+    nextTopic = "Revision Heavy Day — No New Topic";
   }
 
   let output = `
     <strong>Study:</strong> ${studyTime.toFixed(1)} hrs – ${topSubject} – ${nextTopic}<br>
     <strong>Qbank:</strong> ${qbankTime.toFixed(1)} hrs – ${topSubject}<br>
-    <strong>Revision:</strong> ${revisionTime.toFixed(1)} hrs – ${revisionLoad} topics due
+    <strong>Revision:</strong> ${revisionTime.toFixed(1)} hrs – ${revisionDue} topics due
   `;
 
   document.getElementById("planOutput").innerHTML = output;
 }
+
