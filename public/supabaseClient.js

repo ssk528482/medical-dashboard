@@ -36,3 +36,47 @@ async function loadFromCloud() {
     localStorage.setItem("studyData", JSON.stringify(studyData));
   }
 }
+
+async function login() {
+
+  const email = document.getElementById("emailInput").value;
+
+  if (!email) {
+    alert("Enter email");
+    return;
+  }
+
+  await supabaseClient.auth.signInWithOtp({
+    email: email
+  });
+
+  alert("Check your email for login link.");
+}
+
+async function logout() {
+  await supabaseClient.auth.signOut();
+  location.reload();
+}
+
+async function checkUser() {
+
+  const { data } = await supabaseClient.auth.getUser();
+  const user = data.user;
+
+  const status = document.getElementById("authStatus");
+
+  if (user) {
+    status.innerText = "Logged in as: " + user.email;
+
+    await loadFromCloud();
+
+    renderSubjects?.();
+    renderQbank?.();
+    renderAnalytics?.();
+  } else {
+    status.innerText = "Not logged in";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", checkUser);
+
