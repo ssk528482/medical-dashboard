@@ -34,6 +34,14 @@ function generatePlan() {
 
   let revisionDue = getRevisionsDueToday().length;
 
+  if (
+    studyData.dailyPlan &&
+    studyData.dailyPlan.date !== today() &&
+    studyData.dailyPlan.completed === false
+  ) {
+    topSubject = studyData.dailyPlan.study.subject;
+  }
+  
   let subjectsSorted = Object.keys(studyData.subjects).sort(
     (a, b) => subjectPriority(b) - subjectPriority(a)
   );
@@ -156,9 +164,17 @@ function submitEvening() {
       topic.nextRevision = null;
     }
   });
-
+  if (
+    studyData.dailyPlan &&
+    studyData.dailyPlan.date === today() &&
+    document.getElementById("studyDone").checked
+  ) {
+    studyData.dailyPlan.completed = true;
+  }
+  
   saveData();
   renderSubjects();
   alert("Evening update saved.");
+
 }
 
