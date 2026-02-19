@@ -215,6 +215,47 @@ function renderRevisionCheckboxList() {
   });
 }
 
+function renderHeatmap() {
+  let container = document.getElementById("heatmapContainer");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  let last30 = [];
+
+  for (let i = 29; i >= 0; i--) {
+    let d = new Date();
+    d.setDate(d.getDate() - i);
+    last30.push(d.toISOString().split("T")[0]);
+  }
+
+  last30.forEach(date => {
+    let box = document.createElement("div");
+    box.style.width = "20px";
+    box.style.height = "20px";
+    box.style.display = "inline-block";
+    box.style.margin = "2px";
+    box.style.borderRadius = "4px";
+
+    let score = 0;
+
+    if (studyData.dailyHistory[date]) {
+      let d = studyData.dailyHistory[date];
+      score =
+        (d.study ? 1 : 0) +
+        (d.qbank ? 1 : 0) +
+        (d.revision ? 1 : 0);
+    }
+
+    if (score === 3) box.style.background = "#16a34a";
+    else if (score === 2) box.style.background = "#eab308";
+    else if (score === 1) box.style.background = "#f97316";
+    else box.style.background = "#ef4444";
+
+    container.appendChild(box);
+  });
+}
+
 
 document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
@@ -223,6 +264,6 @@ document.addEventListener("DOMContentLoaded", function () {
   if (studyData.dailyPlan && studyData.dailyPlan.date === today()) {
   renderSavedPlan();
 }
-
+    renderHeatmap();
     populateAllEveningSelectors();
 });
