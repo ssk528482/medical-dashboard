@@ -190,3 +190,14 @@ input, select {
   padding: 10px 0;
   border-bottom: 1px solid #eee;
 }
+
+.collapse-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.collapsed-content {
+  display: none;
+}
