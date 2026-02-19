@@ -98,3 +98,26 @@ function submitEvening() {
   alert("Evening update saved.");
 }
 
+function detectPhaseStatus(subjectName) {
+  let subject = studyData.subjects[subjectName];
+
+  let total = subject.topics.length;
+
+  let completed = subject.topics.filter(t => t.status === "completed").length;
+  let revisedOnce = subject.topics.filter(t => t.revisionIndex >= 1).length;
+  let revisedTwice = subject.topics.filter(t => t.revisionIndex >= 2).length;
+
+  return {
+    phase1: completed === total,
+    phase2: revisedOnce === total,
+    phase3: revisedTwice === total
+  };
+}
+
+function getOverdueCount(subjectName) {
+  let subject = studyData.subjects[subjectName];
+
+  return subject.topics.filter(t =>
+    t.nextRevision && isPast(t.nextRevision)
+  ).length;
+}
