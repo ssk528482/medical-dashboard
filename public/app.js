@@ -104,9 +104,40 @@ function calculateRetention() {
   return retention.toFixed(1);
 }
 
+function populateEveningSelectors() {
+  let subjectSelect = document.getElementById("eveningSubject");
+  subjectSelect.innerHTML = "";
+
+  Object.keys(studyData.subjects).forEach(subjectName => {
+    let opt = document.createElement("option");
+    opt.value = subjectName;
+    opt.text = subjectName;
+    subjectSelect.appendChild(opt);
+  });
+
+  subjectSelect.onchange = populateTopicSelector;
+  populateTopicSelector();
+}
+
+function populateTopicSelector() {
+  let subjectName = document.getElementById("eveningSubject").value;
+  let topicSelect = document.getElementById("eveningTopic");
+  topicSelect.innerHTML = "";
+
+  if (!subjectName) return;
+
+  studyData.subjects[subjectName].topics.forEach((topic, index) => {
+    let opt = document.createElement("option");
+    opt.value = index;
+    opt.text = topic.name;
+    topicSelect.appendChild(opt);
+  });
+}
+
 
 document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
     renderSubjects();
+    populateEveningSelectors();
   }
 });
