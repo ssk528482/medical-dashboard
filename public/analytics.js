@@ -1,4 +1,5 @@
 function renderAnalytics() {
+
   let container = document.getElementById("analyticsContainer");
   container.innerHTML = "";
 
@@ -6,10 +7,11 @@ function renderAnalytics() {
   let completedTopics = 0;
   let totalOverdue = 0;
 
-  let subjectRows = "";
+  let subjectStats = [];
   let weakTopics = [];
 
   Object.keys(studyData.subjects).forEach(subjectName => {
+
     let subject = studyData.subjects[subjectName];
 
     let subjectTotal = 0;
@@ -17,11 +19,12 @@ function renderAnalytics() {
     let overdueCount = 0;
 
     subject.topics.forEach(topic => {
+
       totalTopics++;
 
       if (topic.status === "completed") completedTopics++;
 
-      if (topic.nextRevision && isPast(topic.nextRevision)) {
+      if (topic.nextRevision && topic.nextRevision <= today()) {
         overdueCount++;
         totalOverdue++;
       }
@@ -44,34 +47,72 @@ function renderAnalytics() {
           });
         }
       }
+
     });
 
-    let subjectAccuracy =
+    let accuracy =
       subjectTotal > 0
         ? ((subjectCorrect / subjectTotal) * 100).toFixed(1)
         : 0;
 
-    let phaseStatus = detectPhaseStatus(subjectName);
+    subjectStats.push({
+      name: subjectName,
+      accuracy: parseFloat(accuracy),
+      overdue: overdueCount
+    });
 
-    subjectRows += `
-      <tr>
-        <td>${subjectName}</td>
-        <td>${subjectAccuracy}%</td>
-        <td>${overdueCount}</td>
-        <td>
-          ${phaseStatus.phase1 ? "✔" : "❌"} /
-          ${phaseStatus.phase2 ? "✔" : "❌"} /
-          ${phaseStatus.phase3 ? "✔" : "❌"}
-        </td>
-      </tr>
-    `;
   });
 
-  let completionPercent = percentage(completedTopics, totalTopics);
+  // 🔹 Completion %
+  let completionPercent =
+    totalTopics > 0
+      ? ((completedTopics / totalTopics) * 100).toFixed(1)
+      : 0;
 
+  // 🔹 Days left
+  let examDate = new Date("2026-12-01");
+  let todayDate = new Date();
+  let daysLeft = Math.ceil(
+    (examDate - todayDate) / (1000 * 60 * 60 * 24)
+  );
+
+  // 🔹 Pace calculation
+  let remainingTopics = totalTopics - completedTopics;
+  let requiredPace =
+    daysLeft > 0
+      ? (remainingTopics / daysLeft).toFixed(2)
+      : 0;
+
+  let avgDailyCompletion = calculateAverageDailyCompletion();
+  let projectedFinishDate = calculateProjectedFinishDate(
+    remainingTopics,
+    avgDailyCompletion
+  );
+
+  let riskLevel = "Low";
+  if (avgDailyCompletion < requiredPace) riskLevel = "High";
+  else if (avgDailyCompletion - requiredPace < 0.5) riskLevel = "Moderate";
+
+  // 🔹 Retention
+  let retention = calculateRetention();
+
+  // 🔹 Weakest subjects
+  subjectStats.sort((a, b) => a.accuracy - b.accuracy);
+
+  let subjectRows = subjectStats
+    .map(
+      s =>
+        `<tr>
+          <td>${s.name}</td>
+          <td>${s.accuracy}%</td>
+          <td>${s.overdue}</td>
+        </tr>`
+    )
+    .join("");
+
+  // 🔹 Weakest topics
   weakTopics.sort((a, b) => a.accuracy - b.accuracy);
-
-  let weakTopicsHTML = weakTopics
+  let weakHTML = weakTopics
     .slice(0, 5)
     .map(
       t =>
@@ -79,34 +120,70 @@ function renderAnalytics() {
     )
     .join("");
 
-  let retention = calculateRetention();
-
   container.innerHTML = `
-    <h2>Overall Progress</h2>
-    <p><strong>Completion:</strong> ${completionPercent}% (${completedTopics}/${totalTopics})</p>
-    <p><strong>Overdue Revisions:</strong> ${totalOverdue}</p>
-    <p><strong>Projected Retention:</strong> ${retention}%</p>
 
-    <hr>
+    <div class="card">
+      <div class="section-title">Command Summary</div>
+      <p><strong>Completion:</strong> ${completionPercent}%</p>
+      <p><strong>Projected Retention:</strong> ${retention}%</p>
+      <p><strong>Overdue Revisions:</strong> ${totalOverdue}</p>
+      <p><strong>Days Left:</strong> ${daysLeft}</p>
+      <p><strong>Required Pace:</strong> ${requiredPace} topics/day</p>
+      <p><strong>Your Pace:</strong> ${avgDailyCompletion.toFixed(2)} topics/day</p>
+      <p><strong>Risk Level:</strong> ${riskLevel}</p>
+      <p><strong>Projected Finish:</strong> ${projectedFinishDate}</p>
+    </div>
 
-    <h2>Subject Summary</h2>
-    <table border="1" cellpadding="5">
-      <tr>
-        <th>Subject</th>
-        <th>Accuracy</th>
-        <th>Overdue</th>
-        <th>Phases (1/2/3)</th>
-      </tr>
-      ${subjectRows}
-    </table>
+    <div class="card">
+      <div class="section-title">Subject Weakness Ranking</div>
+      <table border="1" cellpadding="5">
+        <tr>
+          <th>Subject</th>
+          <th>Accuracy</th>
+          <th>Overdue</th>
+        </tr>
+        ${subjectRows}
+      </table>
+    </div>
 
-    <hr>
+    <div class="card">
+      <div class="section-title">Top Weak Qbank Topics</div>
+      <ul>
+        ${weakHTML || "<li>No weak topics yet</li>"}
+      </ul>
+    </div>
 
-    <h2>Top Weak Qbank Topics</h2>
-    <ul>
-      ${weakTopicsHTML || "<li>No weak topics yet</li>"}
-    </ul>
   `;
+}
+
+
+// 🔹 Helper Functions
+
+function calculateAverageDailyCompletion() {
+
+  if (!studyData.dailyHistory) return 0;
+
+  let days = Object.keys(studyData.dailyHistory).length;
+  if (days === 0) return 0;
+
+  let completedCount = 0;
+
+  Object.keys(studyData.dailyHistory).forEach(date => {
+    if (studyData.dailyHistory[date].study) completedCount++;
+  });
+
+  return completedCount / days;
+}
+
+function calculateProjectedFinishDate(remainingTopics, avgDailyCompletion) {
+
+  if (avgDailyCompletion === 0) return "Insufficient data";
+
+  let daysNeeded = Math.ceil(remainingTopics / avgDailyCompletion);
+  let d = new Date();
+  d.setDate(d.getDate() + daysNeeded);
+
+  return d.toISOString().split("T")[0];
 }
 
 document.addEventListener("DOMContentLoaded", renderAnalytics);
