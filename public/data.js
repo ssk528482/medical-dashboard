@@ -1,6 +1,8 @@
 let studyData = JSON.parse(localStorage.getItem("studyData")) || {
   setupComplete: false,
-  subjects: {}
+  subjects: {},
+  dailyHistory: {}
+
 };
 
 function saveData() {
