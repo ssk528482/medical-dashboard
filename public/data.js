@@ -4,6 +4,9 @@ if (!studyData.setupComplete) studyData.setupComplete = false;
 if (!studyData.subjects) studyData.subjects = {};
 if (!studyData.dailyHistory) studyData.dailyHistory = {};
 
+if (!studyData.uiState) studyData.uiState = {};
+if (!studyData.uiState.qbankCollapsed) studyData.uiState.qbankCollapsed = {};
+
 
 function saveData() {
   localStorage.setItem("studyData", JSON.stringify(studyData));
