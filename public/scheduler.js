@@ -75,6 +75,25 @@ function generatePlan() {
   document.getElementById("planOutput").innerHTML = output;
 }
 
+studyData.dailyPlan = {
+  date: today(),
+  study: {
+    subject: topSubject,
+    topicIndex: subjectObj.pointer
+  },
+  qbank: {
+    subject: topSubject,
+    topicIndex: subjectObj.pointer
+  },
+  revisionCount: revisionDue,
+  hours: hours,
+  completed: false
+};
+
+saveData();
+
+
+
 function submitEvening() {
 
   // STUDY
