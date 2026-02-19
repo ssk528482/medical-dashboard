@@ -76,18 +76,13 @@ function generatePlan() {
 }
 
 function submitEvening() {
-  let subjectName = document.getElementById("eveningSubject").value;
-  let topicIndex = parseInt(document.getElementById("eveningTopic").value);
-
-  let studyCompleted = document.getElementById("studyDone").checked;
-  let qbankCompleted = document.getElementById("qbankDone").checked;
-  let revisionCompleted = document.getElementById("revisionDone").checked;
-
-  let subject = studyData.subjects[subjectName];
-  let topic = subject.topics[topicIndex];
 
   // STUDY
-  if (studyCompleted) {
+  if (document.getElementById("studyDone").checked) {
+    let subjectName = document.getElementById("studySubject").value;
+    let topicIndex = parseInt(document.getElementById("studyTopic").value);
+    let topic = studyData.subjects[subjectName].topics[topicIndex];
+
     topic.status = "completed";
     topic.completedOn = today();
 
@@ -106,30 +101,45 @@ function submitEvening() {
   }
 
   // QBANK
-  if (qbankCompleted) {
-    let total = parseInt(document.getElementById("eveningTotal").value);
-    let correct = parseInt(document.getElementById("eveningCorrect").value);
+  if (document.getElementById("qbankDone").checked) {
+    let subjectName = document.getElementById("qbankSubject").value;
+    let topicIndex = parseInt(document.getElementById("qbankTopic").value);
+
+    let total = parseInt(document.getElementById("qbankTotal").value) || 0;
+    let correct = parseInt(document.getElementById("qbankCorrect").value) || 0;
+
+    let topic = studyData.subjects[subjectName].topics[topicIndex];
 
     if (!topic.qbankStats) {
       topic.qbankStats = { total: 0, correct: 0 };
     }
 
-    topic.qbankStats.total += total || 0;
-    topic.qbankStats.correct += correct || 0;
+    topic.qbankStats.total += total;
+    topic.qbankStats.correct += correct;
     topic.qbankDone = true;
   }
 
-  // REVISION
-  if (revisionCompleted && topic.nextRevision === today()) {
+  // REVISION (multiple topics)
+  let revisionCheckboxes = document.querySelectorAll(
+    "#revisionCheckboxList input[type='checkbox']:checked"
+  );
+
+  revisionCheckboxes.forEach(box => {
+    let [subjectName, topicIndex] = box.value.split("|");
+    topicIndex = parseInt(topicIndex);
+
+    let topic = studyData.subjects[subjectName].topics[topicIndex];
+
     topic.revisionIndex++;
     if (topic.revisionIndex < topic.revisionDates.length) {
       topic.nextRevision = topic.revisionDates[topic.revisionIndex];
     } else {
       topic.nextRevision = null;
     }
-  }
+  });
 
   saveData();
   renderSubjects();
   alert("Evening update saved.");
 }
+
