@@ -27,6 +27,13 @@ function subjectPriority(subjectName) {
 
 function generatePlan() {
 
+  let hours = parseFloat(document.getElementById("dailyHours").value);
+  if (!hours || hours <= 0) {
+    alert("Enter valid hours.");
+    return;
+  }
+
+  // If plan already exists today → lock
   if (
     studyData.dailyPlan &&
     studyData.dailyPlan.date === today()
@@ -36,33 +43,15 @@ function generatePlan() {
     return;
   }
 
-  
-  let hours = parseFloat(document.getElementById("dailyHours").value);
-  if (!hours || hours <= 0) {
-    alert("Enter valid hours.");
-    return;
-  }
-
-  // 🔹 If today's plan already exists, reload instead of regenerating
-  if (
-    studyData.dailyPlan &&
-    studyData.dailyPlan.date === today()
-  ) {
-    renderSavedPlan();
-    return;
-  }
-
   let revisionDue = getRevisionsDueToday().length;
 
-  // 🔹 Sort subjects by priority
   let subjectsSorted = Object.keys(studyData.subjects).sort(
     (a, b) => subjectPriority(b) - subjectPriority(a)
   );
 
-  // 🔹 Declare topSubject FIRST
   let topSubject = subjectsSorted[0];
 
-  // 🔹 Carry forward unfinished plan
+  // Carry forward unfinished plan
   if (
     studyData.dailyPlan &&
     studyData.dailyPlan.date !== today() &&
@@ -90,7 +79,6 @@ function generatePlan() {
 
   document.getElementById("planOutput").innerHTML = output;
 
-  // 🔹 Save plan
   studyData.dailyPlan = {
     date: today(),
     study: {
@@ -107,8 +95,25 @@ function generatePlan() {
   };
 
   saveData();
+
+  document.getElementById("generateButton").disabled = true;
 }
 
+function resetTodayPlan() {
+
+  if (
+    studyData.dailyPlan &&
+    studyData.dailyPlan.date === today()
+  ) {
+    delete studyData.dailyPlan;
+    saveData();
+  }
+
+  document.getElementById("planOutput").innerHTML = "";
+  document.getElementById("generateButton").disabled = false;
+
+  alert("Today's plan has been reset.");
+}
 
 function submitEvening() {
 
