@@ -59,19 +59,13 @@ function finishSetup() {
 function renderStatus() {
   if (!studyData.setupComplete) return;
 
-  document.getElementById("setupSection").style.display = "none";
-  document.getElementById("statusSection").style.display = "block";
+  let setupSection = document.getElementById("setupSection");
+  let statusSection = document.getElementById("statusSection");
 
-  let totalSubjects = Object.keys(studyData.subjects).length;
-  let totalTopics = 0;
-
-  Object.values(studyData.subjects).forEach(s => {
-    totalTopics += s.topics.length;
-  });
-
-  document.getElementById("summary").innerText =
-    `Subjects: ${totalSubjects} | Total Topics: ${totalTopics}`;
+  if (setupSection) setupSection.style.display = "none";
+  if (statusSection) statusSection.style.display = "block";
 }
+
 
 document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
