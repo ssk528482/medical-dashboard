@@ -33,6 +33,16 @@ function renderSubjects() {
 
     container.appendChild(div);
   });
+  
+  // 🔵 ADD RETENTION DISPLAY HERE
+  let retentionDisplay = document.createElement("div");
+  retentionDisplay.style.marginTop = "20px";
+  retentionDisplay.innerHTML =
+    "<h3>Projected Retention: " +
+    calculateRetention() +
+    "%</h3>";
+
+  container.appendChild(retentionDisplay);
 
   renderRevisionSection();
 }
