@@ -47,7 +47,13 @@
 </div>
 
 <hr>
-<h3>Evening Check</h3>
+<h3>Evening Update</h3>
+
+Subject:
+<select id="eveningSubject"></select><br>
+
+Topic:
+<select id="eveningTopic"></select><br><br>
 
 <label>
 <input type="checkbox" id="studyDone"> Study Completed
@@ -61,13 +67,14 @@
 <input type="checkbox" id="revisionDone"> Revision Completed
 </label><br><br>
 
-Qbank Total Questions:
+Qbank Total:
 <input type="number" id="eveningTotal"><br>
 
 Qbank Correct:
 <input type="number" id="eveningCorrect"><br><br>
 
 <button onclick="submitEvening()">Submit Evening Update</button>
+
 
   
 <script src="utils.js"></script>
