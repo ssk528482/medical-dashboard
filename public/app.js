@@ -264,6 +264,5 @@ document.addEventListener("DOMContentLoaded", function () {
   if (studyData.dailyPlan && studyData.dailyPlan.date === today()) {
   renderSavedPlan();
 }
-    renderHeatmap();
     populateAllEveningSelectors();
 });
