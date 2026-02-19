@@ -14,42 +14,40 @@ function renderEditor() {
 
     let topicsHTML = "";
 
-    subject.topics.forEach((topic, index) => {
-      topicsHTML += `
-        <div style="margin-bottom:5px;">
-          ${topic.name}
-          <button onclick="deleteTopic('${subjectName}', ${index})">❌</button>
+subject.topics.forEach((topic, index) => {
 
-          <label>
-            <input type="checkbox"
-              ${topic.status === "completed" ? "checked" : ""}
-              onchange="toggleCompleted('${subjectName}', ${index})">
-            Completed
-          </label>
+  let row = document.createElement("div");
+  row.className = "topic-row";
 
-          <label>
-            <input type="checkbox"
-              ${topic.revisionIndex >= 1 ? "checked" : ""}
-              onchange="markRevised('${subjectName}', ${index}, 1)">
-            Rev1
-          </label>
+  row.innerHTML = `
+    <div class="topic-name">${index + 1}. ${topic.name}</div>
 
-          <label>
-            <input type="checkbox"
-              ${topic.revisionIndex >= 2 ? "checked" : ""}
-              onchange="markRevised('${subjectName}', ${index}, 2)">
-            Rev2
-          </label>
+    <div class="topic-actions">
+      <span class="pill ${topic.status === "completed" ? "completed" : ""}"
+        onclick="toggleComplete('${subjectName}', ${index})">
+        ✔
+      </span>
 
-          <label>
-            <input type="checkbox"
-              ${topic.qbankDone ? "checked" : ""}
-              onchange="toggleQbank('${subjectName}', ${index})">
-            Qbank
-          </label>
-        </div>
-      `;
-    });
+      <span class="pill rev"
+        onclick="markRevision('${subjectName}', ${index})">
+        Rev
+      </span>
+
+      <span class="pill qbank"
+        onclick="toggleQbank('${subjectName}', ${index})">
+        Q
+      </span>
+
+      <button class="delete-btn"
+        onclick="deleteTopic('${subjectName}', ${index})">
+        X
+      </button>
+    </div>
+  `;
+
+  div.appendChild(row);
+});
+
 
       div.innerHTML = `
         <div class="subject-header">
