@@ -21,7 +21,10 @@ function renderSubjects() {
 
     div.innerHTML = `
       <strong>${subjectName}</strong> (${subject.size})<br>
-      Progress: ${percent}% (${completedCount}/${totalTopics})<br>
+      Progress: ${percent}% (${completedCount}/${totalTopics})
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${percent}%"></div>
+      </div>
       Next Topic: ${nextTopic}<br><br>
       <button onclick="completeTopic('${subjectName}'); renderSubjects();">
         Mark Next Topic Complete
