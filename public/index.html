@@ -1,80 +1,191 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Medical Exam Command Center</title>
-  <style>
-    body { font-family: Arial; background:#f4f6f9; padding:20px; }
-    .card { background:white; padding:20px; border-radius:12px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05); }
-    button { padding:8px 14px; border:none; border-radius:8px; cursor:pointer; }
-    .dark { background:#111; color:white; }
-  </style>
+<title>Medical Exam Command Center</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { font-family: Arial; background:#f4f6f9; padding:20px; transition:0.3s; }
+.card { background:white; padding:20px; border-radius:12px; margin-bottom:20px; box-shadow:0 4px 10px rgba(0,0,0,0.05); }
+button { padding:8px 14px; border:none; border-radius:8px; cursor:pointer; margin-top:8px;}
+.dark { background:#111; color:white; }
+.dark .card { background:#1c1c1c; }
+input { padding:5px; margin:3px;}
+h1 { margin-bottom:20px;}
+</style>
 </head>
 <body>
 
 <h1>Medical Exam Command Center</h1>
 
 <div class="card">
-  <h2>Exam Countdown</h2>
-  <p id="countdown"></p>
+<h2>Exam Countdown</h2>
+<p id="countdown"></p>
 </div>
 
 <div class="card">
-  <h2>Qbank Accuracy</h2>
-  Total Questions: <input type="number" id="total"><br><br>
-  Correct Answers: <input type="number" id="correct"><br><br>
-  <button onclick="calculate()">Calculate</button>
-  <p id="accuracy"></p>
+<h2>Qbank Performance</h2>
+Subject:
+<select id="subjectSelect"></select><br>
+Total Questions: <input type="number" id="total"><br>
+Correct Answers: <input type="number" id="correct"><br>
+<button onclick="updateQbank()">Update</button>
+<p id="accuracy"></p>
+<canvas id="accuracyChart"></canvas>
 </div>
 
 <div class="card">
-  <h2>Daily Streak</h2>
-  <p id="streak">0</p>
-  <button onclick="increaseStreak()">Mark Today Complete</button>
+<h2>Daily Streak</h2>
+<p id="streak">0</p>
+<button onclick="increaseStreak()">Mark Today Complete</button>
 </div>
 
 <div class="card">
-  <h2>Smart Revision Auto-Scheduler</h2>
-  <ul id="schedule"></ul>
+<h2>Retention Tracker</h2>
+Week Retention %: <input type="number" id="retentionInput">
+<button onclick="addRetention()">Add Week</button>
+<canvas id="retentionChart"></canvas>
+</div>
+
+<div class="card">
+<h2>3-Phase Revision Tracker</h2>
+<label><input type="checkbox" id="phase1"> Phase 1</label><br>
+<label><input type="checkbox" id="phase2"> Phase 2</label><br>
+<label><input type="checkbox" id="phase3"> Phase 3</label>
+</div>
+
+<div class="card">
+<h2>Smart Weak Zone Detector</h2>
+<ul id="weakList"></ul>
+</div>
+
+<div class="card">
+<h2>Smart Weekly Auto-Scheduler</h2>
+<ul id="schedule"></ul>
+</div>
+
+<div class="card">
+<h2>Monthly Planner</h2>
+<div id="calendar"></div>
 </div>
 
 <button onclick="toggleDark()">Toggle Dark Mode</button>
 
 <script>
+const subjects = ["Anatomy","Physiology","Biochemistry","Pathology","Pharmacology","Microbiology","PSM","Medicine","Surgery","OBGYN","Pediatrics","Orthopedics","Dermatology","ENT","Ophthalmology","Anesthesia","Radiology","Psychiatry","Forensic Medicine"];
+
+let subjectData = JSON.parse(localStorage.getItem("subjectData")) || {};
+subjects.forEach(s=>{ if(!subjectData[s]) subjectData[s]=0; });
+
 const examDate = new Date("2026-12-01");
 const today = new Date();
-const daysLeft = Math.ceil((examDate - today)/(1000*60*60*24));
-document.getElementById("countdown").innerText = daysLeft + " days remaining";
+document.getElementById("countdown").innerText =
+Math.ceil((examDate - today)/(1000*60*60*24)) + " days remaining";
 
-function calculate(){
-  let total = document.getElementById("total").value;
-  let correct = document.getElementById("correct").value;
-  if(total>0){
-    let acc = (correct/total*100).toFixed(1);
-    document.getElementById("accuracy").innerText = acc + "%";
-    localStorage.setItem("accuracy", acc);
-  }
+let select = document.getElementById("subjectSelect");
+subjects.forEach(s=>{
+let option = document.createElement("option");
+option.value=s; option.text=s;
+select.appendChild(option);
+});
+
+function updateQbank(){
+let subject = select.value;
+let total = document.getElementById("total").value;
+let correct = document.getElementById("correct").value;
+if(total>0){
+let acc = (correct/total*100).toFixed(1);
+subjectData[subject]=acc;
+localStorage.setItem("subjectData",JSON.stringify(subjectData));
+document.getElementById("accuracy").innerText = "Accuracy: "+acc+"%";
+renderWeak();
+renderSchedule();
+renderChart();
+}
 }
 
 function increaseStreak(){
-  let streak = localStorage.getItem("streak") || 0;
-  streak++;
-  localStorage.setItem("streak", streak);
-  document.getElementById("streak").innerText = streak;
+let streak = localStorage.getItem("streak") || 0;
+streak++;
+localStorage.setItem("streak", streak);
+document.getElementById("streak").innerText = streak;
 }
-
 document.getElementById("streak").innerText = localStorage.getItem("streak") || 0;
 
-function toggleDark(){
-  document.body.classList.toggle("dark");
+function renderWeak(){
+let sorted = Object.entries(subjectData).sort((a,b)=>a[1]-b[1]);
+let weak = sorted.slice(0,5);
+let ul=document.getElementById("weakList");
+ul.innerHTML="";
+weak.forEach(w=>{
+let li=document.createElement("li");
+li.innerText=w[0]+" - "+w[1]+"%";
+ul.appendChild(li);
+});
 }
 
-const subjects = ["Medicine","Surgery","Pharma","Pathology","PSM","Microbiology","OBGYN"];
-let schedule = document.getElementById("schedule");
-subjects.forEach((sub,i)=>{
-  let li = document.createElement("li");
-  li.innerText = "Day " + (i+1) + ": " + sub;
-  schedule.appendChild(li);
+function renderSchedule(){
+let sorted = Object.entries(subjectData).sort((a,b)=>a[1]-b[1]);
+let ul=document.getElementById("schedule");
+ul.innerHTML="";
+sorted.slice(0,7).forEach((s,i)=>{
+let li=document.createElement("li");
+li.innerText="Day "+(i+1)+": "+s[0];
+ul.appendChild(li);
 });
+}
+
+let retentionData = JSON.parse(localStorage.getItem("retentionData")) || [];
+function addRetention(){
+let val=document.getElementById("retentionInput").value;
+if(val){
+retentionData.push(val);
+localStorage.setItem("retentionData",JSON.stringify(retentionData));
+renderRetention();
+}
+}
+
+function renderRetention(){
+retChart.data.labels = retentionData.map((_,i)=>"W"+(i+1));
+retChart.data.datasets[0].data = retentionData;
+retChart.update();
+}
+
+const accChart = new Chart(document.getElementById("accuracyChart"), {
+type: "bar",
+data: { labels: subjects, datasets: [{ label:"Accuracy %", data: Object.values(subjectData) }] }
+});
+
+function renderChart(){
+accChart.data.datasets[0].data = Object.values(subjectData);
+accChart.update();
+}
+
+const retChart = new Chart(document.getElementById("retentionChart"), {
+type: "line",
+data: { labels: [], datasets: [{ label:"Retention %", data: [] }] }
+});
+
+renderWeak();
+renderSchedule();
+renderRetention();
+renderChart();
+
+function toggleDark(){
+document.body.classList.toggle("dark");
+}
+
+let cal=document.getElementById("calendar");
+for(let i=1;i<=30;i++){
+let span=document.createElement("span");
+span.innerText=i;
+span.style.padding="6px";
+span.style.display="inline-block";
+span.style.margin="2px";
+span.style.border="1px solid gray";
+span.onclick=function(){ span.style.background="lightgreen"; }
+cal.appendChild(span);
+}
 </script>
 
 </body>
