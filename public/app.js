@@ -180,6 +180,23 @@ function populateTopicDropdown(subjectId, topicId) {
   });
 }
 
+function renderSavedPlan() {
+  let plan = studyData.dailyPlan;
+
+  let subjectObj = studyData.subjects[plan.study.subject];
+  let topicName = subjectObj.topics[plan.study.topicIndex]
+    ? subjectObj.topics[plan.study.topicIndex].name
+    : "Completed";
+
+  let output = `
+    <strong>Study:</strong> ${plan.study.subject} - ${topicName}<br>
+    <strong>Qbank:</strong> ${plan.qbank.subject}<br>
+    <strong>Revision:</strong> ${plan.revisionCount} topics
+  `;
+
+  document.getElementById("planOutput").innerHTML = output;
+}
+
 function renderRevisionCheckboxList() {
   let container = document.getElementById("revisionCheckboxList");
   container.innerHTML = "";
