@@ -26,14 +26,33 @@ function subjectPriority(subjectName) {
 
 
 function generatePlan() {
+
   let hours = parseFloat(document.getElementById("dailyHours").value);
   if (!hours || hours <= 0) {
     alert("Enter valid hours.");
     return;
   }
 
+  // 🔹 If today's plan already exists, reload instead of regenerating
+  if (
+    studyData.dailyPlan &&
+    studyData.dailyPlan.date === today()
+  ) {
+    renderSavedPlan();
+    return;
+  }
+
   let revisionDue = getRevisionsDueToday().length;
 
+  // 🔹 Sort subjects by priority
+  let subjectsSorted = Object.keys(studyData.subjects).sort(
+    (a, b) => subjectPriority(b) - subjectPriority(a)
+  );
+
+  // 🔹 Declare topSubject FIRST
+  let topSubject = subjectsSorted[0];
+
+  // 🔹 Carry forward unfinished plan
   if (
     studyData.dailyPlan &&
     studyData.dailyPlan.date !== today() &&
@@ -41,12 +60,7 @@ function generatePlan() {
   ) {
     topSubject = studyData.dailyPlan.study.subject;
   }
-  
-  let subjectsSorted = Object.keys(studyData.subjects).sort(
-    (a, b) => subjectPriority(b) - subjectPriority(a)
-  );
 
-  let topSubject = subjectsSorted[0];
   let subjectObj = studyData.subjects[topSubject];
 
   let nextTopic =
@@ -54,33 +68,35 @@ function generatePlan() {
       ? subjectObj.topics[subjectObj.pointer].name
       : "All topics completed";
 
-  let daysLeft = Math.ceil(
-    (new Date("2026-12-01") - new Date()) / (1000 * 60 * 60 * 24)
-  );
-
-  let revisionWeight = revisionDue > 8 ? 0.6 : 0.3;
-
-  if (daysLeft < 120) revisionWeight += 0.1;
-  if (daysLeft < 60) revisionWeight += 0.1;
-
-  let studyWeight = 0.5 - (revisionWeight - 0.3);
-  let qbankWeight = 1 - studyWeight - revisionWeight;
-
-  let studyTime = hours * studyWeight;
-  let qbankTime = hours * qbankWeight;
-  let revisionTime = hours * revisionWeight;
-
-  if (revisionDue > 10) {
-    nextTopic = "Revision Heavy Day — No New Topic";
-  }
+  let studyTime = hours * 0.5;
+  let qbankTime = hours * 0.3;
+  let revisionTime = hours * 0.2;
 
   let output = `
     <strong>Study:</strong> ${studyTime.toFixed(1)} hrs – ${topSubject} – ${nextTopic}<br>
     <strong>Qbank:</strong> ${qbankTime.toFixed(1)} hrs – ${topSubject}<br>
-    <strong>Revision:</strong> ${revisionTime.toFixed(1)} hrs – ${revisionDue} topics due
+    <strong>Revision:</strong> ${revisionTime.toFixed(1)} hrs – ${revisionDue} topics
   `;
 
   document.getElementById("planOutput").innerHTML = output;
+
+  // 🔹 Save plan
+  studyData.dailyPlan = {
+    date: today(),
+    study: {
+      subject: topSubject,
+      topicIndex: subjectObj.pointer
+    },
+    qbank: {
+      subject: topSubject,
+      topicIndex: subjectObj.pointer
+    },
+    revisionCount: revisionDue,
+    hours: hours,
+    completed: false
+  };
+
+  saveData();
 }
 
 studyData.dailyPlan = {
