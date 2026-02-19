@@ -202,6 +202,10 @@ function renderRevisionCheckboxList() {
 document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
     renderSubjects();
-  }
+}
+  if (studyData.dailyPlan && studyData.dailyPlan.date === today()) {
+  renderSavedPlan();
+}
+
     populateAllEveningSelectors();
 });
