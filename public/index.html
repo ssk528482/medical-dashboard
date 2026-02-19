@@ -36,11 +36,17 @@
   <h2>Morning Planner</h2>
   Hours Available Today:
   <input type="number" id="dailyHours">
-  <button onclick="generatePlan()">Generate Plan</button>
+  <button id="generateButton" onclick="generatePlan()">Generate Plan</button>
 
   <div id="planOutput" style="margin-top:15px;"></div>
 </div>
 
+<div class="card">
+  <div class="section-title">Consistency Heatmap</div>
+  <div id="heatmapContainer"></div>
+</div>
+
+  
 <div class="card">  
 <div id="statusSection" style="display:none;">
   <h2>Subjects Overview</h2>
