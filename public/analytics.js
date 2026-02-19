@@ -52,51 +52,56 @@ function renderAnalytics() {
 
     let accuracy =
       subjectTotal > 0
-        ? ((subjectCorrect / subjectTotal) * 100).toFixed(1)
+        ? ((subjectCorrect / subjectTotal) * 100)
         : 0;
 
     subjectStats.push({
       name: subjectName,
-      accuracy: parseFloat(accuracy),
+      accuracy: accuracy,
       overdue: overdueCount
     });
 
   });
 
-  // 🔹 Completion %
   let completionPercent =
     totalTopics > 0
-      ? ((completedTopics / totalTopics) * 100).toFixed(1)
+      ? (completedTopics / totalTopics) * 100
       : 0;
 
-  // 🔹 Days left
-  let examDate = new Date("2026-12-01");
-  let todayDate = new Date();
-  let daysLeft = Math.ceil(
-    (examDate - todayDate) / (1000 * 60 * 60 * 24)
-  );
-
-  // 🔹 Pace calculation
-  let remainingTopics = totalTopics - completedTopics;
-  let requiredPace =
-    daysLeft > 0
-      ? (remainingTopics / daysLeft).toFixed(2)
-      : 0;
-
-  let avgDailyCompletion = calculateAverageDailyCompletion();
-  let projectedFinishDate = calculateProjectedFinishDate(
-    remainingTopics,
-    avgDailyCompletion
-  );
-
-  let riskLevel = "Low";
-  if (avgDailyCompletion < requiredPace) riskLevel = "High";
-  else if (avgDailyCompletion - requiredPace < 0.5) riskLevel = "Moderate";
-
-  // 🔹 Retention
   let retention = calculateRetention();
 
-  // 🔹 Weakest subjects
+  let examDate = new Date("2026-12-01");
+  let daysLeft = Math.ceil(
+    (examDate - new Date()) / (1000 * 60 * 60 * 24)
+  );
+
+  let remainingTopics = totalTopics - completedTopics;
+  let avgDailyCompletion = calculateAverageDailyCompletion();
+
+  let requiredPace =
+    daysLeft > 0
+      ? (remainingTopics / daysLeft)
+      : 0;
+
+  let riskLevel = "Low";
+  let riskColor = "green";
+
+  if (avgDailyCompletion < requiredPace) {
+    riskLevel = "High";
+    riskColor = "red";
+  } else if (avgDailyCompletion - requiredPace < 0.5) {
+    riskLevel = "Moderate";
+    riskColor = "yellow";
+  }
+
+  let weeklyConsistency = calculateWeeklyConsistency();
+  let monthlyConsistency = calculateMonthlyConsistency();
+
+  let burnoutWarning = "";
+  if (weeklyConsistency < monthlyConsistency - 20) {
+    burnoutWarning = "<p class='warning'>⚠ Consistency dropping — burnout risk</p>";
+  }
+
   subjectStats.sort((a, b) => a.accuracy - b.accuracy);
 
   let subjectRows = subjectStats
@@ -104,13 +109,12 @@ function renderAnalytics() {
       s =>
         `<tr>
           <td>${s.name}</td>
-          <td>${s.accuracy}%</td>
+          <td>${s.accuracy.toFixed(1)}%</td>
           <td>${s.overdue}</td>
         </tr>`
     )
     .join("");
 
-  // 🔹 Weakest topics
   weakTopics.sort((a, b) => a.accuracy - b.accuracy);
   let weakHTML = weakTopics
     .slice(0, 5)
@@ -124,14 +128,29 @@ function renderAnalytics() {
 
     <div class="card">
       <div class="section-title">Command Summary</div>
-      <p><strong>Completion:</strong> ${completionPercent}%</p>
-      <p><strong>Projected Retention:</strong> ${retention}%</p>
-      <p><strong>Overdue Revisions:</strong> ${totalOverdue}</p>
-      <p><strong>Days Left:</strong> ${daysLeft}</p>
-      <p><strong>Required Pace:</strong> ${requiredPace} topics/day</p>
-      <p><strong>Your Pace:</strong> ${avgDailyCompletion.toFixed(2)} topics/day</p>
-      <p><strong>Risk Level:</strong> ${riskLevel}</p>
-      <p><strong>Projected Finish:</strong> ${projectedFinishDate}</p>
+
+      <p>Completion: ${completionPercent.toFixed(1)}%</p>
+      <div class="stat-bar">
+        <div class="stat-fill green" style="width:${completionPercent}%"></div>
+      </div>
+
+      <p>Retention: ${retention}%</p>
+      <div class="stat-bar">
+        <div class="stat-fill green" style="width:${retention}%"></div>
+      </div>
+
+      <p>Risk Level: <span class="${riskColor}">${riskLevel}</span></p>
+
+      <p>Days Left: ${daysLeft}</p>
+      <p>Required Pace: ${requiredPace.toFixed(2)}</p>
+      <p>Your Pace: ${avgDailyCompletion.toFixed(2)}</p>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Weekly Report</div>
+      <p>7-Day Consistency: ${weeklyConsistency.toFixed(1)}%</p>
+      <p>30-Day Consistency: ${monthlyConsistency.toFixed(1)}%</p>
+      ${burnoutWarning}
     </div>
 
     <div class="card">
@@ -147,7 +166,7 @@ function renderAnalytics() {
     </div>
 
     <div class="card">
-      <div class="section-title">Top Weak Qbank Topics</div>
+      <div class="section-title">Top Weak Topics</div>
       <ul>
         ${weakHTML || "<li>No weak topics yet</li>"}
       </ul>
@@ -157,33 +176,36 @@ function renderAnalytics() {
 }
 
 
-// 🔹 Helper Functions
+function calculateWeeklyConsistency() {
+  return calculateConsistencyForDays(7);
+}
 
-function calculateAverageDailyCompletion() {
+function calculateMonthlyConsistency() {
+  return calculateConsistencyForDays(30);
+}
+
+function calculateConsistencyForDays(days) {
 
   if (!studyData.dailyHistory) return 0;
 
-  let days = Object.keys(studyData.dailyHistory).length;
-  if (days === 0) return 0;
+  let totalScore = 0;
+  let maxScore = days * 3;
 
-  let completedCount = 0;
+  for (let i = 0; i < days; i++) {
+    let d = new Date();
+    d.setDate(d.getDate() - i);
+    let key = d.toISOString().split("T")[0];
 
-  Object.keys(studyData.dailyHistory).forEach(date => {
-    if (studyData.dailyHistory[date].study) completedCount++;
-  });
+    if (studyData.dailyHistory[key]) {
+      let entry = studyData.dailyHistory[key];
+      totalScore +=
+        (entry.study ? 1 : 0) +
+        (entry.qbank ? 1 : 0) +
+        (entry.revision ? 1 : 0);
+    }
+  }
 
-  return completedCount / days;
-}
-
-function calculateProjectedFinishDate(remainingTopics, avgDailyCompletion) {
-
-  if (avgDailyCompletion === 0) return "Insufficient data";
-
-  let daysNeeded = Math.ceil(remainingTopics / avgDailyCompletion);
-  let d = new Date();
-  d.setDate(d.getDate() + daysNeeded);
-
-  return d.toISOString().split("T")[0];
+  return (totalScore / maxScore) * 100;
 }
 
 document.addEventListener("DOMContentLoaded", renderAnalytics);
