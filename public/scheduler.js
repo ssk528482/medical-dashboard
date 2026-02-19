@@ -99,22 +99,7 @@ function generatePlan() {
   saveData();
 }
 
-studyData.dailyPlan = {
-  date: today(),
-  study: {
-    subject: topSubject,
-    topicIndex: subjectObj.pointer
-  },
-  qbank: {
-    subject: topSubject,
-    topicIndex: subjectObj.pointer
-  },
-  revisionCount: revisionDue,
-  hours: hours,
-  completed: false
-};
 
-saveData();
 
 
 
