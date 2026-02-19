@@ -58,7 +58,7 @@ function renderEditor() {
             Delete
           </button>
         </div>
-      `;
+      
 
 
       <br><br>
