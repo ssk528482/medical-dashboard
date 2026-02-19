@@ -3,14 +3,7 @@ function renderEditor() {
   container.innerHTML = "";
 
   Object.keys(studyData.subjects).forEach(subjectName => {
-  div.innerHTML = `
-    <div class="subject-header">
-      <strong>${subjectName}</strong>
-      <button class="delete-btn" onclick="deleteSubject('${subjectName}')">
-        Delete
-      </button>
-    </div>
-  `;
+    let subject = studyData.subjects[subjectName];
 
     let div = document.createElement("div");
     div.className = "subject-card";
@@ -58,14 +51,15 @@ function renderEditor() {
       `;
     });
 
-    div.innerHTML = `
-      <strong>${subjectName}</strong>
-      <select onchange="changeSize('${subjectName}', this.value)">
-        <option value="large" ${subject.size === "large" ? "selected" : ""}>Large</option>
-        <option value="medium" ${subject.size === "medium" ? "selected" : ""}>Medium</option>
-        <option value="small" ${subject.size === "small" ? "selected" : ""}>Small</option>
-      </select>
-      <button onclick="deleteSubject('${subjectName}')">Delete Subject</button>
+      div.innerHTML = `
+        <div class="subject-header">
+          <strong>${subjectName}</strong>
+          <button class="delete-btn" onclick="deleteSubject('${subjectName}')">
+            Delete
+          </button>
+        </div>
+      `;
+
 
       <br><br>
 
