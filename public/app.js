@@ -34,16 +34,6 @@ function renderSubjects() {
     container.appendChild(div);
   });
 
-  // 🔵 ADD RETENTION DISPLAY HERE
-  let retentionDisplay = document.createElement("div");
-  retentionDisplay.style.marginTop = "20px";
-  retentionDisplay.innerHTML =
-    "<h3>Projected Retention: " +
-    calculateRetention() +
-    "%</h3>";
-
-  container.appendChild(retentionDisplay);
-
   renderRevisionSection();
 }
 
@@ -76,36 +66,7 @@ function renderRevisionSection() {
   container.appendChild(revDiv);
 }
 
-function calculateRetention() {
-  let totalTopics = 0;
-  let revisedOnTime = 0;
 
-  Object.values(studyData.subjects).forEach(subject => {
-    subject.topics.forEach(topic => {
-      totalTopics++;
-      if (topic.revisionIndex > 0) revisedOnTime++;
-    });
-  });
-
-  let revisionCompliance = (revisedOnTime / totalTopics) * 100 || 0;
-
-  let accuracySum = 0;
-  let count = 0;
-
-  Object.values(studyData.subjects).forEach(subject => {
-    accuracySum += subjectAccuracy(subject);
-    count++;
-  });
-
-  let avgAccuracy = accuracySum / count || 0;
-
-  let retention =
-    revisionCompliance * 0.4 +
-    avgAccuracy * 0.4 +
-    (revisionCompliance > 80 ? 20 : 10);
-
-  return retention.toFixed(1);
-}
 
 function populateEveningSelectors() {
   let subjectSelect = document.getElementById("eveningSubject");
