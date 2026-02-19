@@ -134,10 +134,68 @@ function populateTopicSelector() {
   });
 }
 
+function populateAllEveningSelectors() {
+  populateSelector("studySubject", "studyTopic");
+  populateSelector("qbankSubject", "qbankTopic");
+  renderRevisionCheckboxList();
+}
+
+function populateSelector(subjectId, topicId) {
+  let subjectSelect = document.getElementById(subjectId);
+  subjectSelect.innerHTML = "";
+
+  Object.keys(studyData.subjects).forEach(subjectName => {
+    let opt = document.createElement("option");
+    opt.value = subjectName;
+    opt.text = subjectName;
+    subjectSelect.appendChild(opt);
+  });
+
+  subjectSelect.onchange = function () {
+    populateTopicDropdown(subjectId, topicId);
+  };
+
+  populateTopicDropdown(subjectId, topicId);
+}
+
+function populateTopicDropdown(subjectId, topicId) {
+  let subjectName = document.getElementById(subjectId).value;
+  let topicSelect = document.getElementById(topicId);
+  topicSelect.innerHTML = "";
+
+  if (!subjectName) return;
+
+  studyData.subjects[subjectName].topics.forEach((topic, index) => {
+    let opt = document.createElement("option");
+    opt.value = index;
+    opt.text = topic.name;
+    topicSelect.appendChild(opt);
+  });
+}
+
+function renderRevisionCheckboxList() {
+  let container = document.getElementById("revisionCheckboxList");
+  container.innerHTML = "";
+
+  let due = getRevisionsDueToday();
+
+  due.forEach(item => {
+    let label = document.createElement("label");
+    label.innerHTML = `
+      <input type="checkbox" 
+        value="${item.subjectName}|${item.topicIndex}">
+      ${item.subjectName} - ${item.topicName}
+    `;
+    container.appendChild(label);
+    container.appendChild(document.createElement("br"));
+  });
+}
+
 
 document.addEventListener("DOMContentLoaded", function () {
   if (studyData.setupComplete) {
     renderSubjects();
     populateEveningSelectors();
+    populateAllEveningSelectors();
   }
 });
