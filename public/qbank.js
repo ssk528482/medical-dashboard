@@ -10,6 +10,9 @@ function renderQbank() {
     let subjectTotal = 0;
     let subjectCorrect = 0;
 
+    let isCollapsed =
+      studyData.uiState.qbankCollapsed[subjectName] || false;
+
     let subjectCard = document.createElement("div");
     subjectCard.className = "subject-card";
 
@@ -35,12 +38,8 @@ function renderQbank() {
 
       topicsHTML += `
         <div class="topic-qbank-row">
-
           <div>
             <strong>${topic.name}</strong>
-            <div style="font-size:12px;color:#666;">
-              Total: ${topic.qbankStats.total}
-            </div>
           </div>
 
           <div style="display:flex;align-items:center;gap:8px;">
@@ -78,7 +77,16 @@ function renderQbank() {
 
     subjectCard.innerHTML = `
       <div class="subject-header">
-        <strong>${subjectName} (${subject.size})</strong>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="collapse-btn"
+            onclick="toggleCollapse('${subjectName}')">
+            ${isCollapsed ? "▶" : "▼"}
+          </button>
+
+          <strong>${subjectName} (${subject.size})</strong>
+        </div>
+
         <span class="accuracy-badge ${
           subjectAccuracy >= 75
             ? "accuracy-high"
@@ -88,6 +96,7 @@ function renderQbank() {
         }">
           ${subjectAccuracy.toFixed(1)}%
         </span>
+
       </div>
 
       <div class="stat-bar">
@@ -101,7 +110,8 @@ function renderQbank() {
         style="width:${subjectAccuracy}%"></div>
       </div>
 
-      <div style="margin-top:15px;">
+      <div class="${isCollapsed ? "collapsed-content" : ""}"
+           style="margin-top:15px;">
         ${topicsHTML}
       </div>
     `;
@@ -111,6 +121,17 @@ function renderQbank() {
   });
 
   saveData();
+}
+
+
+
+function toggleCollapse(subjectName) {
+
+  studyData.uiState.qbankCollapsed[subjectName] =
+    !studyData.uiState.qbankCollapsed[subjectName];
+
+  saveData();
+  renderQbank();
 }
 
 
@@ -127,6 +148,7 @@ function updateTopicQbank(subjectName, index, field, value) {
 
   renderQbank();
 }
+
 
 
 document.addEventListener("DOMContentLoaded", renderQbank);
