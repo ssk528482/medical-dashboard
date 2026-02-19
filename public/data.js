@@ -1,9 +1,9 @@
-let studyData = JSON.parse(localStorage.getItem("studyData")) || {
-  setupComplete: false,
-  subjects: {},
-  dailyHistory: {}
+let studyData = JSON.parse(localStorage.getItem("studyData")) || {};
 
-};
+if (!studyData.setupComplete) studyData.setupComplete = false;
+if (!studyData.subjects) studyData.subjects = {};
+if (!studyData.dailyHistory) studyData.dailyHistory = {};
+
 
 function saveData() {
   localStorage.setItem("studyData", JSON.stringify(studyData));
