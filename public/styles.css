@@ -122,3 +122,52 @@ input, select {
   color: #ef4444;
   font-weight: bold;
 }
+
+.subject-card {
+  background: white;
+  margin: 15px;
+  padding: 18px;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.subject-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.topic-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.topic-name {
+  font-weight: 500;
+}
+
+.topic-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pill {
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pill.completed { background: #16a34a; color: white; }
+.pill.rev { background: #3b82f6; color: white; }
+.pill.qbank { background: #9333ea; color: white; }
+
+.delete-btn {
+  background: #ef4444;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
