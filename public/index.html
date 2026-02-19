@@ -49,31 +49,39 @@
 <hr>
 <h3>Evening Update</h3>
 
+<h4>Study Log</h4>
 Subject:
-<select id="eveningSubject"></select><br>
-
+<select id="studySubject"></select>
 Topic:
-<select id="eveningTopic"></select><br><br>
-
+<select id="studyTopic"></select>
 <label>
-<input type="checkbox" id="studyDone"> Study Completed
-</label><br>
+<input type="checkbox" id="studyDone"> Completed
+</label>
 
+<hr>
+
+<h4>Qbank Log</h4>
+Subject:
+<select id="qbankSubject"></select>
+Topic:
+<select id="qbankTopic"></select>
+<br>
+Total:
+<input type="number" id="qbankTotal">
+Correct:
+<input type="number" id="qbankCorrect">
 <label>
-<input type="checkbox" id="qbankDone"> Qbank Completed
-</label><br>
+<input type="checkbox" id="qbankDone"> Completed
+</label>
 
-<label>
-<input type="checkbox" id="revisionDone"> Revision Completed
-</label><br><br>
+<hr>
 
-Qbank Total:
-<input type="number" id="eveningTotal"><br>
+<h4>Revision (Anki) Log</h4>
+<div id="revisionCheckboxList"></div>
 
-Qbank Correct:
-<input type="number" id="eveningCorrect"><br><br>
-
+<br>
 <button onclick="submitEvening()">Submit Evening Update</button>
+
 
 
   
