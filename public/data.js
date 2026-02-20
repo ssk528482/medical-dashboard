@@ -8,7 +8,7 @@ if (!studyData.uiState) studyData.uiState = {};
 if (!studyData.uiState.qbankCollapsed) studyData.uiState.qbankCollapsed = {};
 
 
-function saveData() {
+async function saveData() {
   localStorage.setItem("studyData", JSON.stringify(studyData));
 
   if (typeof saveToCloud === "function") {
