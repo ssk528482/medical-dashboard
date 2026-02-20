@@ -10,7 +10,10 @@ if (!studyData.uiState.qbankCollapsed) studyData.uiState.qbankCollapsed = {};
 
 function saveData() {
   localStorage.setItem("studyData", JSON.stringify(studyData));
-  saveToCloud();
+
+  if (typeof saveToCloud === "function") {
+    saveToCloud();
+  }
 }
 
 
