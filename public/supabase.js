@@ -116,6 +116,7 @@ async function checkUser() {
 
   if (user) {
     await loadFromCloud();
+    await setupRealtime();
   }
 
   // 🔥 Now render everything safely
@@ -127,6 +128,49 @@ async function checkUser() {
   if (typeof renderQbank === "function") renderQbank();
   if (typeof renderAnalytics === "function") renderAnalytics();
   if (typeof renderEditor === "function") renderEditor();
+}
+
+let realtimeChannel = null;
+
+async function setupRealtime() {
+
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return;
+
+  if (realtimeChannel) {
+    supabaseClient.removeChannel(realtimeChannel);
+  }
+
+  realtimeChannel = supabaseClient
+    .channel("study-data-listener")
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "study_data",
+        filter: `user_id=eq.${user.id}`
+      },
+      async (payload) => {
+
+        console.log("Realtime update received");
+
+        studyData = payload.new.data;
+
+        localStorage.setItem("studyData", JSON.stringify(studyData));
+
+        // Re-render everything
+        if (typeof renderSubjects === "function") renderSubjects();
+        if (typeof renderSavedPlan === "function") renderSavedPlan();
+        if (typeof populateAllEveningSelectors === "function") populateAllEveningSelectors();
+        if (typeof renderHeatmap === "function") renderHeatmap();
+        if (typeof renderRevisionSection === "function") renderRevisionSection();
+        if (typeof renderQbank === "function") renderQbank();
+        if (typeof renderAnalytics === "function") renderAnalytics();
+        if (typeof renderEditor === "function") renderEditor();
+      }
+    )
+    .subscribe();
 }
 
 document.addEventListener("DOMContentLoaded", checkUser);
