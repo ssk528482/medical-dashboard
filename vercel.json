@@ -1,5 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": "public",
+  "routes": [
+    {
+      "src": "/",
+      "dest": "/login.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ] 
   "git": {
     "deploymentEnabled": false
   }
