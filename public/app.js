@@ -152,12 +152,22 @@ function populateTopicDropdown(subjectId, topicId) {
 }
 
 function renderSavedPlan() {
+
   let plan = studyData.dailyPlan;
+  if (!plan) return;
+
+  if (!studyData.subjects[plan.study.subject]) {
+    document.getElementById("planOutput").innerHTML =
+      "<strong>Plan subject deleted.</strong>";
+    return;
+  }
 
   let subjectObj = studyData.subjects[plan.study.subject];
-  let topicName = subjectObj.topics[plan.study.topicIndex]
-    ? subjectObj.topics[plan.study.topicIndex].name
-    : "Completed";
+
+  let topicName =
+    subjectObj.topics[plan.study.topicIndex]
+      ? subjectObj.topics[plan.study.topicIndex].name
+      : "Completed";
 
   let output = `
     <strong>Study:</strong> ${plan.study.subject} - ${topicName}<br>
