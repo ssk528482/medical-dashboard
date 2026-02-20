@@ -12,7 +12,7 @@ async function saveData() {
   localStorage.setItem("studyData", JSON.stringify(studyData));
 
   if (typeof saveToCloud === "function") {
-    saveToCloud();
+    await saveToCloud();
   }
 }
 
