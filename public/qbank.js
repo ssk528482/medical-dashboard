@@ -148,7 +148,3 @@ function updateTopicQbank(subjectName, index, field, value) {
 
   renderQbank();
 }
-
-
-
-document.addEventListener("DOMContentLoaded", renderQbank);
