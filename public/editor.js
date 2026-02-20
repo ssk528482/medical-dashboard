@@ -1,5 +1,7 @@
 function renderEditor() {
   let container = document.getElementById("subjectsEditorContainer");
+  if (!container) return;
+
   container.innerHTML = "";
 
   Object.keys(studyData.subjects).forEach(subjectName => {
@@ -8,66 +10,59 @@ function renderEditor() {
     let div = document.createElement("div");
     div.className = "subject-card";
 
-    div.style.border = "1px solid #ccc";
-    div.style.padding = "10px";
-    div.style.marginBottom = "15px";
+    // Subject header
+    div.innerHTML = `
+      <div class="subject-header">
+        <strong>${subjectName}</strong>
+        <button class="delete-btn"
+          onclick="deleteSubject('${subjectName}')">
+          Delete
+        </button>
+      </div>
 
-    let topicsHTML = "";
-
-subject.topics.forEach((topic, index) => {
-
-  let row = document.createElement("div");
-  row.className = "topic-row";
-
-  row.innerHTML = `
-    <div class="topic-name">${index + 1}. ${topic.name}</div>
-
-    <div class="topic-actions">
-      <span class="pill ${topic.status === "completed" ? "completed" : ""}"
-        onclick="toggleComplete('${subjectName}', ${index})">
-        ✔
-      </span>
-
-      <span class="pill rev"
-        onclick="markRevision('${subjectName}', ${index})">
-        Rev
-      </span>
-
-      <span class="pill qbank"
-        onclick="toggleQbank('${subjectName}', ${index})">
-        Q
-      </span>
-
-      <button class="delete-btn"
-        onclick="deleteTopic('${subjectName}', ${index})">
-        X
-      </button>
-    </div>
-  `;
-
-  div.appendChild(row);
-});
-
-
-      div.innerHTML = `
-        <div class="subject-header">
-          <strong>${subjectName}</strong>
-          <button class="delete-btn" onclick="deleteSubject('${subjectName}')">
-            Delete
-          </button>
-        </div>
-      
-
-
-      <br><br>
+      <br>
 
       Add Topic:
       <input id="addTopic-${subjectName}" placeholder="Topic Name">
       <button onclick="addTopic('${subjectName}')">Add</button>
 
       <hr>
-      ${topicsHTML}
     `;
+
+    // 🔥 Now append topics properly
+    subject.topics.forEach((topic, index) => {
+
+      let row = document.createElement("div");
+      row.className = "topic-row";
+
+      row.innerHTML = `
+        <div class="topic-name">${index + 1}. ${topic.name}</div>
+
+        <div class="topic-actions">
+          <span class="pill ${topic.status === "completed" ? "completed" : ""}"
+            onclick="toggleCompleted('${subjectName}', ${index})">
+            ✔
+          </span>
+
+          <span class="pill rev"
+            onclick="markRevised('${subjectName}', ${index}, 1)">
+            Rev
+          </span>
+
+          <span class="pill qbank"
+            onclick="toggleQbank('${subjectName}', ${index})">
+            Q
+          </span>
+
+          <button class="delete-btn"
+            onclick="deleteTopic('${subjectName}', ${index})">
+            X
+          </button>
+        </div>
+      `;
+
+      div.appendChild(row);
+    });
 
     container.appendChild(div);
   });
