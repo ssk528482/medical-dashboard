@@ -183,3 +183,140 @@ function toggleQbank(subjectName, index) {
   saveData();
   renderEditor();
 }
+
+// ─── Bulk Import ──────────────────────────────────────────────
+
+let bulkSubjects = {};
+
+function openBulkModal() {
+  bulkSubjects = {};
+  document.getElementById("bulkModal").style.display = "block";
+  document.body.style.overflow = "hidden";
+  bulkGoStep1();
+}
+
+function closeBulkModal() {
+  document.getElementById("bulkModal").style.display = "none";
+  document.body.style.overflow = "";
+  bulkSubjects = {};
+}
+
+function bulkAddSubject() {
+  let name = document.getElementById("bulkSubjectName").value.trim();
+  let size = document.getElementById("bulkSubjectSize").value;
+  let topicsRaw = document.getElementById("bulkTopicsInput").value.trim();
+
+  if (!name) { alert("Enter subject name."); return; }
+  if (!topicsRaw) { alert("Enter at least one topic."); return; }
+
+  let topics = topicsRaw.split("\n").filter(t => t.trim()).map(t => makeTopicObj(t.trim()));
+  bulkSubjects[name] = { size, topics, pointer: 0, qbank: { total: 0, correct: 0 } };
+
+  // Clear inputs for next subject
+  document.getElementById("bulkSubjectName").value = "";
+  document.getElementById("bulkTopicsInput").value = "";
+
+  renderBulkPreview();
+}
+
+function renderBulkPreview() {
+  let keys = Object.keys(bulkSubjects);
+  let preview = document.getElementById("bulkPreview");
+  let list = document.getElementById("bulkPreviewList");
+  let nextBtn = document.getElementById("bulkNextBtn");
+
+  if (keys.length === 0) { preview.style.display = "none"; nextBtn.style.display = "none"; return; }
+
+  preview.style.display = "block";
+  nextBtn.style.display = "block";
+
+  let sizeColors = { large: "#3b82f6", medium: "#8b5cf6", small: "#64748b" };
+
+  list.innerHTML = keys.map(name => {
+    let s = bulkSubjects[name];
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;font-size:13px;">
+        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.topics.length} topics)</span></span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="background:${sizeColors[s.size]};color:white;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;">${s.size}</span>
+          <span onclick="bulkRemoveSubject('${name}')" style="color:#ef4444;cursor:pointer;font-size:16px;line-height:1;">×</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function bulkRemoveSubject(name) {
+  delete bulkSubjects[name];
+  renderBulkPreview();
+}
+
+function bulkGoStep2() {
+  let keys = Object.keys(bulkSubjects);
+  if (keys.length === 0) { alert("Add at least one subject first."); return; }
+
+  let totalTopics = Object.values(bulkSubjects).reduce((a, s) => a + s.topics.length, 0);
+
+  document.getElementById("bulkSummarySubjects").textContent = keys.length;
+  document.getElementById("bulkSummaryTopics").textContent = totalTopics;
+
+  let sizeColors = { large: "#3b82f6", medium: "#8b5cf6", small: "#64748b" };
+
+  document.getElementById("bulkReviewList").innerHTML = keys.map(name => {
+    let s = bulkSubjects[name];
+    return `
+      <div style="padding:6px 0;border-bottom:1px solid #1e293b;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <strong>${name}</strong>
+          <span style="background:${sizeColors[s.size]};color:white;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;">${s.size}</span>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">${s.topics.length} topics</div>
+      </div>
+    `;
+  }).join("");
+
+  // Update step indicators
+  document.getElementById("bulkStep1").style.display = "none";
+  document.getElementById("bulkStep2").style.display = "block";
+  document.getElementById("bDot1").style.background = "#16a34a";
+  document.getElementById("bDot1").style.borderColor = "#16a34a";
+  document.getElementById("bDot1").textContent = "✓";
+  document.getElementById("bDot2").style.background = "#3b82f6";
+  document.getElementById("bDot2").style.borderColor = "#3b82f6";
+  document.getElementById("bDot2").style.color = "white";
+  document.getElementById("bLine1").style.background = "#16a34a";
+}
+
+function bulkGoStep1() {
+  document.getElementById("bulkStep1").style.display = "block";
+  document.getElementById("bulkStep2").style.display = "none";
+  document.getElementById("bDot1").style.background = "#3b82f6";
+  document.getElementById("bDot1").style.borderColor = "#3b82f6";
+  document.getElementById("bDot1").style.color = "white";
+  document.getElementById("bDot1").textContent = "1";
+  document.getElementById("bDot2").style.background = "#1e293b";
+  document.getElementById("bDot2").style.borderColor = "#334155";
+  document.getElementById("bDot2").style.color = "#64748b";
+  document.getElementById("bLine1").style.background = "#334155";
+}
+
+function bulkConfirmImport() {
+  let keys = Object.keys(bulkSubjects);
+  if (keys.length === 0) return;
+
+  keys.forEach(name => {
+    // Don't overwrite if subject already exists — merge topics instead
+    if (studyData.subjects[name]) {
+      bulkSubjects[name].topics.forEach(t => {
+        studyData.subjects[name].topics.push(t);
+      });
+    } else {
+      studyData.subjects[name] = bulkSubjects[name];
+    }
+  });
+
+  saveData();
+  closeBulkModal();
+  renderEditor();
+  alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
+}
