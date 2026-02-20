@@ -226,21 +226,3 @@ function renderHeatmap() {
     container.appendChild(box);
   });
 }
-
-
-document.addEventListener("DOMContentLoaded", function () {
-  if (studyData.setupComplete) {
-    renderSubjects();
-  }
-  if (
-    studyData.dailyPlan &&
-    studyData.dailyPlan.date === today()
-  ) {
-    renderSavedPlan();
-    let btn = document.getElementById("generateButton");
-    if (btn) btn.disabled = true;
-  }
-
-    populateAllEveningSelectors();
-    renderHeatmap();
-});
