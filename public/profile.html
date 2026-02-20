@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<script src="router.js"></script>
+
+<h1>👤 Profile</h1>
+
+<div id="profileContainer"></div>
+
+<div class="bottom-nav">
+  <a href="index.html">🏠<br>Plan</a>
+  <a href="editor.html">📚<br>Syllabus</a>
+  <a href="qbank.html">🧪<br>Qbank</a>
+  <a href="analytics.html">📊<br>Stats</a>
+  <a href="profile.html" class="active">👤<br>Profile</a>
+</div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="revisionEngine.js"></script>
+<script src="scheduler.js"></script>
+<script src="intelligence.js"></script>
+<script src="charts.js"></script>
+<script src="supabase.js"></script>
+<script>
+
+function renderProfile() {
+  let container = document.getElementById("profileContainer");
+  if (!container) return;
+
+  let phases = getGlobalPhaseStats();
+  let streak = calculateStreak();
+  let longestStreak = calculateLongestStreak();
+  let daysLeft = daysUntilExam();
+  let weekly = calculateWeeklyConsistency().toFixed(0);
+  let monthly = calculateMonthlyConsistency().toFixed(0);
+  let burnout = getBurnoutIndex();
+  let completionPct = phases.total > 0 ? (phases.phase1.count / phases.total * 100).toFixed(1) : 0;
+
+  container.innerHTML = `
+
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+          display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">🩺</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:18px;font-weight:700;">${studyData.userName || "Student"}</div>
+          <div style="font-size:13px;color:#64748b;" id="displayEmail">Loading...</div>
+          <div style="font-size:12px;color:#3b82f6;margin-top:2px;">🎯 Exam: ${studyData.examDate || "Not set"}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">🔥 Streaks & Consistency</div>
+      <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="stat-box">
+          <div class="stat-big" style="color:#f97316;">${streak}</div>
+          <div class="stat-label">Current Streak</div>
+          <div style="font-size:10px;color:#64748b;margin-top:2px;">days</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-big" style="color:#eab308;">${longestStreak}</div>
+          <div class="stat-label">Best Streak</div>
+          <div style="font-size:10px;color:#64748b;margin-top:2px;">days</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-big" style="color:${burnout>50?"#ef4444":burnout>25?"#f59e0b":"#10b981"}">${burnout}</div>
+          <div class="stat-label">Burnout Index</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px;">
+          <span>7-Day Consistency</span><span style="color:#3b82f6;">${weekly}%</span>
+        </div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${weekly}%;background:#3b82f6;"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin:8px 0 4px;">
+          <span>30-Day Consistency</span><span style="color:#8b5cf6;">${monthly}%</span>
+        </div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${monthly}%;background:#8b5cf6;"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">📚 Study Progress</div>
+      <div class="analytics-grid">
+        <div class="stat-box"><div class="stat-big" style="color:#3b82f6;">${completionPct}%</div><div class="stat-label">Completion</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#f59e0b;">${daysLeft}</div><div class="stat-label">Days to Exam</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6;">${phases.phase2.pct}%</div><div class="stat-label">Phase 2 Done</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#10b981;">${phases.qbank.pct}%</div><div class="stat-label">Qbank Done</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">⚙️ Settings</div>
+      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Your Name</label>
+      <input type="text" id="settingName" value="${studyData.userName || ""}" style="width:100%;margin-bottom:12px;">
+
+      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Exam Date</label>
+      <input type="date" id="settingExamDate" value="${studyData.examDate || "2026-12-01"}" style="width:100%;margin-bottom:12px;">
+
+      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Default Daily Hours</label>
+      <input type="number" id="settingHours" value="${studyData.defaultHours || 8}" min="1" max="18" style="width:100%;margin-bottom:16px;">
+
+      <button onclick="saveSettings()" style="width:100%;background:#16a34a;">Save Settings ✓</button>
+    </div>
+
+    <div class="card" style="border-color:#7f1d1d;">
+      <div class="section-title" style="color:#fca5a5;">⚠️ Account</div>
+      <button onclick="doLogout()" style="width:100%;background:#ef4444;">Logout</button>
+    </div>
+  `;
+
+  supabaseClient.auth.getUser().then(({ data: { user } }) => {
+    let el = document.getElementById("displayEmail");
+    if (el && user) el.textContent = user.email;
+  });
+}
+
+function saveSettings() {
+  studyData.userName = document.getElementById("settingName").value.trim();
+  studyData.examDate = document.getElementById("settingExamDate").value;
+  studyData.defaultHours = parseFloat(document.getElementById("settingHours").value) || 8;
+  saveData();
+  alert("Settings saved ✓");
+  renderProfile();
+}
+
+async function doLogout() {
+  await supabaseClient.auth.signOut();
+  localStorage.removeItem("studyData");
+  window.location.href = "login.html";
+}
+
+</script>
+
+</body>
+</html>

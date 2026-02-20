@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Syllabus Editor — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<script src="router.js"></script>
+
+<h1>📚 Syllabus Editor</h1>
+
+<div class="card">
+  <div class="section-title">Add New Subject</div>
+  <input id="newSubjectName" placeholder="Subject Name" style="width:100%;">
+  <select id="newSubjectSize" style="width:100%;">
+    <option value="large">Large</option>
+    <option value="medium">Medium</option>
+    <option value="small">Small</option>
+  </select>
+  <button onclick="addNewSubject()" style="width:100%;margin-top:8px;">Add Subject</button>
+</div>
+
+<div id="subjectsEditorContainer" style="padding:0 14px;"></div>
+
+<div class="bottom-nav">
+  <a href="index.html">🏠<br>Plan</a>
+  <a href="editor.html" class="active">📚<br>Syllabus</a>
+  <a href="qbank.html">🧪<br>Qbank</a>
+  <a href="analytics.html">📊<br>Stats</a>
+  <a href="profile.html">👤<br>Profile</a>
+</div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="revisionEngine.js"></script>
+<script src="editor.js"></script>
+<script src="supabase.js"></script>
+
+</body>
+</html>
