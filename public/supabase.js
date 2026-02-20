@@ -100,23 +100,24 @@ async function logout() {
 
 async function checkUser() {
 
-  const {
-    data: { user }
-  } = await supabaseClient.auth.getUser();
-
-  const status = document.getElementById("authStatus");
+  const { data: { user } } = await supabaseClient.auth.getUser();
 
   if (user) {
-    status.innerText = "Logged in as: " + user.email;
-    await loadFromCloud();
 
-    // safe rendering
+    document.getElementById("authStatus").innerText = "Logged in";
+
+    await loadFromCloud(); // 🔥 WAIT for cloud
+
     if (typeof renderSubjects === "function") renderSubjects();
     if (typeof renderQbank === "function") renderQbank();
     if (typeof renderAnalytics === "function") renderAnalytics();
+
   } else {
-    status.innerText = "Not logged in";
+
+    document.getElementById("authStatus").innerText = "Not logged in";
+
   }
+
 }
 
 document.addEventListener("DOMContentLoaded", checkUser);
