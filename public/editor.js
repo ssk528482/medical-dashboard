@@ -78,29 +78,39 @@ function renderEditor() {
               ${index + 1}. ${topic.name}
             </span>
           </div>
-
+        
           <div class="topic-actions">
-
-            <span class="pill completed ${completedClass}"
+        
+            <span class="pill completed ${topic.status === "completed" ? "active" : ""}"
               onclick="toggleCompleted('${subjectName}', ${index})">
               ✓
             </span>
-
-            <span class="pill rev ${revActive}"
+        
+            <span class="pill rev ${topic.revisionIndex === 1 ? "active" : ""}"
               onclick="markRevised('${subjectName}', ${index}, 1)">
-              Rev
+              R1
             </span>
-
-            <span class="pill qbank ${qbankActive}"
+        
+            <span class="pill rev ${topic.revisionIndex === 2 ? "active" : ""}"
+              onclick="markRevised('${subjectName}', ${index}, 2)">
+              R2
+            </span>
+        
+            <span class="pill rev ${topic.revisionIndex === 3 ? "active" : ""}"
+              onclick="markRevised('${subjectName}', ${index}, 3)">
+              R3
+            </span>
+        
+            <span class="pill qbank ${topic.qbankDone ? "active" : ""}"
               onclick="toggleQbank('${subjectName}', ${index})">
               Q
             </span>
-
+        
             <button class="icon-btn"
               onclick="deleteTopic('${subjectName}', ${index})">
               ✕
             </button>
-
+        
           </div>
         `;
 
