@@ -162,9 +162,3 @@ function calculateAverageDailyCompletion() {
 
   return completedCount / days;
 }
-
-document.addEventListener("DOMContentLoaded", function () {
-  if (studyData.setupComplete) {
-    renderStatus();
-  }
-});
