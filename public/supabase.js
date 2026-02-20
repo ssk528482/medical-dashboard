@@ -46,8 +46,17 @@ async function loadFromCloud() {
   const { data, error } = await supabaseClient
     .from("study_data")
     .select("data")
-    .eq("user_id", user.id)
-    .single();
+    .eq("user_id", user.id);
+  
+  if (error) {
+    console.log("Load error:", error);
+    return;
+  }
+  
+  if (data && data.length > 0) {
+    studyData = data[0].data;
+    localStorage.setItem("studyData", JSON.stringify(studyData));
+  }
 
   if (error) {
     console.log("Load error:", error);
