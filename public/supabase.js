@@ -122,6 +122,7 @@ async function checkUser() {
   if (typeof renderSubjects === "function") renderSubjects();
   if (typeof renderQbank === "function") renderQbank();
   if (typeof renderAnalytics === "function") renderAnalytics();
+  if (typeof renderEditor === "function") renderEditor();
 }
 
 document.addEventListener("DOMContentLoaded", checkUser);
