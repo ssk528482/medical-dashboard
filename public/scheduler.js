@@ -49,8 +49,10 @@ function generatePlan() {
     (a, b) => subjectPriority(b) - subjectPriority(a)
   );
 
-  let topSubject = subjectsSorted[0];
-
+  if (subjectsSorted.length === 0) {
+    alert("Add subjects first.");
+    return;
+  }
   // Carry forward unfinished plan
   if (
     studyData.dailyPlan &&
@@ -154,7 +156,11 @@ if (document.getElementById("studyDone").checked) {
 
     let total = parseInt(document.getElementById("qbankTotal").value) || 0;
     let correct = parseInt(document.getElementById("qbankCorrect").value) || 0;
-
+    
+    if (
+      studyData.subjects[subjectName] &&
+      studyData.subjects[subjectName].topics[topicIndex]
+    ) {
     let topic = studyData.subjects[subjectName].topics[topicIndex];
 
     if (!topic.qbankStats) {
@@ -163,7 +169,10 @@ if (document.getElementById("studyDone").checked) {
 
     topic.qbankStats.total += total;
     topic.qbankStats.correct += correct;
-    topic.qbankDone = true;
+    topic.qbankDone = true;    
+  
+    }
+
   }
 
   // REVISION (multiple topics)
