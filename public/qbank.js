@@ -146,5 +146,6 @@ function updateTopicQbank(subjectName, index, field, value) {
 
   topic.qbankStats[field] = parseInt(value) || 0;
 
+  saveData(); // 🔥 ADD THIS
   renderQbank();
 }
