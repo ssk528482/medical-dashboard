@@ -123,29 +123,6 @@ input, select {
   font-weight: bold;
 }
 
-.subject-card {
-  background: white;
-  margin: 15px;
-  padding: 18px;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-}
-
-.subject-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.topic-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
-}
-
 .topic-name {
   font-weight: 500;
 }
@@ -200,4 +177,104 @@ input, select {
 
 .collapsed-content {
   display: none;
+}
+
+.subject-card {
+  background: #1f2937;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+}
+
+.subject-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.subject-title {
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-btn {
+  background: #ef4444;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: white;
+}
+
+.add-topic-row {
+  margin: 12px 0;
+  display: flex;
+  gap: 10px;
+}
+
+.add-topic-row input {
+  flex: 1;
+  padding: 6px;
+  border-radius: 8px;
+  border: none;
+}
+
+.add-topic-row button {
+  background: #3b82f6;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: white;
+}
+
+.topic-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #374151;
+}
+
+.topic-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topic-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status.completed {
+  color: #10b981;
+}
+
+.status.pending {
+  color: #6b7280;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.badge.rev {
+  background: #2563eb;
+  color: white;
+}
+
+.badge.qbank {
+  background: #9333ea;
+  color: white;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 14px;
+  cursor: pointer;
 }
