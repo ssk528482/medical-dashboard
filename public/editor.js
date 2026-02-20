@@ -93,7 +93,9 @@ function addNewSubject() {
 }
 
 function deleteSubject(subjectName) {
+
   delete studyData.subjects[subjectName];
+
   saveData();
   renderEditor();
 }
