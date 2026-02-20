@@ -174,6 +174,3 @@ function renderAnalytics() {
 
   `;
 }
-
-
-document.addEventListener("DOMContentLoaded", renderAnalytics);
