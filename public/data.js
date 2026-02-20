@@ -105,7 +105,7 @@ function calculateRetention() {
     count++;
   });
 
-  let avgAccuracy = accuracySum / count || 0;
+  let avgAccuracy = count > 0 ? accuracySum / count : 0;
 
   let retention =
     revisionCompliance * 0.4 +
