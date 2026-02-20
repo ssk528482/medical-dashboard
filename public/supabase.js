@@ -16,13 +16,22 @@ async function saveToCloud() {
   const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) return;
 
-  await supabaseClient
+  const { error } = await supabaseClient
     .from("study_data")
-    .upsert({
-      user_id: user.id,
-      data: studyData,
-      updated_at: new Date().toISOString()
-    });
+    .upsert(
+      {
+        user_id: user.id,
+        data: studyData,
+        updated_at: new Date().toISOString()
+      },
+      {
+        onConflict: "user_id"
+      }
+    );
+
+  if (error) {
+    console.error("Save error:", error);
+  }
 }
 
 
@@ -34,8 +43,9 @@ async function loadFromCloud() {
 
   const { data, error } = await supabaseClient
     .from("study_data")
-    .select("data")
-    .eq("user_id", user.id);
+    .select("*")
+    .eq("user_id", user.id)
+    .limit(1);
 
   if (error) {
     console.log("Load error:", error);
@@ -44,14 +54,12 @@ async function loadFromCloud() {
 
   if (data && data.length > 0) {
 
-    // Cloud is master
     studyData = data[0].data;
 
     localStorage.setItem("studyData", JSON.stringify(studyData));
 
   } else {
 
-    // First device → push local to cloud
     await saveToCloud();
   }
 }
