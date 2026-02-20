@@ -10,8 +10,5 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ] 
-  "git": {
-    "deploymentEnabled": false
-  }
+  ]
 }
