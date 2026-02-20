@@ -111,9 +111,9 @@ async function checkUser() {
     await loadFromCloud();
 
     // safe rendering
-    renderSubjects?.();
-    renderQbank?.();
-    renderAnalytics?.();
+    if (typeof renderSubjects === "function") renderSubjects();
+    if (typeof renderQbank === "function") renderQbank();
+    if (typeof renderAnalytics === "function") renderAnalytics();
   } else {
     status.innerText = "Not logged in";
   }
