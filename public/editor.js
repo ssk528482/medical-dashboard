@@ -1,17 +1,19 @@
 function renderEditor() {
-  let container = document.getElementById("editorContainer");
+  let container = document.getElementById("subjectsEditorContainer");
+  if (!container) return;
+
   container.innerHTML = "";
 
   Object.keys(studyData.subjects).forEach(subjectName => {
     let subject = studyData.subjects[subjectName];
 
-    let card = document.createElement("div");
-    card.className = "subject-card";
-
     let isCollapsed =
       studyData.uiState?.editorCollapsed?.[subjectName] || false;
 
-    // ===== HEADER =====
+    let div = document.createElement("div");
+    div.className = "subject-card";
+
+    // ===== SUBJECT HEADER =====
     let header = document.createElement("div");
     header.className = "subject-header";
 
@@ -22,94 +24,136 @@ function renderEditor() {
         </span>
         ${subjectName}
       </div>
-      <button class="delete-btn" onclick="deleteSubject('${subjectName}')">
+
+      <button class="delete-btn"
+        onclick="deleteSubject('${subjectName}')">
         Delete
       </button>
     `;
 
     header.querySelector(".collapse-btn").onclick = function () {
+      if (!studyData.uiState) studyData.uiState = {};
       if (!studyData.uiState.editorCollapsed)
         studyData.uiState.editorCollapsed = {};
 
       studyData.uiState.editorCollapsed[subjectName] = !isCollapsed;
+
       saveData();
       renderEditor();
     };
 
-    card.appendChild(header);
+    div.appendChild(header);
 
     if (!isCollapsed) {
-      // ===== ADD TOPIC =====
+
+      // ===== ADD TOPIC ROW =====
       let addRow = document.createElement("div");
       addRow.className = "add-topic-row";
 
       addRow.innerHTML = `
-        <input type="text" id="topicInput-${subjectName}" placeholder="New Topic">
+        <input id="addTopic-${subjectName}" placeholder="New Topic">
         <button onclick="addTopic('${subjectName}')">Add</button>
       `;
 
-      card.appendChild(addRow);
+      div.appendChild(addRow);
 
       // ===== TOPICS =====
       subject.topics.forEach((topic, index) => {
 
-        let topicRow = document.createElement("div");
-        topicRow.className = "topic-row";
+        let row = document.createElement("div");
+        row.className = "topic-row";
 
-        let completedIcon =
-          topic.status === "completed"
-            ? `<span class="status completed">✓</span>`
-            : `<span class="status pending">•</span>`;
+        let completedClass =
+          topic.status === "completed" ? "completed" : "";
 
-        let revBadge =
-          topic.revisionIndex > 0
-            ? `<span class="badge rev">Rev ${topic.revisionIndex}</span>`
-            : "";
+        let revActive =
+          topic.revisionIndex > 0 ? "active" : "";
 
-        let qbankBadge =
-          topic.qbankStats?.total > 0
-            ? `<span class="badge qbank">
-                ${Math.round(
-                  (topic.qbankStats.correct /
-                    (topic.qbankStats.total || 1)) *
-                    100
-                )}%
-              </span>`
-            : "";
+        let qbankActive =
+          topic.qbankDone ? "active" : "";
 
-        topicRow.innerHTML = `
+        row.innerHTML = `
           <div class="topic-left">
-            ${completedIcon}
-            <span class="topic-name">${index + 1}. ${topic.name}</span>
+            <span class="topic-name">
+              ${index + 1}. ${topic.name}
+            </span>
           </div>
-          <div class="topic-right">
-            ${revBadge}
-            ${qbankBadge}
-            <button class="icon-btn delete-topic"
+
+          <div class="topic-actions">
+
+            <span class="pill completed ${completedClass}"
+              onclick="toggleCompleted('${subjectName}', ${index})">
+              ✓
+            </span>
+
+            <span class="pill rev ${revActive}"
+              onclick="markRevised('${subjectName}', ${index}, 1)">
+              Rev
+            </span>
+
+            <span class="pill qbank ${qbankActive}"
+              onclick="toggleQbank('${subjectName}', ${index})">
+              Q
+            </span>
+
+            <button class="icon-btn"
               onclick="deleteTopic('${subjectName}', ${index})">
               ✕
             </button>
+
           </div>
         `;
 
-        card.appendChild(topicRow);
+        div.appendChild(row);
       });
     }
 
-    container.appendChild(card);
+    container.appendChild(div);
   });
 }
 
+function addNewSubject() {
+  let name = document.getElementById("newSubjectName").value.trim();
+  let size = document.getElementById("newSubjectSize").value;
+
+  if (!name) return;
+
+  if (!studyData.subjects[name]) {
+    studyData.subjects[name] = {
+      size: size,
+      topics: [],
+      pointer: 0,
+      qbank: { total: 0, correct: 0 }
+    };
+  }
+
+  saveData();
+  renderEditor();
+}
+
+function deleteSubject(subjectName) {
+
+  delete studyData.subjects[subjectName];
+
+  saveData();
+  renderEditor();
+}
+
 function addTopic(subjectName) {
-  let input = document.getElementById(`topicInput-${subjectName}`);
+  let input = document.getElementById(`addTopic-${subjectName}`);
   let topicName = input.value.trim();
+
   if (!topicName) return;
 
   studyData.subjects[subjectName].topics.push({
     name: topicName,
-    status: "pending",
+    status: "not-started",
+    completedOn: null,
+    revisionDates: [],
     revisionIndex: 0,
-    qbankStats: { total: 0, correct: 0 }
+    nextRevision: null,
+    anki: false,
+    qbankDone: false
   });
 
   input.value = "";
@@ -117,16 +161,45 @@ function addTopic(subjectName) {
   renderEditor();
 }
 
-function deleteSubject(subjectName) {
-  delete studyData.subjects[subjectName];
-  saveData();
-  renderEditor();
-}
-
 function deleteTopic(subjectName, index) {
   studyData.subjects[subjectName].topics.splice(index, 1);
+  fixPointer(subjectName);
   saveData();
   renderEditor();
 }
 
-document.addEventListener("DOMContentLoaded", renderEditor);
+function toggleCompleted(subjectName, index) {
+  let topic = studyData.subjects[subjectName].topics[index];
+
+  if (topic.status === "completed") {
+    topic.status = "not-started";
+    topic.revisionIndex = 0;
+    topic.nextRevision = null;
+  } else {
+    topic.status = "completed";
+    topic.completedOn = today();
+  }
+
+  fixPointer(subjectName);
+  saveData();
+  renderEditor();
+}
+
+function markRevised(subjectName, index, level) {
+  let topic = studyData.subjects[subjectName].topics[index];
+  topic.revisionIndex = level;
+  saveData();
+  renderEditor();
+}
+
+function toggleQbank(subjectName, index) {
+  let topic = studyData.subjects[subjectName].topics[index];
+  topic.qbankDone = !topic.qbankDone;
+  saveData();
+  renderEditor();
+}
+
+function changeSize(subjectName, newSize) {
+  studyData.subjects[subjectName].size = newSize;
+  saveData();
+}
