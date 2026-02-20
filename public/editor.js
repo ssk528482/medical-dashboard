@@ -172,5 +172,3 @@ function fixPointer(subjectName) {
     subject.pointer = subject.topics.length;
   }
 }
-
-document.addEventListener("DOMContentLoaded", renderEditor);
