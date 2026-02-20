@@ -53,11 +53,16 @@ function generatePlan() {
     alert("Add subjects first.");
     return;
   }
+
+  // 🔥 DECLARE topSubject FIRST
+  let topSubject = subjectsSorted[0];
+
   // Carry forward unfinished plan
   if (
     studyData.dailyPlan &&
     studyData.dailyPlan.date !== today() &&
-    studyData.dailyPlan.completed === false
+    studyData.dailyPlan.completed === false &&
+    studyData.subjects[studyData.dailyPlan.study.subject]
   ) {
     topSubject = studyData.dailyPlan.study.subject;
   }
@@ -97,7 +102,6 @@ function generatePlan() {
   };
 
   saveData();
-
   document.getElementById("generateButton").disabled = true;
 }
 
