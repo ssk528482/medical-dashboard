@@ -37,9 +37,7 @@ async function saveToCloud() {
 
 async function loadFromCloud() {
 
-  const {
-    data: { user }
-  } = await supabaseClient.auth.getUser();
+  const { data: { user } } = await supabaseClient.auth.getUser();
 
   if (!user) return;
 
@@ -47,26 +45,28 @@ async function loadFromCloud() {
     .from("study_data")
     .select("data")
     .eq("user_id", user.id);
-  
+
   if (error) {
     console.log("Load error:", error);
     return;
   }
-  
+
+  // 🔥 If cloud data exists, override local completely
   if (data && data.length > 0) {
+
     studyData = data[0].data;
+
     localStorage.setItem("studyData", JSON.stringify(studyData));
+
+    console.log("Cloud data loaded and applied.");
+
+  } else {
+
+    // First time user → push local to cloud
+    await saveToCloud();
+
   }
 
-  if (error) {
-    console.log("Load error:", error);
-    return;
-  }
-
-  if (data && data.data) {
-    studyData = data.data;
-    localStorage.setItem("studyData", JSON.stringify(studyData));
-  }
 }
 
 // ─────────────────────────────────────────────────────────────
