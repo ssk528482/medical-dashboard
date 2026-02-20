@@ -76,7 +76,7 @@ async function login() {
   await supabaseClient.auth.signInWithOtp({
     email: email,
     options: {
-      emailRedirectTo: window.location.origin
+      emailRedirectTo: "https://medical-dashboard-lac.vercel.app"
     }
   });
 
