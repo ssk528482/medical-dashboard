@@ -104,8 +104,9 @@ async function checkUser() {
 
   if (user) {
 
-    document.getElementById("authStatus").innerText = "Logged in";
-
+    const statusEl = document.getElementById("authStatus");
+    if (statusEl) statusEl.innerText = "Logged in"; 
+    
     await loadFromCloud(); // 🔥 WAIT for cloud
 
     if (typeof renderSubjects === "function") renderSubjects();
@@ -114,8 +115,8 @@ async function checkUser() {
 
   } else {
 
-    document.getElementById("authStatus").innerText = "Not logged in";
-
+    if (statusEl) statusEl.innerText = "Not logged in";
+    
   }
 
 }
