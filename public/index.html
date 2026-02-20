@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<h1>🩺 Medical Study OS</h1>
+
+<div id="authSection" class="card" style="margin:14px;">
+  <div class="section-title">Cloud Sync</div>
+  <input type="email" id="emailInput" placeholder="Enter your email" style="width:100%;">
+  <div style="display:flex;gap:8px;">
+    <button onclick="login()">Login</button>
+    <button onclick="logout()" style="background:#475569;">Logout</button>
+  </div>
+  <p id="authStatus"></p>
+</div>
+
+<div id="setupSection">
+  <div class="card">
+    <div class="section-title">Initial Setup</div>
+    <input id="subjectName" placeholder="Subject Name" style="width:100%;">
+    <select id="subjectSize" style="width:100%;">
+      <option value="large">Large</option>
+      <option value="medium">Medium</option>
+      <option value="small">Small</option>
+    </select>
+    <textarea id="topicsInput" rows="6"
+      placeholder="Paste topics here (one per line)"
+      style="width:100%;margin-top:8px;"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="addSubject()">Add Subject</button>
+      <button onclick="finishSetup()" style="background:#16a34a;">Finish Setup</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">☀️ Morning Planner</div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div>
+      <label style="font-size:12px;color:#94a3b8;">Hours Available</label><br>
+      <input type="number" id="dailyHours" style="width:80px;" min="1" max="16" placeholder="hrs">
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;">
+      <button id="generateButton" onclick="generatePlan()">Generate Plan</button>
+      <button onclick="resetTodayPlan()" style="background:#ef4444;font-size:12px;padding:8px 10px;">Reset</button>
+    </div>
+  </div>
+  <div id="planOutput" style="margin-top:10px;"></div>
+</div>
+
+<div class="card">
+  <div class="section-title">📅 60-Day Consistency</div>
+  <div id="heatmapContainer"></div>
+</div>
+
+<div id="statusSection" style="display:none;">
+  <div id="subjectsContainer"></div>
+</div>
+
+<div class="card">
+  <div class="section-title">🌙 Evening Update</div>
+
+  <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px;">📖 Study Log</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select id="studySubject" style="flex:1;min-width:120px;"></select>
+      <select id="studyTopic" style="flex:1;min-width:140px;"></select>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;">
+      <input type="checkbox" id="studyDone"> Completed today
+    </label>
+  </div>
+
+  <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🧪 Qbank Log</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select id="qbankSubject" style="flex:1;min-width:120px;"></select>
+      <select id="qbankTopic" style="flex:1;min-width:140px;"></select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px;align-items:center;flex-wrap:wrap;">
+      <div>
+        <label style="font-size:11px;color:#94a3b8;">Total Qs</label><br>
+        <input type="number" id="qbankTotal" style="width:70px;" min="0">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#94a3b8;">Correct</label><br>
+        <input type="number" id="qbankCorrect" style="width:70px;" min="0">
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;">
+      <input type="checkbox" id="qbankDone"> Completed today
+    </label>
+  </div>
+
+  <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🔁 Revision Log</div>
+    <div id="revisionCheckboxList"></div>
+  </div>
+
+  <button onclick="submitEvening()" style="width:100%;background:#16a34a;padding:12px;font-size:15px;font-weight:600;">
+    Submit Evening Update ✓
+  </button>
+</div>
+
+<div class="bottom-nav">
+  <a href="index.html" class="active">🏠<br>Plan</a>
+  <a href="editor.html">📚<br>Syllabus</a>
+  <a href="qbank.html">🧪<br>Qbank</a>
+  <a href="analytics.html">📊<br>Stats</a>
+</div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="revisionEngine.js"></script>
+<script src="scheduler.js"></script>
+<script src="supabase.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
