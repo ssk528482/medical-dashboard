@@ -10,16 +10,10 @@ const supabaseClient = supabase.createClient(
   SUPABASE_ANON_KEY
 );
 
-// ─────────────────────────────────────────────────────────────
-// 2) Save cloud function — upserts or inserts on conflict
-// ─────────────────────────────────────────────────────────────
-
+// 🔥 SAVE TO CLOUD
 async function saveToCloud() {
 
-  const {
-    data: { user }
-  } = await supabaseClient.auth.getUser();
-
+  const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) return;
 
   await supabaseClient
@@ -31,14 +25,11 @@ async function saveToCloud() {
     });
 }
 
-// ─────────────────────────────────────────────────────────────
-// 3) Load cloud function — loads stored JSON from Supabase
-// ─────────────────────────────────────────────────────────────
 
+// 🔥 LOAD FROM CLOUD
 async function loadFromCloud() {
 
   const { data: { user } } = await supabaseClient.auth.getUser();
-
   if (!user) return;
 
   const { data, error } = await supabaseClient
@@ -51,74 +42,71 @@ async function loadFromCloud() {
     return;
   }
 
-  // 🔥 If cloud data exists, override local completely
   if (data && data.length > 0) {
 
+    // Cloud is master
     studyData = data[0].data;
 
     localStorage.setItem("studyData", JSON.stringify(studyData));
 
-    console.log("Cloud data loaded and applied.");
-
   } else {
 
-    // First time user → push local to cloud
+    // First device → push local to cloud
     await saveToCloud();
-
   }
-
 }
 
-// ─────────────────────────────────────────────────────────────
-// 4) Login / Logout / Auth State Tracking
-// ─────────────────────────────────────────────────────────────
 
+// 🔥 LOGIN
 async function login() {
 
   const email = document.getElementById("emailInput").value;
-
   if (!email) {
     alert("Enter email");
     return;
   }
 
-  await supabaseClient.auth.signInWithOtp({
+  const { error } = await supabaseClient.auth.signInWithOtp({
     email: email,
     options: {
       emailRedirectTo: "https://medical-dashboard-lac.vercel.app"
     }
   });
 
-  alert("Check your email for login link.");
+  if (error) {
+    console.error(error);
+    alert("Login failed.");
+  } else {
+    alert("Check your email.");
+  }
 }
 
+
+// 🔥 LOGOUT
 async function logout() {
   await supabaseClient.auth.signOut();
-  localStorage.removeItem("studyData");
   location.reload();
 }
 
+
+// 🔥 INIT
 async function checkUser() {
 
   const { data: { user } } = await supabaseClient.auth.getUser();
 
-  if (user) {
-
-    const statusEl = document.getElementById("authStatus");
-    if (statusEl) statusEl.innerText = "Logged in"; 
-    
-    await loadFromCloud(); // 🔥 WAIT for cloud
-
-    if (typeof renderSubjects === "function") renderSubjects();
-    if (typeof renderQbank === "function") renderQbank();
-    if (typeof renderAnalytics === "function") renderAnalytics();
-
-  } else {
-
-    if (statusEl) statusEl.innerText = "Not logged in";
-    
+  const statusEl = document.getElementById("authStatus");
+  if (statusEl) {
+    statusEl.innerText = user ? "Logged in" : "Not logged in";
   }
 
+  if (user) {
+    await loadFromCloud();
+  }
+
+  // Render AFTER cloud load
+  if (typeof renderSubjects === "function") renderSubjects();
+  if (typeof renderQbank === "function") renderQbank();
+  if (typeof renderAnalytics === "function") renderAnalytics();
 }
 
 document.addEventListener("DOMContentLoaded", checkUser);
