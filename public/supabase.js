@@ -54,7 +54,14 @@ async function loadFromCloud() {
 
   if (data && data.length > 0) {
 
-    studyData = data[0].data;
+    let cloudData = data[0].data;
+
+    // 🔥 Safety: If string, parse it
+    if (typeof cloudData === "string") {
+      cloudData = JSON.parse(cloudData);
+    }
+
+    studyData = cloudData;
 
     localStorage.setItem("studyData", JSON.stringify(studyData));
 
