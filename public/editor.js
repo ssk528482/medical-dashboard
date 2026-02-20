@@ -160,10 +160,3 @@ function changeSize(subjectName, newSize) {
   saveData();
 }
 
-function fixPointer(subjectName) {
-  let subject = studyData.subjects[subjectName];
-  subject.pointer = subject.topics.findIndex(t => t.status !== "completed");
-  if (subject.pointer === -1) {
-    subject.pointer = subject.topics.length;
-  }
-}
