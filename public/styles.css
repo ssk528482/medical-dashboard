@@ -132,17 +132,6 @@ input, select {
   gap: 6px;
 }
 
-.pill {
-  padding: 4px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.pill.completed { background: #16a34a; color: white; }
-.pill.rev { background: #3b82f6; color: white; }
-.pill.qbank { background: #9333ea; color: white; }
-
 .delete-btn {
   background: #ef4444;
   border-radius: 8px;
@@ -279,18 +268,36 @@ input, select {
   cursor: pointer;
 }
 
-.pill.rev {
-  background: #374151;
+.pill {
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #e5e7eb;
+  color: #374151;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
+/* Completed */
+.pill.completed.active {
+  background: #16a34a;
+  color: white;
+}
+
+/* Revision */
 .pill.rev.active {
   background: #2563eb;
+  color: white;
 }
 
-.pill.completed.active {
-  background: #10b981;
-}
-
+/* Qbank */
 .pill.qbank.active {
   background: #9333ea;
+  color: white;
+}
+
+/* Hover */
+.pill:hover {
+  opacity: 0.8;
 }
