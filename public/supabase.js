@@ -118,8 +118,12 @@ async function checkUser() {
     await loadFromCloud();
   }
 
-  // Render AFTER cloud load
+  // 🔥 Now render everything safely
   if (typeof renderSubjects === "function") renderSubjects();
+  if (typeof renderSavedPlan === "function") renderSavedPlan();
+  if (typeof populateAllEveningSelectors === "function") populateAllEveningSelectors();
+  if (typeof renderHeatmap === "function") renderHeatmap();
+  if (typeof renderRevisionSection === "function") renderRevisionSection();
   if (typeof renderQbank === "function") renderQbank();
   if (typeof renderAnalytics === "function") renderAnalytics();
   if (typeof renderEditor === "function") renderEditor();
