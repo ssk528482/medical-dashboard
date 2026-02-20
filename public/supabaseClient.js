@@ -2,7 +2,6 @@
 // 1) Replace YOUR_URL and YOUR_ANON_KEY with values from
 //    Supabase Settings → API → Project URL & anon public key
 // ─────────────────────────────────────────────────────────────
-
 const SUPABASE_URL = "https://alrkpctsjmvspybrgdfy.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFscmtwY3Rzam12c3B5YnJnZGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjAxODcsImV4cCI6MjA4NzA5NjE4N30.TLSmuCaKCnZ99QUcwL9w7yUGJHrMMj-BWXnqNG7OTwU";
 
