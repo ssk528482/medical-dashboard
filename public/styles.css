@@ -278,3 +278,19 @@ input, select {
   font-size: 14px;
   cursor: pointer;
 }
+
+.pill.rev {
+  background: #374151;
+}
+
+.pill.rev.active {
+  background: #2563eb;
+}
+
+.pill.completed.active {
+  background: #10b981;
+}
+
+.pill.qbank.active {
+  background: #9333ea;
+}
