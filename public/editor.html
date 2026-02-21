@@ -21,16 +21,22 @@
 <!-- ── Editor Tab ── -->
 <div id="editorTab">
   <div class="card">
-    <div class="section-title">Add New Subject</div>
-    <input id="newSubjectName" placeholder="Subject Name" style="width:100%;">
-    <select id="newSubjectSize" style="width:100%;">
-      <option value="large">Large</option>
-      <option value="medium">Medium</option>
-      <option value="small">Small</option>
-    </select>
-    <div style="display:flex;gap:8px;margin-top:8px;">
-      <button onclick="addNewSubject()" style="flex:1;">Add Subject</button>
-      <button onclick="openBulkModal()" style="flex:1;background:#8b5cf6;">📥 Bulk Import</button>
+    <div class="section-title">
+      <button class="collapse-btn" onclick="toggleSubjectCollapse(this, 'newSubjectContent')">▼</button>
+      Add New Subject
+    </div>
+    
+    <div id="newSubjectContent">
+      <input id="newSubjectName" placeholder="Subject Name" style="width:100%;">
+      <select id="newSubjectSize" style="width:100%;">
+        <option value="large">Large</option>
+        <option value="medium">Medium</option>
+        <option value="small">Small</option>
+      </select>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button onclick="addNewSubject()" style="flex:1;">Add Subject</button>
+        <button onclick="openBulkModal()" style="flex:1;background:#8b5cf6;">📥 Bulk Import</button>
+      </div>
     </div>
   </div>
 
