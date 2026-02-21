@@ -71,24 +71,31 @@
 <div class="step-panel" id="step2">
   <div class="card">
     <div class="section-title">📚 Add Subjects</div>
+
     <label>Subject Name</label>
     <input type="text" id="subjectName" placeholder="e.g. Anatomy">
+
     <label>Subject Size</label>
     <select id="subjectSize">
       <option value="large">Large (many units, heavy weight)</option>
       <option value="medium">Medium</option>
       <option value="small">Small</option>
     </select>
-    <label>Units (one per line)</label>
-    <textarea id="topicsInput" rows="6" placeholder="Upper Limb&#10;Lower Limb&#10;Head & Neck&#10;Thorax&#10;Abdomen"></textarea>
-    <div style="font-size:11px;color:#64748b;margin-top:-8px;margin-bottom:10px;">
-      Each line = one unit. Add chapters to units later in the Syllabus editor.
+
+    <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:12px;">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">📋 Units &amp; Topics</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">
+        Format per line: <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit Name | Topic1, Topic2, Topic3</code><br>
+        Or just a unit with no topics yet: <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit Name</code>
+      </div>
+      <textarea id="topicsInput" rows="7" placeholder="Upper Limb | Bones, Muscles, Nerves&#10;Lower Limb | Hip, Knee, Ankle&#10;Head &amp; Neck&#10;Thorax | Heart, Lungs&#10;Abdomen" style="font-family:monospace;font-size:12px;margin-bottom:0;"></textarea>
     </div>
-    <button onclick="addSubjectFromSetup()" style="width:100%;">+ Add Subject</button>
+
+    <button onclick="addSubjectFromSetup()" style="width:100%;background:#8b5cf6;">+ Add Subject</button>
 
     <div id="subjectPreview" style="display:none;margin-top:14px;">
       <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">SUBJECTS TO ADD</div>
-      <div id="subjectList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:200px;overflow-y:auto;"></div>
+      <div id="subjectList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:220px;overflow-y:auto;"></div>
     </div>
   </div>
   <div class="nav-row">
@@ -108,7 +115,7 @@
       <div class="summary-box"><div class="summary-big" id="summaryDays" style="color:#10b981;">—</div><div style="font-size:11px;color:#64748b;">Days Left</div></div>
     </div>
     <div id="summarySubjectList" style="background:#0f172a;border-radius:10px;padding:12px;"></div>
-    <div class="tip">🎯 Add chapters to each unit in the Syllabus editor after setup.</div>
+    <div class="tip">🎯 Topics you added via the <code>Unit | Topic</code> format are already in your syllabus. You can add more chapters to any unit in the Syllabus editor.</div>
   </div>
   <div class="nav-row">
     <button class="secondary" onclick="goStep(2)" style="width:40%;">← Back</button>
@@ -152,13 +159,22 @@ function goStep3() {
 }
 
 function addSubjectFromSetup() {
-  let name    = document.getElementById("subjectName").value.trim();
-  let size    = document.getElementById("subjectSize").value;
+  let name     = document.getElementById("subjectName").value.trim();
+  let size     = document.getElementById("subjectSize").value;
   let rawUnits = document.getElementById("topicsInput").value.trim();
-  if (!name)    { alert("Enter subject name."); return; }
+  if (!name)     { alert("Enter subject name."); return; }
   if (!rawUnits) { alert("Enter at least one unit."); return; }
 
-  let units = rawUnits.split("\n").filter(t => t.trim()).map(t => makeUnitObj(t.trim()));
+  // Parse "Unit Name | Topic1, Topic2, Topic3" format (matching bulk import)
+  let units = rawUnits.split("\n").filter(t => t.trim()).map(line => {
+    let [unitPart, topicsPart] = line.split("|").map(s => s.trim());
+    let unit = makeUnitObj(unitPart || line.trim());
+    if (topicsPart) {
+      unit.chapters = topicsPart.split(",").map(t => t.trim()).filter(Boolean).map(t => makeChapterObj(t));
+    }
+    return unit;
+  });
+
   _setupSubjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   document.getElementById("subjectName").value = "";
   document.getElementById("topicsInput").value = "";
@@ -166,7 +182,7 @@ function addSubjectFromSetup() {
 }
 
 function renderSetupPreview() {
-  let keys = Object.keys(_setupSubjects);
+  let keys    = Object.keys(_setupSubjects);
   let preview = document.getElementById("subjectPreview");
   let list    = document.getElementById("subjectList");
   if (!keys.length) { preview.style.display = "none"; return; }
@@ -175,12 +191,13 @@ function renderSetupPreview() {
   let sizeColors = { large: "#3b82f6", medium: "#8b5cf6", small: "#64748b" };
   list.innerHTML = keys.map(name => {
     let s = _setupSubjects[name];
+    let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
     return `
       <div class="preview-item">
-        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.units.length} units)</span></span>
+        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.units.length} units${totalTopics ? ", " + totalTopics + " topics" : ""})</span></span>
         <div style="display:flex;gap:6px;align-items:center;">
           <span class="badge" style="background:${sizeColors[s.size]}">${s.size}</span>
-          <span onclick="removeSetupSubject('${name}')" style="cursor:pointer;color:#ef4444;font-size:16px;line-height:1;">×</span>
+          <span onclick="removeSetupSubject('${name}')" style="cursor:pointer;color:#ef4444;font-size:18px;line-height:1;">×</span>
         </div>
       </div>`;
   }).join("");
@@ -202,9 +219,10 @@ function renderSummary() {
 
   document.getElementById("summarySubjectList").innerHTML = Object.keys(_setupSubjects).map(name => {
     let s = _setupSubjects[name];
+    let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
     return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1e293b;font-size:13px;">
       <span>${name}</span>
-      <span style="color:#64748b;">${s.units.length} units · ${s.size}</span>
+      <span style="color:#64748b;">${s.units.length} units${totalTopics ? " · " + totalTopics + " topics" : ""} · ${s.size}</span>
     </div>`;
   }).join("");
 }
