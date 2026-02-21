@@ -453,18 +453,14 @@ function renderQbank() {
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div style="flex:1;min-width:0;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" ${unit.qbankDone ? "checked" : ""} onchange="toggleUnitQbankDone('${esc(subjectName)}',${ui},this.checked)" style="width:16px;height:16px;margin:0;">
                 <strong style="font-size:13px;">${unit.name}</strong>
                 ${uAcc !== null ? `<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;color:white;
                   background:${uAcc>=75?"#16a34a":uAcc>=50?"#eab308":"#ef4444"};">${uAcc}%</span>` : ""}
               </div>
               <div style="font-size:11px;color:#64748b;margin-top:4px;">${uTotal} questions • ${uCorrect} correct</div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span class="pill qbank ${unit.qbankRevision>=1?"active":""}" style="font-size:10px;padding:2px 6px;" onclick="setQbankRevision('${esc(subjectName)}',${ui},1)">R1</span>
-              <span class="pill qbank ${unit.qbankRevision>=2?"active":""}" style="font-size:10px;padding:2px 6px;" onclick="setQbankRevision('${esc(subjectName)}',${ui},2)">R2</span>
-              <span class="pill qbank ${unit.qbankRevision>=3?"active":""}" style="font-size:10px;padding:2px 6px;" onclick="setQbankRevision('${esc(subjectName)}',${ui},3)">R3</span>
-            </div>
+            <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;"
+              onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
           </div>
           <div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap;">
             <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Total Qs" min="0"
