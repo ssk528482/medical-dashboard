@@ -69,7 +69,81 @@ function buildBarChart(data, opts = {}) {
   return `<svg width="100%" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
 }
 
-// ─── Data builders ────────────────────────────────────────────
+// ─── Sparkline (inline mini chart) ───────────────────────────
+
+function buildSparkline(values, opts = {}) {
+  let { width = 80, height = 28, color = "#3b82f6", strokeWidth = 1.5 } = opts;
+  if (!values || values.length < 2) return `<span style="font-size:10px;color:#475569;">no data</span>`;
+  let min = Math.min(...values), max = Math.max(...values), range = max - min || 1;
+  let pts = values.map((v, i) => {
+    let x = (i / (values.length - 1)) * width;
+    let y = height - ((v - min) / range) * (height - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  let last = values[values.length - 1];
+  let first = values[0];
+  let trend = last >= first ? "#10b981" : "#ef4444";
+  let c = opts.forceColor || trend;
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block;">
+    <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${(values.length-1)/(values.length-1)*width}" cy="${(height - ((last - min)/range)*(height-4) - 2).toFixed(1)}" r="2.5" fill="${c}"/>
+  </svg>`;
+}
+
+function buildSubjectQbankSparklines() {
+  // Returns HTML string of per-subject sparkline rows
+  let subjects = studyData.subjects;
+  let rows = Object.keys(subjects).map(name => {
+    let sub = subjects[name];
+    // Collect qbank session history from dailyHistory
+    let sessions = [];
+    let sortedDays = Object.keys(studyData.dailyHistory || {}).sort();
+    sortedDays.forEach(day => {
+      let hist = studyData.dailyHistory[day];
+      (hist.qbankEntries || []).forEach(e => {
+        if (e.subject === name && e.total > 0) {
+          sessions.push({ day, acc: (e.correct / e.total) * 100 });
+        }
+      });
+    });
+    // Fallback: use cumulative stats if no session history
+    let totalQ = 0, totalC = 0;
+    sub.units.forEach(u => { totalQ += u.qbankStats.total; totalC += u.qbankStats.correct; });
+    let overallAcc = totalQ > 0 ? (totalC / totalQ * 100).toFixed(1) : null;
+
+    if (sessions.length < 2) {
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0f172a;">
+          <div>
+            <div style="font-size:13px;font-weight:600;">${name}</div>
+            <div style="font-size:11px;color:#475569;">${sessions.length === 1 ? "1 session" : "No sessions yet"}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${overallAcc ? `<span style="font-size:12px;font-weight:700;color:${overallAcc>=75?"#10b981":overallAcc>=50?"#eab308":"#ef4444"};">${overallAcc}%</span>` : `<span style="color:#475569;font-size:12px;">—</span>`}
+            <div style="width:80px;height:28px;display:flex;align-items:center;justify-content:center;">
+              ${buildSparkline(sessions.map(s => s.acc))}
+            </div>
+          </div>
+        </div>`;
+    }
+    let vals = sessions.map(s => s.acc);
+    let last = vals[vals.length - 1];
+    let trendUp = last >= vals[0];
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0f172a;">
+        <div>
+          <div style="font-size:13px;font-weight:600;">${name}</div>
+          <div style="font-size:11px;color:#475569;">${sessions.length} sessions · last: ${sessions[sessions.length-1].day.slice(5)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:13px;font-weight:700;color:${last>=75?"#10b981":last>=50?"#eab308":"#ef4444"};">${last.toFixed(1)}%</span>
+          <span style="font-size:16px;">${trendUp ? "↑" : "↓"}</span>
+          ${buildSparkline(vals, { width: 80, height: 28 })}
+        </div>
+      </div>`;
+  });
+  return rows.join("");
+}
 
 function buildGlobalAccuracyTrend(days) {
   let data = [];

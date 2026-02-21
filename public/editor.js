@@ -108,11 +108,20 @@ function renderEditor() {
             let r1Active   = ch.revisionIndex >= 1;
             let r2Active   = ch.revisionIndex >= 2;
             let r3Active   = ch.revisionIndex >= 3;
+            let diff = ch.difficulty || "medium";
+            let diffColors = { easy: "#10b981", medium: "#eab308", hard: "#ef4444" };
+            let diffLabels = { easy: "Easy", medium: "Med", hard: "Hard" };
             chRow.innerHTML = `
-              <div class="topic-left">
+              <div class="topic-left" style="flex:1;min-width:0;">
                 <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>
               </div>
-              <div class="topic-actions">
+              <div class="topic-actions" style="gap:3px;">
+                <select onchange="setChapterDifficulty('${esc(subjectName)}',${ui},${ci},this.value)"
+                  style="font-size:10px;padding:2px 4px;width:52px;background:#1e293b;border:1px solid ${diffColors[diff]};color:${diffColors[diff]};border-radius:5px;">
+                  <option value="easy"  ${diff==="easy" ?"selected":""}>Easy</option>
+                  <option value="medium"${diff==="medium"?"selected":""}>Med</option>
+                  <option value="hard"  ${diff==="hard" ?"selected":""}>Hard</option>
+                </select>
                 <span class="pill completed ${compActive ? "active" : ""}" onclick="toggleChapterCompleted('${esc(subjectName)}',${ui},${ci})">✓</span>
                 <span class="pill rev ${r1Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},1)">R1</span>
                 <span class="pill rev ${r2Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},2)">R2</span>
@@ -195,6 +204,16 @@ function addChapter(subjectName, ui) {
 function deleteChapter(subjectName, ui, ci) {
   studyData.subjects[subjectName].units[ui].chapters.splice(ci, 1);
   fixPointer(subjectName);
+  saveData(); renderEditor();
+}
+
+function setChapterDifficulty(subjectName, ui, ci, level) {
+  let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
+  if (!ch) return;
+  ch.difficulty = level;
+  // Map difficulty to difficultyFactor: hard=1.5, medium=2.5, easy=3.5
+  const factorMap = { easy: 3.5, medium: 2.5, hard: 1.5 };
+  ch.difficultyFactor = factorMap[level] || 2.5;
   saveData(); renderEditor();
 }
 
@@ -336,14 +355,8 @@ function renderQbank() {
               ${uAcc !== null ? `${uCorrect}/${uTotal} correct · ${uAcc}%` : "Not logged yet"}
             </div>
           </div>
-          <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;margin-left:8px;">
-            <span class="pill rev ${unit.qbankRevision >= 1 ? "active" : ""}" style="cursor:pointer;font-size:11px;padding:3px 8px;"
-              onclick="setQbankRevision('${esc(subjectName)}',${ui},1)">R1</span>
-            <span class="pill rev ${unit.qbankRevision >= 2 ? "active" : ""}" style="cursor:pointer;font-size:11px;padding:3px 8px;"
-              onclick="setQbankRevision('${esc(subjectName)}',${ui},2)">R2</span>
-            <span class="pill rev ${unit.qbankRevision >= 3 ? "active" : ""}" style="cursor:pointer;font-size:11px;padding:3px 8px;"
-              onclick="setQbankRevision('${esc(subjectName)}',${ui},3)">R3</span>
-          </div>
+          <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;margin-left:8px;"
+            onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
         </div>
 
         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">

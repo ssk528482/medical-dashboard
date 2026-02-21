@@ -35,12 +35,19 @@ function subjectPriority(subjectName) {
   if (ySubject === subjectName && dbSubject === subjectName) consecutivePenalty = 15;
   else if (ySubject === subjectName) consecutivePenalty = 5;
 
+  // Hard chapter boost: count hard chapters not yet completed
+  let hardPending = 0;
+  subject.units.forEach(u => u.chapters.forEach(ch => {
+    if (ch.difficulty === "hard" && ch.status !== "completed") hardPending++;
+  }));
+
   return (
     ((100 - accuracy) * 0.35 +
     incomplete * 0.25 +
     overdue * 12 +
     (sizeWeight[subject.size] || 0) +
-    phaseBoost) * proximityMult
+    phaseBoost +
+    hardPending * 3) * proximityMult
   ) - consecutivePenalty;
 }
 
@@ -93,12 +100,47 @@ function generatePlan() {
   let qbankTime    = (adjHours * qbankRatio).toFixed(1);
   let revisionTime = (adjHours * revisionRatio).toFixed(1);
 
+  let daysLeft = daysUntilExam();
+  let examCountdownMode = daysLeft > 0 && daysLeft <= 30;
+
   let burnoutWarn = burnoutAdj < 1.0
     ? `<div style="color:#ef4444;font-size:12px;margin-top:6px;">⚠ Burnout detected — load reduced ${((1-burnoutAdj)*100).toFixed(0)}%</div>` : "";
 
-  let daysLeft = daysUntilExam();
   let examAlert = daysLeft <= 30
     ? `<div style="color:#f59e0b;font-size:12px;margin-top:4px;">🔔 ${daysLeft} days to exam — revision priority elevated</div>` : "";
+
+  // ── EXAM COUNTDOWN MODE ──────────────────────────────────────
+  if (examCountdownMode) {
+    let revisionDue   = getRevisionsDueToday();
+    let overdueCount  = revisionDue.filter(r => r.isOverdue).length;
+    let adjHours      = hours * burnoutAdj;
+    let revisionTime  = (adjHours * 0.5).toFixed(1);
+    let qbankTime     = (adjHours * 0.5).toFixed(1);
+
+    document.getElementById("planOutput").innerHTML = `
+      <div style="background:#450a0a;border:1px solid #ef4444;border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:800;color:#fca5a5;margin-bottom:4px;">🚨 EXAM COUNTDOWN MODE — ${daysLeft} days left</div>
+        <div style="font-size:12px;color:#fca5a5;opacity:0.85;">New study paused. Focus 100% on revision and Qbank mastery.</div>
+      </div>
+      <div style="padding:4px 0;font-size:14px;line-height:1.9;">
+        <strong>🔁 Revision:</strong> ${revisionTime} hrs — ${revisionDue.length} chapters due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}<br>
+        <strong>🧪 Qbank:</strong> ${qbankTime} hrs — weak units first
+        ${burnoutWarn}${examAlert}
+      </div>`;
+
+    studyData.dailyPlan = {
+      date: today(),
+      study: { subject: null },
+      qbank: { subject: topSubject },
+      revisionCount: revisionDue.length,
+      hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
+      completed: false,
+      examCountdownMode: true
+    };
+    saveData();
+    document.getElementById("generateButton").disabled = true;
+    return;
+  }
 
   document.getElementById("planOutput").innerHTML = `
     <div style="padding:8px 0;font-size:14px;line-height:1.8;">
@@ -130,100 +172,53 @@ function resetTodayPlan() {
 }
 
 function submitEvening() {
-  let todayKey = today();
+  let studiedSubject = null;
 
-  // Guard: once per day
-  if (studyData.dailyHistory?.[todayKey]?.eveningSubmitted) {
-    alert("Already submitted today. Delete and resubmit if you need to change.");
-    return;
-  }
+  // ── STUDY ──
+  if (document.getElementById("studyDone")?.checked) {
+    let subjectName  = document.getElementById("studySubject")?.value;
+    let unitIndex    = parseInt(document.getElementById("studyUnit")?.value) || 0;
+    let chapterIndex = parseInt(document.getElementById("studyChapter")?.value) || 0;
+    studiedSubject   = subjectName;
 
-  if (!studyData.dailyHistory[todayKey]) {
-    studyData.dailyHistory[todayKey] = { study: false, qbank: false, revision: false, studySubject: null };
-  }
-
-  let hist = studyData.dailyHistory[todayKey];
-  hist.studyEntries  = [];
-  hist.qbankEntries  = [];
-  hist.revisedItems  = [];
-
-  // ── STUDY ENTRIES ──
-  let studyContainer = document.getElementById("studyEntries");
-  if (studyContainer) {
-    studyContainer.querySelectorAll("[id^='studyEntry-']").forEach(entryDiv => {
-      let id = entryDiv.id.replace("studyEntry-", "");
-      let subjectName = document.getElementById(`sSub-${id}`)?.value;
-      let ui          = parseInt(document.getElementById(`sUnit-${id}`)?.value) || 0;
-      let topicSel    = document.getElementById(`sTopics-${id}`);
-      if (!subjectName || !topicSel) return;
-
-      let selectedOpts = Array.from(topicSel.selectedOptions);
-      if (!selectedOpts.length) return;
-
-      let unit     = studyData.subjects[subjectName]?.units[ui];
-      let unitName = unit?.name || "";
-      let topicNames   = [];
-      let topicIndices = [];
-
-      selectedOpts.forEach(opt => {
-        let ci = parseInt(opt.value);
-        let ch = unit?.chapters[ci];
-        if (!ch) return;
-        topicNames.push(ch.name);
-        topicIndices.push(ci);
-
-        ch.status = "completed";
-        ch.completedOn = today();
-        ch.lastReviewedOn = today();
-        let dates = [], cursor = today();
-        for (let i = 0; i < BASE_INTERVALS.length; i++) {
-          cursor = addDays(cursor, computeNextInterval(ch, i));
-          dates.push(cursor);
-        }
-        ch.revisionDates = dates;
-        ch.nextRevision  = dates[0];
-        ch.revisionIndex = 0;
-        ch.missedRevisions = 0;
-      });
-
-      if (topicNames.length) {
-        fixPointer(subjectName);
-        hist.study = true;
-        hist.studySubject = subjectName;
-        hist.studyEntries.push({ subject: subjectName, unit: unitName, topics: topicNames, topicIndices });
+    let chapter = studyData.subjects[subjectName]?.units[unitIndex]?.chapters[chapterIndex];
+    if (chapter) {
+      chapter.status = "completed";
+      chapter.completedOn = today();
+      chapter.lastReviewedOn = today();
+      let dates = [], cursor = today();
+      for (let i = 0; i < BASE_INTERVALS.length; i++) {
+        cursor = addDays(cursor, computeNextInterval(chapter, i));
+        dates.push(cursor);
       }
-    });
+      chapter.revisionDates = dates;
+      chapter.nextRevision = dates[0];
+      chapter.revisionIndex = 0;
+      chapter.missedRevisions = 0;
+      fixPointer(subjectName);
+    }
   }
 
-  // ── QBANK ENTRIES ──
-  let qbankContainer = document.getElementById("qbankEntries");
-  if (qbankContainer) {
-    qbankContainer.querySelectorAll("[id^='qbankEntry-']").forEach(entryDiv => {
-      let id = entryDiv.id.replace("qbankEntry-", "");
-      let subjectName = document.getElementById(`qSub-${id}`)?.value;
-      let ui          = parseInt(document.getElementById(`qUnit-${id}`)?.value) || 0;
-      let total       = parseInt(document.getElementById(`qTotal-${id}`)?.value) || 0;
-      let correct     = parseInt(document.getElementById(`qCorrect-${id}`)?.value) || 0;
-      if (!subjectName || total <= 0) return;
+  // ── QBANK ──
+  if (document.getElementById("qbankDone")?.checked) {
+    let subjectName = document.getElementById("qbankSubject")?.value;
+    let unitIndex   = parseInt(document.getElementById("qbankUnit")?.value) || 0;
+    let total       = parseInt(document.getElementById("qbankTotal")?.value) || 0;
+    let correct     = parseInt(document.getElementById("qbankCorrect")?.value) || 0;
 
-      let unit     = studyData.subjects[subjectName]?.units[ui];
-      let unitName = unit?.name || "";
-      if (!unit) return;
-
+    let unit = studyData.subjects[subjectName]?.units[unitIndex];
+    if (unit && total > 0) {
       unit.qbankStats.total   += total;
       unit.qbankStats.correct += correct;
       unit.qbankDone = true;
-
+      // Update difficulty factors for all chapters in this unit
       let q = Math.round((correct / total) * 5);
       unit.chapters.forEach(ch => {
         let ef = ch.difficultyFactor || 2.5;
         ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
         ch.difficultyFactor = clamp(ef, 1.3, 3.0);
       });
-
-      hist.qbank = true;
-      hist.qbankEntries.push({ subject: subjectName, unit: unitName, unitIndex: ui, total, correct });
-    });
+    }
   }
 
   // ── REVISION ──
@@ -231,17 +226,29 @@ function submitEvening() {
   revBoxes.forEach(box => {
     let [subjectName, ui, ci] = box.value.split("|");
     markRevisionDone(subjectName, parseInt(ui), parseInt(ci));
-    hist.revisedItems.push({ subjectName, ui, ci });
   });
-  if (revBoxes.length > 0) hist.revision = true;
 
-  if (studyData.dailyPlan?.date === today() && hist.study) {
+  // ── Log daily history ──
+  let todayKey = today();
+  if (!studyData.dailyHistory[todayKey]) {
+    studyData.dailyHistory[todayKey] = { study: false, qbank: false, revision: false, studySubject: null };
+  }
+  if (document.getElementById("studyDone")?.checked) {
+    studyData.dailyHistory[todayKey].study = true;
+    studyData.dailyHistory[todayKey].studySubject = studiedSubject;
+  }
+  if (document.getElementById("qbankDone")?.checked) {
+    studyData.dailyHistory[todayKey].qbank = true;
+  }
+  if (revBoxes.length > 0) {
+    studyData.dailyHistory[todayKey].revision = true;
+  }
+
+  if (studyData.dailyPlan?.date === today() && document.getElementById("studyDone")?.checked) {
     studyData.dailyPlan.completed = true;
   }
 
-  hist.eveningSubmitted = true;
   saveData();
   renderSubjects();
-  renderEveningUpdate();
   alert("Evening update saved ✓");
 }

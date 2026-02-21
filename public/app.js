@@ -3,6 +3,26 @@ function renderSubjects() {
   if (!container) return;
   container.innerHTML = "";
 
+  // ── Exam Countdown Banner ──
+  let daysLeft = daysUntilExam();
+  if (daysLeft > 0 && daysLeft <= 30) {
+    let cdBanner = document.createElement("div");
+    cdBanner.style.cssText = "background:linear-gradient(135deg,#450a0a,#7f1d1d);border:1px solid #ef4444;border-radius:12px;padding:14px 16px;margin:0 14px 12px;";
+    cdBanner.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:#fca5a5;">🚨 EXAM COUNTDOWN MODE</div>
+          <div style="font-size:12px;color:#fca5a5;opacity:0.85;margin-top:3px;">New study paused — revisions & Qbank only</div>
+        </div>
+        <div style="text-align:center;background:rgba(0,0,0,0.3);border-radius:10px;padding:8px 14px;">
+          <div style="font-size:28px;font-weight:900;color:#ef4444;">${daysLeft}</div>
+          <div style="font-size:10px;color:#fca5a5;text-transform:uppercase;letter-spacing:.05em;">days left</div>
+        </div>
+      </div>
+    `;
+    container.appendChild(cdBanner);
+  }
+
   // ── Streak Banner ──
   let streak = calculateStreak();
   if (streak > 0) {
@@ -58,6 +78,37 @@ function renderSubjects() {
     </div>
   `;
   container.appendChild(phaseBanner);
+
+  // ── Weekly Report Teaser (Sundays or grade C/D) ──
+  let todayDate = new Date();
+  let isSunday  = todayDate.getDay() === 0;
+  let weekMissed = 0;
+  for (let i = 1; i <= 7; i++) {
+    let d = addDays(today(), -i);
+    if (!studyData.dailyHistory?.[d]?.eveningSubmitted) weekMissed++;
+    else break;
+  }
+  let weekConsistency = Math.round(((7 - weekMissed) / 7) * 100);
+
+  if (isSunday || weekConsistency < 70) {
+    let wGrade = weekConsistency >= 85 ? "A" : weekConsistency >= 70 ? "B" : weekConsistency >= 55 ? "C" : "D";
+    let wColor = { A:"#10b981", B:"#3b82f6", C:"#eab308", D:"#ef4444" }[wGrade];
+    let wEl = document.createElement("div");
+    wEl.className = "card";
+    wEl.style.cssText = `border-color:${wColor};`;
+    wEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="section-title" style="margin-bottom:2px;">📋 Weekly Report</div>
+          <div style="font-size:12px;color:#94a3b8;">This week's consistency: <strong style="color:${wColor};">${weekConsistency}%</strong></div>
+        </div>
+        <div style="width:44px;height:44px;border-radius:50%;background:${wColor}22;border:2px solid ${wColor};
+          display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:${wColor};">${wGrade}</div>
+      </div>
+      <a href="analytics.html" style="display:block;margin-top:10px;text-align:center;background:#1e293b;color:#93c5fd;border-radius:8px;padding:7px;font-size:12px;text-decoration:none;">View Full Report →</a>
+    `;
+    container.appendChild(wEl);
+  }
 
   // ── Subject Cards ──
   Object.keys(studyData.subjects).forEach(subjectName => {

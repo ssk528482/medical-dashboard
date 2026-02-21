@@ -138,6 +138,18 @@ function renderAnalytics() {
       ${_phaseRowUnits("Qbank — Units Done", phases.qbank, "#10b981")}
     </div>
 
+    <!-- Weekly Report Card -->
+    <div class="card">
+      <div class="section-title">📋 Weekly Report Card</div>
+      ${buildWeeklyReportCard()}
+    </div>
+
+    <!-- Per-Subject Qbank Sparklines -->
+    <div class="card">
+      <div class="section-title">📈 Qbank Accuracy Per Subject</div>
+      ${buildSubjectQbankSparklines()}
+    </div>
+
     <!-- Accuracy Trend Chart -->
     <div class="card">
       <div class="section-title">📊 Qbank Accuracy Trend (30 days)</div>
@@ -267,6 +279,113 @@ function _phaseRowUnits(label, phaseData, color) {
       </div>
       <div class="stat-bar" style="height:10px;"><div class="stat-fill" style="width:${phaseData.pct}%;background:${color};"></div></div>
     </div>`;
+}
+
+function buildWeeklyReportCard() {
+  // Last 7 completed days (Mon–Sun of most recent week)
+  let days = [], totalStudy = 0, totalQbank = 0, totalRevision = 0;
+  let subjectsCovered = new Set();
+  let totalQ = 0, totalCorrect = 0;
+  let missedDays = 0, topicsCompleted = 0;
+
+  for (let i = 6; i >= 0; i--) {
+    let d = addDays(today(), -i);
+    days.push(d);
+    let hist = studyData.dailyHistory?.[d];
+    if (!hist || !hist.eveningSubmitted) { missedDays++; continue; }
+    if (hist.study)    totalStudy++;
+    if (hist.qbank)    totalQbank++;
+    if (hist.revision) totalRevision++;
+    (hist.studyEntries || []).forEach(e => {
+      subjectsCovered.add(e.subject);
+      topicsCompleted += (e.topics || []).length;
+    });
+    (hist.qbankEntries || []).forEach(e => {
+      totalQ       += e.total   || 0;
+      totalCorrect += e.correct || 0;
+    });
+  }
+
+  let consistency = Math.round(((7 - missedDays) / 7) * 100);
+  let accuracy    = totalQ > 0 ? ((totalCorrect / totalQ) * 100).toFixed(1) : null;
+  let grade = consistency >= 85 ? "A" : consistency >= 70 ? "B" : consistency >= 55 ? "C" : "D";
+  let gradeColor = { A: "#10b981", B: "#3b82f6", C: "#eab308", D: "#ef4444" }[grade];
+  let dayNames = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  // day-by-day dots
+  let dotRow = days.map((d, idx) => {
+    let hist = studyData.dailyHistory?.[d];
+    let score = 0;
+    if (hist?.eveningSubmitted) score = (hist.study?1:0) + (hist.qbank?1:0) + (hist.revision?1:0);
+    let dotC = score === 3 ? "#16a34a" : score === 2 ? "#eab308" : score === 1 ? "#f97316" : "#1f2937";
+    let dayLabel = dayNames[(new Date(d).getDay() + 6) % 7]; // Mon=0
+    return `<div style="text-align:center;">
+      <div style="width:28px;height:28px;border-radius:50%;background:${dotC};margin:0 auto 2px;display:flex;align-items:center;justify-content:center;font-size:10px;color:white;font-weight:700;">${score||""}</div>
+      <div style="font-size:9px;color:#64748b;">${dayLabel}</div>
+    </div>`;
+  }).join("");
+
+  // Feedback message
+  let feedback = "";
+  if (consistency === 100) feedback = "🏆 Perfect week! Outstanding discipline.";
+  else if (consistency >= 85) feedback = "🌟 Excellent consistency. Keep the momentum.";
+  else if (consistency >= 70) feedback = "👍 Good week. A couple of missed days — stay on track.";
+  else if (consistency >= 50) feedback = "⚠️ Below average. Focus on daily habits.";
+  else feedback = "🔴 Difficult week. Restart with a small, achievable goal today.";
+
+  // Overdue revisions this week
+  let overdueCount = 0;
+  Object.keys(studyData.subjects).forEach(n => { overdueCount += getOverdueCount(n); });
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">Week of ${days[0].slice(5)} – ${days[6].slice(5)}</div>
+        <div style="font-size:13px;color:#94a3b8;margin-top:3px;">Consistency: ${consistency}%</div>
+      </div>
+      <div style="width:56px;height:56px;border-radius:50%;background:${gradeColor}22;border:3px solid ${gradeColor};
+        display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:${gradeColor};">${grade}</div>
+    </div>
+
+    <!-- Day Dots -->
+    <div style="display:flex;justify-content:space-between;margin-bottom:14px;">${dotRow}</div>
+
+    <!-- Stats Row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
+      <div style="background:#0f172a;border-radius:8px;padding:8px;text-align:center;">
+        <div style="font-size:16px;font-weight:700;color:#3b82f6;">${topicsCompleted}</div>
+        <div style="font-size:9px;color:#64748b;margin-top:1px;">Topics</div>
+      </div>
+      <div style="background:#0f172a;border-radius:8px;padding:8px;text-align:center;">
+        <div style="font-size:16px;font-weight:700;color:#10b981;">${totalRevision}</div>
+        <div style="font-size:9px;color:#64748b;margin-top:1px;">Rev. Days</div>
+      </div>
+      <div style="background:#0f172a;border-radius:8px;padding:8px;text-align:center;">
+        <div style="font-size:16px;font-weight:700;color:${accuracy ? (accuracy>=75?"#10b981":accuracy>=50?"#eab308":"#ef4444") : "#475569"};">${accuracy || "—"}${accuracy?"%":""}</div>
+        <div style="font-size:9px;color:#64748b;margin-top:1px;">Qbank Acc</div>
+      </div>
+      <div style="background:#0f172a;border-radius:8px;padding:8px;text-align:center;">
+        <div style="font-size:16px;font-weight:700;color:${missedDays>0?"#ef4444":"#10b981"};">${missedDays}</div>
+        <div style="font-size:9px;color:#64748b;margin-top:1px;">Missed</div>
+      </div>
+    </div>
+
+    <!-- Subjects covered -->
+    <div style="margin-bottom:10px;">
+      <div style="font-size:11px;color:#64748b;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;">Subjects covered</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        ${subjectsCovered.size > 0
+          ? [...subjectsCovered].map(s => `<span style="background:#1e3a5f;color:#93c5fd;padding:3px 8px;border-radius:6px;font-size:11px;">${s}</span>`).join("")
+          : `<span style="color:#475569;font-size:12px;">None logged this week</span>`}
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div style="background:#0f172a;border-radius:8px;padding:10px;font-size:13px;color:#cbd5e1;line-height:1.5;">
+      ${feedback}
+      ${overdueCount > 0 ? `<br><span style="color:#ef4444;font-size:12px;">⚠ ${overdueCount} revisions still overdue — tackle these first.</span>` : ""}
+    </div>
+  `;
 }
 
 function renderPhaseRow(label, phaseData, color) { return _phaseRow(label, phaseData, color); }

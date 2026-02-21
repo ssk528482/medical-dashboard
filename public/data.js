@@ -22,6 +22,7 @@ function makeChapterObj(name) {
     revisionIndex: 0,
     nextRevision: null,
     difficultyFactor: 2.5,
+    difficulty: "medium",
     missedRevisions: 0,
     lastReviewedOn: null
   };

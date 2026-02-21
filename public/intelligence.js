@@ -88,6 +88,19 @@ function getIntelligenceAlerts() {
     message: `Need ${reqPace.toFixed(1)} chapters/day, averaging ${avgDaily.toFixed(1)}.`
   });
 
+  // 8. Backlog alert: skipped evening update 2+ days
+  let missedDays = 0;
+  for (let i = 1; i <= 7; i++) {
+    let d = addDays(today(), -i);
+    if (!studyData.dailyHistory?.[d]?.eveningSubmitted) missedDays++;
+    else break; // stop at first logged day
+  }
+  if (missedDays >= 2) alerts.push({
+    severity: missedDays >= 4 ? "high" : "medium", icon: "📋",
+    title: `${missedDays}-day study gap`,
+    message: `No evening update for ${missedDays} days. Log a catch-up session today to recover your streak.`
+  });
+
   alerts.sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]));
   return alerts;
 }
