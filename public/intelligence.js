@@ -88,12 +88,12 @@ function getIntelligenceAlerts() {
     message: `Need ${reqPace.toFixed(1)} chapters/day, averaging ${avgDaily.toFixed(1)}.`
   });
 
-  // 8. Backlog alert: skipped evening update 2+ days
+  // 8. Backlog alert: skipped evening update 2+ consecutive days
   let missedDays = 0;
   for (let i = 1; i <= 7; i++) {
     let d = addDays(today(), -i);
     if (!studyData.dailyHistory?.[d]?.eveningSubmitted) missedDays++;
-    else break; // stop at first logged day
+    else break;
   }
   if (missedDays >= 2) alerts.push({
     severity: missedDays >= 4 ? "high" : "medium", icon: "📋",
@@ -106,15 +106,16 @@ function getIntelligenceAlerts() {
 }
 
 function _recentSubjectAccuracy(subjectName, days) {
+  // Use per-session dailyHistory entries for recency
   let subject = studyData.subjects[subjectName];
   if (!subject) return null;
   let cutoff = addDays(today(), -days);
   let total = 0, correct = 0;
-  subject.units.forEach(unit => {
-    if (unit.qbankStats && unit.qbankDone) {
-      total   += unit.qbankStats.total;
-      correct += unit.qbankStats.correct;
-    }
+  Object.keys(studyData.dailyHistory || {}).forEach(dateStr => {
+    if (dateStr < cutoff) return;
+    (studyData.dailyHistory[dateStr].qbankEntries || []).forEach(e => {
+      if (e.subject === subjectName) { total += e.total || 0; correct += e.correct || 0; }
+    });
   });
   return total === 0 ? null : (correct / total) * 100;
 }

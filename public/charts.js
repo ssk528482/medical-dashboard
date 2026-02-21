@@ -146,18 +146,17 @@ function buildSubjectQbankSparklines() {
 }
 
 function buildGlobalAccuracyTrend(days) {
+  // Build from actual logged qbank sessions in dailyHistory
   let data = [];
   for (let i = days - 1; i >= 0; i--) {
     let d = new Date(); d.setDate(d.getDate() - i);
     let dateStr = d.toISOString().split("T")[0];
     let label   = (d.getMonth()+1) + "/" + d.getDate();
-    let total = 0, correct = 0;
-    Object.values(studyData.subjects).forEach(sub => {
-      sub.units.forEach(u => {
-        if (u.qbankDone) { total += u.qbankStats?.total || 0; correct += u.qbankStats?.correct || 0; }
-      });
-    });
-    if (total > 0) data.push({ label, value: (correct / total) * 100 });
+    let hist = studyData.dailyHistory?.[dateStr];
+    if (!hist?.qbankEntries?.length) continue;
+    let dayTotal = 0, dayCorrect = 0;
+    hist.qbankEntries.forEach(e => { dayTotal += e.total || 0; dayCorrect += e.correct || 0; });
+    if (dayTotal > 0) data.push({ label, value: (dayCorrect / dayTotal) * 100 });
   }
   return data;
 }

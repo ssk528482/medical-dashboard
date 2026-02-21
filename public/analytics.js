@@ -124,7 +124,7 @@ function renderAnalytics() {
         </div>
       </div>
       <div style="font-size:12px;color:#64748b;margin-top:10px;padding:10px;background:#0f172a;border-radius:8px;">
-        📅 Phase 1 est. completion: <strong style="color:#e2e8f0;">${prediction.phase1CompletionDate}</strong>
+        📅 Study est. completion: <strong style="color:#e2e8f0;">${prediction.phase1CompletionDate}</strong>
       </div>
       <div style="font-size:11px;color:#475569;margin-top:6px;">Model: Accuracy 40% · Rev compliance 30% · Completion 20% · Consistency 10%</div>
     </div>
@@ -205,47 +205,117 @@ function renderAnalytics() {
     <!-- Subject Ranking -->
     <div class="card">
       <div class="section-title">📉 Subject Ranking (Weakest First)</div>
-      ${subjectStats.map(s => `
-        <div style="margin-bottom:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <strong>${s.name}</strong>
+      ${subjectStats.map(s => {
+        let phaseChips = [
+          s.phase.completed ? `<span style="background:#1e3a5f;color:#60a5fa;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;">Done✓</span>` : "",
+          s.phase.r1        ? `<span style="background:#2e1a5e;color:#a78bfa;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;">R1✓</span>` : "",
+          s.phase.r2        ? `<span style="background:#3b2200;color:#fbbf24;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;">R2✓</span>` : "",
+          s.phase.r3        ? `<span style="background:#431407;color:#fb923c;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;">R3✓</span>` : "",
+        ].filter(Boolean).join("");
+        let hardCount = 0, easyCount = 0;
+        studyData.subjects[s.name]?.units.forEach(u => u.chapters.forEach(ch => {
+          if (ch.difficulty === "hard") hardCount++;
+          if (ch.difficulty === "easy") easyCount++;
+        }));
+        return `
+        <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #1e293b;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <strong style="font-size:14px;">${s.name}</strong>
             <div style="display:flex;gap:6px;align-items:center;">
-              ${s.overdue > 0 ? `<span class="badge-overdue">⚠ ${s.overdue}</span>` : ""}
+              ${s.overdue > 0 ? `<span class="badge-overdue">⚠ ${s.overdue} overdue</span>` : ""}
               <span class="accuracy-badge ${s.accuracy>=75?"accuracy-high":s.accuracy>=50?"accuracy-mid":"accuracy-low"}">${s.accuracy.toFixed(1)}%</span>
             </div>
           </div>
-          <div class="stat-bar"><div class="stat-fill ${s.accuracy>=75?"green":s.accuracy>=50?"yellow":"red"}" style="width:${Math.max(s.accuracy,0)}%"></div></div>
-          <div style="font-size:11px;color:#64748b;margin-top:3px;">
-            ${s.phase.phase1?"✓P1 ":""}${s.phase.phase2?"✓P2 ":""}${s.phase.phase3?"✓P3":""}· ${s.size}
+          <div class="stat-bar" style="height:8px;margin-bottom:6px;">
+            <div class="stat-fill ${s.accuracy>=75?"green":s.accuracy>=50?"yellow":"red"}" style="width:${Math.max(s.accuracy,0)}%"></div>
           </div>
-        </div>
-      `).join("")}
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+            ${phaseChips || `<span style="color:#475569;font-size:11px;">No phases completed</span>`}
+            <span style="margin-left:auto;font-size:10px;color:#475569;">${s.size}
+              ${hardCount > 0 ? `· <span style="color:#ef4444;">${hardCount} hard</span>` : ""}
+              ${easyCount > 0 ? `· <span style="color:#10b981;">${easyCount} easy</span>` : ""}
+            </span>
+          </div>
+        </div>`;
+      }).join("")}
     </div>
 
-    <!-- Weak Units -->
+    <!-- Weak Units + Hard Topics -->
     <div class="card">
-      <div class="section-title">🎯 Weak Units (< 60% accuracy)</div>
-      ${weakUnits.length === 0
-        ? '<div style="color:#9ca3af;font-size:13px;">No weak units ✓</div>'
-        : weakUnits.slice(0, 8).map(u => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0f172a;">
-            <div>
-              <div style="font-size:13px;font-weight:600;">${u.unit}</div>
-              <div style="font-size:11px;color:#9ca3af;">${u.subject} · ${u.chapters} chapters</div>
-            </div>
-            <span class="accuracy-badge accuracy-low">${u.accuracy.toFixed(1)}%</span>
-          </div>`).join("")
-      }
+      <div class="section-title">🎯 Needs Attention</div>
+      ${(() => {
+        // Weak qbank units
+        let weakHtml = weakUnits.length === 0 ? "" : `
+          <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Weak Qbank Units (&lt;60%)</div>
+          ${weakUnits.slice(0, 6).map(u => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0f172a;">
+              <div>
+                <div style="font-size:13px;font-weight:600;">${u.unit}</div>
+                <div style="font-size:11px;color:#9ca3af;">${u.subject} · ${u.chapters} chapters</div>
+              </div>
+              <span class="accuracy-badge accuracy-low">${u.accuracy.toFixed(1)}%</span>
+            </div>`).join("")}`;
+        // Hard chapters not yet revised (revisionIndex = 0 but completed)
+        let hardUnrevised = [];
+        Object.keys(studyData.subjects).forEach(subName => {
+          studyData.subjects[subName].units.forEach(unit => {
+            unit.chapters.forEach(ch => {
+              if (ch.difficulty === "hard" && ch.status === "completed" && ch.revisionIndex === 0) {
+                hardUnrevised.push({ subName, unitName: unit.name, chName: ch.name });
+              }
+            });
+          });
+        });
+        let hardHtml = hardUnrevised.length === 0 ? "" : `
+          <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin:${weakUnits.length>0?"14px":0} 0 8px;">Hard Topics — Not Yet Revised</div>
+          ${hardUnrevised.slice(0, 6).map(h => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #0f172a;">
+              <div>
+                <div style="font-size:13px;font-weight:600;">${h.chName}</div>
+                <div style="font-size:11px;color:#9ca3af;">${h.subName} · ${h.unitName}</div>
+              </div>
+              <span style="background:#450a0a;color:#fca5a5;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">Hard</span>
+            </div>`).join("")}`;
+        if (!weakHtml && !hardHtml) return '<div style="color:#9ca3af;font-size:13px;">No weak units or unrevised hard topics ✓</div>';
+        return weakHtml + hardHtml;
+      })()}
     </div>
 
     <!-- Overdue -->
     <div class="card">
       <div class="section-title">⏰ Overdue Revisions</div>
-      ${totalOverdue === 0
-        ? '<div style="color:#10b981;font-size:13px;">No overdue revisions ✓</div>'
-        : `<div style="font-size:28px;font-weight:700;color:#ef4444;">${totalOverdue} chapters overdue</div>
-           <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Memory decay is accelerating. Revise today.</div>`
-      }
+      ${(() => {
+        if (totalOverdue === 0) return '<div style="color:#10b981;font-size:13px;">No overdue revisions ✓</div>';
+        // Build per-subject overdue list
+        let rows = [];
+        Object.keys(studyData.subjects).forEach(subName => {
+          let items = [];
+          studyData.subjects[subName].units.forEach((unit, ui) => {
+            unit.chapters.forEach((ch, ci) => {
+              if (ch.nextRevision && ch.nextRevision < today()) {
+                let daysLate = daysBetween(ch.nextRevision, today());
+                items.push({ chName: ch.name, unitName: unit.name, daysLate });
+              }
+            });
+          });
+          if (!items.length) return;
+          items.sort((a, b) => b.daysLate - a.daysLate);
+          rows.push(`
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <strong style="font-size:13px;">${subName}</strong>
+                <span class="badge-overdue">⚠ ${items.length}</span>
+              </div>
+              ${items.slice(0, 3).map(it => `
+                <div style="display:flex;justify-content:space-between;padding:4px 0 4px 10px;border-left:2px solid #ef4444;margin-bottom:2px;">
+                  <span style="font-size:11px;color:#94a3b8;">${it.unitName} → ${it.chName}</span>
+                  <span style="font-size:11px;color:#ef4444;font-weight:600;">${it.daysLate}d late</span>
+                </div>`).join("")}
+              ${items.length > 3 ? `<div style="font-size:11px;color:#64748b;padding-left:10px;">+${items.length-3} more…</div>` : ""}
+            </div>`);
+        });
+        return `<div style="font-size:12px;color:#9ca3af;margin-bottom:10px;">Memory decay is accelerating for <strong style="color:#ef4444;">${totalOverdue}</strong> chapters. Revise today.</div>` + rows.join("");
+      })()}
     </div>
 
     <!-- Settings -->

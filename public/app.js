@@ -92,7 +92,6 @@ function renderSubjects() {
   for (let i = 1; i <= 7; i++) {
     let d = addDays(today(), -i);
     if (!studyData.dailyHistory?.[d]?.eveningSubmitted) weekMissed++;
-    else break;
   }
   let weekConsistency = Math.round(((7 - weekMissed) / 7) * 100);
 
