@@ -63,17 +63,29 @@ function renderEditor() {
         let unitDone = unit.chapters.filter(c => c.status === "completed").length;
         let unitPct  = unit.chapters.length > 0 ? ((unitDone / unit.chapters.length) * 100).toFixed(0) : 0;
 
+        // Unit-level pill states — active only when ALL chapters meet the threshold
+        let unitAllDone = unit.chapters.length > 0 && unit.chapters.every(c => c.status === "completed");
+        let unitAllR1   = unit.chapters.length > 0 && unit.chapters.every(c => c.revisionIndex >= 1);
+        let unitAllR2   = unit.chapters.length > 0 && unit.chapters.every(c => c.revisionIndex >= 2);
+        let unitAllR3   = unit.chapters.length > 0 && unit.chapters.every(c => c.revisionIndex >= 3);
+
         let unitEl = document.createElement("div");
         unitEl.className = "unit-block";
 
         unitEl.innerHTML = `
-          <div class="unit-header">
+          <div class="unit-header" style="flex-wrap:wrap;row-gap:6px;">
             <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
               <button class="collapse-btn" onclick="toggleUnitCollapse('${esc(subjectName)}',${ui})" style="font-size:12px;padding:2px 5px;">${isUnitCollapsed ? "▶" : "▼"}</button>
               <span class="unit-title">${unit.name}</span>
               <span style="font-size:10px;color:#475569;flex-shrink:0;">${unitPct}% (${unitDone}/${unit.chapters.length})</span>
             </div>
-            <button onclick="deleteUnit('${esc(subjectName)}',${ui})" style="background:transparent;color:#ef4444;padding:3px 7px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:6px;">✕</button>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span class="pill completed ${unitAllDone ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="toggleUnitCompleted('${esc(subjectName)}',${ui})" title="Mark all chapters complete">✓</span>
+              <span class="pill rev ${unitAllR1 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},1)" title="Mark all chapters R1">R1</span>
+              <span class="pill rev ${unitAllR2 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},2)" title="Mark all chapters R2">R2</span>
+              <span class="pill rev ${unitAllR3 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},3)" title="Mark all chapters R3">R3</span>
+              <button onclick="deleteUnit('${esc(subjectName)}',${ui})" style="background:transparent;color:#ef4444;padding:3px 7px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:6px;">✕</button>
+            </div>
           </div>
           <div class="stat-bar" style="margin:5px 0 4px;height:4px;">
             <div class="stat-fill ${unitPct>=75?"green":unitPct>=40?"yellow":"red"}" style="width:${unitPct}%"></div>
@@ -103,7 +115,6 @@ function renderEditor() {
             chRow.className = "chapter-row";
             // Completed = green if status completed
             // R1 green if revisionIndex >= 1, R2 green if >=2, R3 green if >=3
-            // But only show current active level highlighted; all previous are also green
             let compActive = ch.status === "completed";
             let r1Active   = ch.revisionIndex >= 1;
             let r2Active   = ch.revisionIndex >= 2;
@@ -191,6 +202,102 @@ function deleteUnit(subjectName, ui) {
   fixPointer(subjectName);
   saveData(); renderEditor();
 }
+
+// ─── Unit-level Bulk Actions ──────────────────────────────────
+
+function toggleUnitCompleted(subjectName, ui) {
+  let unit = studyData.subjects[subjectName].units[ui];
+  if (!unit || !unit.chapters.length) return;
+
+  let allDone = unit.chapters.every(c => c.status === "completed");
+
+  unit.chapters.forEach(ch => {
+    if (allDone) {
+      // Toggle OFF — reset all chapters to not-started
+      ch.status = "not-started";
+      ch.revisionIndex = 0;
+      ch.nextRevision = null;
+      ch.revisionDates = [];
+    } else {
+      // Toggle ON — mark any incomplete chapter as completed
+      if (ch.status !== "completed") {
+        ch.status = "completed";
+        ch.completedOn = today();
+        ch.lastReviewedOn = today();
+        let dates = [], cursor = today();
+        for (let i = 0; i < BASE_INTERVALS.length; i++) {
+          cursor = addDays(cursor, computeNextInterval(ch, i));
+          dates.push(cursor);
+        }
+        ch.revisionDates = dates;
+        ch.nextRevision = dates[0];
+        ch.revisionIndex = 0;
+      }
+    }
+  });
+
+  fixPointer(subjectName);
+  saveData();
+  renderEditor();
+}
+
+function markUnitRevised(subjectName, ui, level) {
+  let unit = studyData.subjects[subjectName].units[ui];
+  if (!unit || !unit.chapters.length) return;
+
+  // Guard checks — same logic as individual chapter buttons
+  if (level === 2) {
+    let notReady = unit.chapters.filter(c => c.revisionIndex < 1);
+    if (notReady.length) {
+      alert(`${notReady.length} chapter(s) haven't completed R1 yet. Mark all chapters R1 first.`);
+      return;
+    }
+  }
+  if (level === 3) {
+    let notReady = unit.chapters.filter(c => c.revisionIndex < 2);
+    if (notReady.length) {
+      alert(`${notReady.length} chapter(s) haven't completed R2 yet. Mark all chapters R2 first.`);
+      return;
+    }
+  }
+  if (level === 1) {
+    // Auto-complete any chapter not yet marked completed (same as individual R1 behavior)
+    unit.chapters.forEach(ch => {
+      if (ch.status !== "completed") {
+        ch.status = "completed";
+        ch.completedOn = today();
+        ch.lastReviewedOn = today();
+        let dates = [], cursor = today();
+        for (let i = 0; i < BASE_INTERVALS.length; i++) {
+          cursor = addDays(cursor, computeNextInterval(ch, i));
+          dates.push(cursor);
+        }
+        ch.revisionDates = dates;
+        ch.nextRevision = dates[0];
+        ch.revisionIndex = 0;
+      }
+    });
+  }
+
+  let allAtLevel = unit.chapters.every(c => c.revisionIndex >= level);
+
+  unit.chapters.forEach(ch => {
+    if (allAtLevel) {
+      // Toggle OFF — drop all chapters back one level
+      if (ch.revisionIndex >= level) ch.revisionIndex = level - 1;
+    } else {
+      // Toggle ON — bring all chapters up to this level
+      if (ch.revisionIndex < level) ch.revisionIndex = level;
+      ch.lastReviewedOn = today();
+    }
+  });
+
+  fixPointer(subjectName);
+  saveData();
+  renderEditor();
+}
+
+// ─── Chapter Actions ──────────────────────────────────────────
 
 function addChapter(subjectName, ui) {
   let input = document.getElementById(`addCh-${subjectName}-${ui}`);
@@ -326,62 +433,52 @@ function renderQbank() {
           ${overallAcc !== null ? overallAcc + "%" : "—"}
         </span>
       </div>
-      ${!isQbCollapsed && totalQ > 0 ? `
-        <div class="stat-bar" style="margin-bottom:12px;height:6px;">
-          <div class="stat-fill ${overallAcc>=75?"green":overallAcc>=50?"yellow":"red"}" style="width:${overallAcc}%"></div>
-        </div>` : ""}
     `;
 
     if (!isQbCollapsed) {
-      if (!subject.units.length) {
-        let empty = document.createElement("div");
-        empty.style.cssText = "color:#64748b;font-size:13px;padding:6px 0;";
-        empty.textContent = "No units — add them in the Syllabus tab.";
-        subjectEl.appendChild(empty);
-      }
-
       subject.units.forEach((unit, ui) => {
-      let uTotal   = unit.qbankStats.total;
-      let uCorrect = unit.qbankStats.correct;
-      let uAcc     = uTotal > 0 ? (uCorrect / uTotal * 100).toFixed(1) : null;
+        let uTotal   = unit.qbankStats?.total   || 0;
+        let uCorrect = unit.qbankStats?.correct || 0;
+        let uAcc     = uTotal > 0 ? (uCorrect / uTotal * 100).toFixed(1) : null;
 
-      let unitEl = document.createElement("div");
-      unitEl.className = "qbank-unit-row";
-      unitEl.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:#cbd5e1;">${unit.name}</div>
-            <div style="font-size:11px;color:#64748b;margin-top:2px;">
-              ${uAcc !== null ? `${uCorrect}/${uTotal} correct · ${uAcc}%` : "Not logged yet"}
+        let unitEl = document.createElement("div");
+        unitEl.className = "qbank-unit-row";
+
+        unitEl.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:#a8c0dc;">${unit.name}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                ${uAcc !== null ? `${uCorrect}/${uTotal} correct · ${uAcc}%` : "Not logged yet"}
+              </div>
             </div>
+            <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;margin-left:8px;"
+              onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
           </div>
-          <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;margin-left:8px;"
-            onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
-        </div>
 
-        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-          <div>
-            <label style="font-size:10px;color:#64748b;display:block;margin-bottom:2px;">Total Qs</label>
-            <input type="number" id="qb-total-${esc(subjectName)}-${ui}" placeholder="0" min="0"
-              style="width:72px;font-size:13px;padding:6px 8px;" value="">
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+            <div>
+              <label style="font-size:10px;color:#64748b;display:block;margin-bottom:2px;">Total Qs</label>
+              <input type="number" id="qb-total-${esc(subjectName)}-${ui}" placeholder="0" min="0"
+                style="width:72px;font-size:13px;padding:6px 8px;" value="">
+            </div>
+            <div>
+              <label style="font-size:10px;color:#64748b;display:block;margin-bottom:2px;">Correct</label>
+              <input type="number" id="qb-correct-${esc(subjectName)}-${ui}" placeholder="0" min="0"
+                style="width:72px;font-size:13px;padding:6px 8px;" value="">
+            </div>
+            <button onclick="logUnitQbank('${esc(subjectName)}',${ui})"
+              style="padding:8px 14px;font-size:12px;margin:0;">Log ✓</button>
+            ${uTotal > 0 ? `<button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
+              style="padding:8px 10px;font-size:11px;margin:0;background:#334155;">Clear</button>` : ""}
           </div>
-          <div>
-            <label style="font-size:10px;color:#64748b;display:block;margin-bottom:2px;">Correct</label>
-            <input type="number" id="qb-correct-${esc(subjectName)}-${ui}" placeholder="0" min="0"
-              style="width:72px;font-size:13px;padding:6px 8px;" value="">
-          </div>
-          <button onclick="logUnitQbank('${esc(subjectName)}',${ui})"
-            style="padding:8px 14px;font-size:12px;margin:0;">Log ✓</button>
-          ${uTotal > 0 ? `<button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
-            style="padding:8px 10px;font-size:11px;margin:0;background:#334155;">Clear</button>` : ""}
-        </div>
 
-        ${uAcc !== null ? `
-          <div class="stat-bar" style="margin-top:8px;height:6px;">
-            <div class="stat-fill ${uAcc>=75?"green":uAcc>=50?"yellow":"red"}" style="width:${uAcc}%"></div>
-          </div>` : ""}
-      `;
-      subjectEl.appendChild(unitEl);
+          ${uAcc !== null ? `
+            <div class="stat-bar" style="margin-top:8px;height:6px;">
+              <div class="stat-fill ${uAcc>=75?"green":uAcc>=50?"yellow":"red"}" style="width:${uAcc}%"></div>
+            </div>` : ""}
+        `;
+        subjectEl.appendChild(unitEl);
       }); // end units forEach
     } // end if !isQbCollapsed
 
@@ -581,16 +678,11 @@ function bulkConfirmImport() {
 }
 
 function toggleaddSubjectCollapse(buttonElement, contentId) {
-  // Find the div we want to collapse/expand
   const contentDiv = document.getElementById(contentId);
-  
-  // Check its current display status
   if (contentDiv.style.display === "none") {
-    // If hidden, show it and change arrow to down
-    contentDiv.style.display = "block"; 
+    contentDiv.style.display = "block";
     buttonElement.innerHTML = "▼";
   } else {
-    // If showing, hide it and change arrow to right
     contentDiv.style.display = "none";
     buttonElement.innerHTML = "▶";
   }
