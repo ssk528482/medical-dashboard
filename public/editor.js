@@ -482,7 +482,7 @@ function bulkConfirmImport() {
   alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
 }
 
-function toggleSubjectCollapse(buttonElement, contentId) {
+function toggleaddSubjectCollapse(buttonElement, contentId) {
   // Find the div we want to collapse/expand
   const contentDiv = document.getElementById(contentId);
   
