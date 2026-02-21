@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planner — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Topic chip styles ── */
+    .topic-chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .topic-chip.selected {
+      background: #1e3a5f !important;
+      color: #93c5fd !important;
+      border-color: #3b82f6 !important;
+    }
+    .topic-chip.already-done {
+      background: #1a3a1a;
+      color: #4ade80;
+      border-color: #166534;
+    }
+    /* Evening submitted card */
+    .evening-submitted-card {
+      background: linear-gradient(135deg, #0f2b1a, #0a1f12);
+      border: 1px solid #16a34a;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+    .evening-entry-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #1a3a1a;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .evening-entry-line:last-child { border-bottom: none; }
+    .entry-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+    /* Section separator */
+    .form-section {
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+      border: 1px solid #1e293b;
+    }
+    .form-section-title {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<script src="router.js"></script>
+
+<h1>📋 Daily Planner</h1>
+
+<!-- Morning Plan -->
+<div class="card">
+  <div class="section-title">☀️ Morning Planner</div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div>
+      <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:3px;">Hours Available</label>
+      <input type="number" id="dailyHours" style="width:90px;" min="1" max="16" placeholder="hrs">
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-top:18px;">
+      <button id="generateButton" onclick="generatePlan()">Generate Plan</button>
+      <button onclick="resetTodayPlan()" style="background:#ef4444;font-size:12px;padding:8px 10px;margin-top:0;">Reset</button>
+    </div>
+  </div>
+  <div id="planOutput" style="margin-top:10px;"></div>
+</div>
+
+<!-- Heatmap -->
+<div class="card">
+  <div class="section-title">📅 60-Day Consistency</div>
+  <div id="heatmapContainer"></div>
+</div>
+
+<!-- Evening Update -->
+<div class="card" id="eveningUpdateCard">
+  <div class="section-title" style="margin-bottom:0;">🌙 Evening Update</div>
+  <div style="font-size:11px;color:#475569;margin-bottom:14px;">Log what you completed today</div>
+  <div id="eveningUpdateInner"></div>
+</div>
+
+<!-- Bottom Nav (5 items) -->
+<div class="bottom-nav">
+  <a href="index.html">🏠<br>Home</a>
+  <a href="planner.html" class="active">📋<br>Planner</a>
+  <a href="editor.html">📚<br>Syllabus</a>
+  <a href="analytics.html">📊<br>Stats</a>
+  <a href="profile.html">👤<br>Profile</a>
+</div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="revisionEngine.js"></script>
+<script src="scheduler.js"></script>
+<script src="intelligence.js"></script>
+<script src="charts.js"></script>
+<script src="supabase.js"></script>
+<script src="app.js"></script>
+<script>
+  // Init planner page
+  document.addEventListener("DOMContentLoaded", function() {
+    if (typeof renderSavedPlan === "function") renderSavedPlan();
+    if (typeof renderHeatmap === "function") renderHeatmap();
+    if (typeof renderEveningUpdate === "function") renderEveningUpdate();
+  });
+</script>
+
+</body>
+</html>

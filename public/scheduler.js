@@ -172,17 +172,48 @@ function resetTodayPlan() {
 }
 
 function submitEvening() {
-  let studiedSubject = null;
+  let todayKey = today();
+  let studyEntries = [];
+  let qbankEntries = [];
+  let revisedItems = [];
+  let anyStudy = false, anyQbank = false, anyRevision = false;
 
-  // ── STUDY ──
-  if (document.getElementById("studyDone")?.checked) {
-    let subjectName  = document.getElementById("studySubject")?.value;
-    let unitIndex    = parseInt(document.getElementById("studyUnit")?.value) || 0;
-    let chapterIndex = parseInt(document.getElementById("studyChapter")?.value) || 0;
-    studiedSubject   = subjectName;
+  // ── STUDY ENTRIES (multi-entry form) ──
+  let studyDivs = document.querySelectorAll("[id^='studyEntry-']");
+  studyDivs.forEach(div => {
+    let id = div.id.replace("studyEntry-", "");
+    let subjectName = document.getElementById(`sSub-${id}`)?.value;
+    let unitIndex   = parseInt(document.getElementById(`sUnit-${id}`)?.value) || 0;
+    if (!subjectName || !studyData.subjects[subjectName]) return;
 
-    let chapter = studyData.subjects[subjectName]?.units[unitIndex]?.chapters[chapterIndex];
-    if (chapter) {
+    // Get selected topic indices from custom chip UI
+    let selectedIndices = [];
+    let chipButtons = div.querySelectorAll(".topic-chip.selected");
+    chipButtons.forEach(btn => {
+      let ci = parseInt(btn.dataset.ci);
+      if (!isNaN(ci)) selectedIndices.push(ci);
+    });
+    // Fallback: native multi-select
+    if (selectedIndices.length === 0) {
+      let sel = document.getElementById(`sTopics-${id}`);
+      if (sel) {
+        Array.from(sel.selectedOptions).forEach(opt => {
+          let ci = parseInt(opt.value);
+          if (!isNaN(ci)) selectedIndices.push(ci);
+        });
+      }
+    }
+    if (selectedIndices.length === 0) return;
+
+    let unit = studyData.subjects[subjectName].units[unitIndex];
+    if (!unit) return;
+
+    let topicNames = [];
+    selectedIndices.forEach(ci => {
+      let chapter = unit.chapters[ci];
+      if (!chapter) return;
+      topicNames.push(chapter.name);
+      // Mark chapter as completed and schedule revisions
       chapter.status = "completed";
       chapter.completedOn = today();
       chapter.lastReviewedOn = today();
@@ -195,60 +226,80 @@ function submitEvening() {
       chapter.nextRevision = dates[0];
       chapter.revisionIndex = 0;
       chapter.missedRevisions = 0;
-      fixPointer(subjectName);
-    }
-  }
+    });
+    fixPointer(subjectName);
 
-  // ── QBANK ──
-  if (document.getElementById("qbankDone")?.checked) {
-    let subjectName = document.getElementById("qbankSubject")?.value;
-    let unitIndex   = parseInt(document.getElementById("qbankUnit")?.value) || 0;
-    let total       = parseInt(document.getElementById("qbankTotal")?.value) || 0;
-    let correct     = parseInt(document.getElementById("qbankCorrect")?.value) || 0;
+    studyEntries.push({
+      subject: subjectName,
+      unit: unit.name,
+      unitIndex,
+      topics: topicNames,
+      topicIndices: selectedIndices
+    });
+    anyStudy = true;
+  });
 
-    let unit = studyData.subjects[subjectName]?.units[unitIndex];
-    if (unit && total > 0) {
-      unit.qbankStats.total   += total;
-      unit.qbankStats.correct += correct;
-      unit.qbankDone = true;
-      // Update difficulty factors for all chapters in this unit
-      let q = Math.round((correct / total) * 5);
-      unit.chapters.forEach(ch => {
-        let ef = ch.difficultyFactor || 2.5;
-        ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-        ch.difficultyFactor = clamp(ef, 1.3, 3.0);
-      });
-    }
-  }
+  // ── QBANK ENTRIES (multi-entry form) ──
+  let qbankDivs = document.querySelectorAll("[id^='qbankEntry-']");
+  qbankDivs.forEach(div => {
+    let id = div.id.replace("qbankEntry-", "");
+    let subjectName = document.getElementById(`qSub-${id}`)?.value;
+    let unitIndex   = parseInt(document.getElementById(`qUnit-${id}`)?.value) || 0;
+    let total       = parseInt(document.getElementById(`qTotal-${id}`)?.value) || 0;
+    let correct     = parseInt(document.getElementById(`qCorrect-${id}`)?.value) || 0;
+    if (!subjectName || !studyData.subjects[subjectName]) return;
+    if (total <= 0) return;
+
+    let unit = studyData.subjects[subjectName].units[unitIndex];
+    if (!unit) return;
+
+    unit.qbankStats.total   = (unit.qbankStats.total   || 0) + total;
+    unit.qbankStats.correct = (unit.qbankStats.correct || 0) + correct;
+    unit.qbankDone = true;
+    // Update difficulty factors
+    let q = Math.round((correct / total) * 5);
+    unit.chapters.forEach(ch => {
+      let ef = ch.difficultyFactor || 2.5;
+      ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+      ch.difficultyFactor = clamp(ef, 1.3, 3.0);
+    });
+
+    qbankEntries.push({
+      subject: subjectName,
+      unit: unit.name,
+      unitIndex,
+      total,
+      correct
+    });
+    anyQbank = true;
+  });
 
   // ── REVISION ──
   let revBoxes = document.querySelectorAll("#revisionCheckboxList input[type='checkbox']:checked");
   revBoxes.forEach(box => {
     let [subjectName, ui, ci] = box.value.split("|");
     markRevisionDone(subjectName, parseInt(ui), parseInt(ci));
+    revisedItems.push({ subjectName, unitIndex: parseInt(ui), chapterIndex: parseInt(ci) });
+    anyRevision = true;
   });
 
   // ── Log daily history ──
-  let todayKey = today();
-  if (!studyData.dailyHistory[todayKey]) {
-    studyData.dailyHistory[todayKey] = { study: false, qbank: false, revision: false, studySubject: null };
-  }
-  if (document.getElementById("studyDone")?.checked) {
-    studyData.dailyHistory[todayKey].study = true;
-    studyData.dailyHistory[todayKey].studySubject = studiedSubject;
-  }
-  if (document.getElementById("qbankDone")?.checked) {
-    studyData.dailyHistory[todayKey].qbank = true;
-  }
-  if (revBoxes.length > 0) {
-    studyData.dailyHistory[todayKey].revision = true;
-  }
+  studyData.dailyHistory[todayKey] = {
+    study: anyStudy,
+    qbank: anyQbank,
+    revision: anyRevision,
+    eveningSubmitted: true,
+    studyEntries,
+    qbankEntries,
+    revisedItems,
+    submittedAt: new Date().toISOString()
+  };
 
-  if (studyData.dailyPlan?.date === today() && document.getElementById("studyDone")?.checked) {
+  if (studyData.dailyPlan?.date === todayKey && anyStudy) {
     studyData.dailyPlan.completed = true;
   }
 
   saveData();
-  renderSubjects();
-  alert("Evening update saved ✓");
+  if (typeof renderSubjects === "function") renderSubjects();
+  if (typeof renderEveningUpdate === "function") renderEveningUpdate();
 }

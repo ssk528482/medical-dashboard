@@ -177,6 +177,7 @@ function renderSubjects() {
 
   renderRevisionSection();
   renderIntelligenceAlerts("homeAlerts");
+  renderPlannerQuickStatus();
 }
 
 function renderRevisionSection() {
@@ -209,7 +210,31 @@ function renderRevisionSection() {
   container.appendChild(revDiv);
 }
 
-// ── Evening Update Rendering ──────────────────────────────────
+// ── Planner Quick Status (shown on Home page) ────────────────
+function renderPlannerQuickStatus() {
+  let el = document.getElementById("plannerQuickStatus");
+  if (!el) return;
+  let todayKey = today();
+  let hist = studyData.dailyHistory?.[todayKey];
+  let submitted = hist?.eveningSubmitted;
+
+  if (submitted) {
+    let studyCount = (hist.studyEntries || []).reduce((s, e) => s + (e.topics || []).length, 0);
+    let qCount = (hist.qbankEntries || []).reduce((s, e) => s + (e.total || 0), 0);
+    let revCount = (hist.revisedItems || []).length;
+    el.innerHTML = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+        <span style="background:#0f2b1a;color:#4ade80;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;">✅ Evening Submitted</span>
+        ${studyCount > 0 ? `<span style="background:#1e293b;color:#93c5fd;padding:4px 10px;border-radius:6px;font-size:11px;">📖 ${studyCount} topic${studyCount>1?"s":""}</span>` : ""}
+        ${qCount > 0 ? `<span style="background:#1e293b;color:#86efac;padding:4px 10px;border-radius:6px;font-size:11px;">🧪 ${qCount}Q done</span>` : ""}
+        ${revCount > 0 ? `<span style="background:#1e293b;color:#c4b5fd;padding:4px 10px;border-radius:6px;font-size:11px;">🔁 ${revCount} revised</span>` : ""}
+      </div>`;
+  } else {
+    el.innerHTML = `<div style="font-size:11px;color:#ef4444;margin-top:4px;">🌙 Evening update pending — log your progress!</div>`;
+  }
+}
+
+
 
 function renderEveningUpdate() {
   let inner = document.getElementById("eveningUpdateInner");
@@ -221,25 +246,67 @@ function renderEveningUpdate() {
   let submitted = studyData.dailyHistory?.[todayKey]?.eveningSubmitted;
 
   if (submitted) {
-    // Show submitted card
     let hist = studyData.dailyHistory[todayKey];
-    let studyLines = (hist.studyEntries || []).map(e =>
-      `<div style="font-size:12px;color:#cbd5e1;padding:2px 0;">📖 ${e.subject} — ${e.unit} — ${e.topics.join(", ")}</div>`
-    ).join("");
-    let qbankLines = (hist.qbankEntries || []).map(e =>
-      `<div style="font-size:12px;color:#cbd5e1;padding:2px 0;">🧪 ${e.subject} — ${e.unit} — ${e.total}Q / ${e.correct}✓</div>`
-    ).join("");
+
+    let studyLines = (hist.studyEntries || []).map(e => {
+      let topicsStr = (e.topics || []).join(", ") || "—";
+      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid #1a3a1a;">
+        <span style="font-size:15px;flex-shrink:0;">📖</span>
+        <div>
+          <div style="font-weight:600;font-size:13px;">${e.subject} — ${e.unit}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px;">${topicsStr}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    let qbankLines = (hist.qbankEntries || []).map(e => {
+      let acc = e.total > 0 ? ((e.correct / e.total) * 100).toFixed(0) : 0;
+      let accColor = acc >= 75 ? "#4ade80" : acc >= 50 ? "#fbbf24" : "#f87171";
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #1a3a1a;">
+        <span style="font-size:15px;flex-shrink:0;">🧪</span>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:13px;">${e.subject} — ${e.unit}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px;">${e.total} questions</div>
+        </div>
+        <span style="font-weight:700;font-size:14px;color:${accColor};">${acc}% (${e.correct}/${e.total})</span>
+      </div>`;
+    }).join("");
+
     let revCount = (hist.revisedItems || []).length;
+    let submittedTime = hist.submittedAt ? new Date(hist.submittedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : "";
+    let topicsCount = (hist.studyEntries||[]).reduce((s,e)=>s+(e.topics||[]).length,0);
+    let questionsCount = (hist.qbankEntries||[]).reduce((s,e)=>s+(e.total||0),0);
 
     inner.innerHTML = `
-      <div style="background:#0f2b1a;border:1px solid #16a34a;border-radius:12px;padding:14px;margin-bottom:10px;">
-        <div style="font-size:13px;font-weight:700;color:#4ade80;margin-bottom:10px;">✅ Today's Evening Update Submitted</div>
-        ${studyLines || '<div style="font-size:12px;color:#64748b;">No study logged</div>'}
-        ${qbankLines || '<div style="font-size:12px;color:#64748b;">No qbank logged</div>'}
-        ${revCount > 0 ? `<div style="font-size:12px;color:#cbd5e1;padding:2px 0;">🔁 ${revCount} revision(s) completed</div>` : ""}
+      <div style="background:linear-gradient(135deg,#0f2b1a,#0a1f12);border:1px solid #16a34a;border-radius:14px;padding:16px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:14px;font-weight:800;color:#4ade80;">✅ Evening Update Submitted</div>
+          ${submittedTime ? `<div style="font-size:11px;color:#64748b;">at ${submittedTime}</div>` : ""}
+        </div>
+
+        ${studyLines || '<div style="font-size:12px;color:#475569;padding:7px 0;">No study logged</div>'}
+        ${qbankLines || '<div style="font-size:12px;color:#475569;padding:7px 0;">No Qbank logged</div>'}
+        ${revCount > 0 ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;"><span style="font-size:15px;">🔁</span><div style="font-size:13px;">${revCount} revision${revCount>1?"s":""} completed</div></div>` : ""}
+
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:70px;background:#0a2b15;border-radius:8px;padding:9px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:#4ade80;">${topicsCount}</div>
+            <div style="font-size:10px;color:#475569;margin-top:2px;">Topics</div>
+          </div>
+          <div style="flex:1;min-width:70px;background:#0a2b15;border-radius:8px;padding:9px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:#60a5fa;">${questionsCount}</div>
+            <div style="font-size:10px;color:#475569;margin-top:2px;">Questions</div>
+          </div>
+          <div style="flex:1;min-width:70px;background:#0a2b15;border-radius:8px;padding:9px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:#c4b5fd;">${revCount}</div>
+            <div style="font-size:10px;color:#475569;margin-top:2px;">Revisions</div>
+          </div>
+        </div>
       </div>
-      <button onclick="deleteEveningUpdate()" style="width:100%;background:#7f1d1d;border:1px solid #ef4444;color:#fca5a5;padding:10px;font-size:13px;">
-        🗑 Delete & Resubmit Evening Update
+
+      <button onclick="deleteEveningUpdate()"
+        style="width:100%;background:#1a0a0a;border:1px solid #450a0a;color:#fca5a5;padding:10px;font-size:12px;font-weight:600;border-radius:10px;">
+        🗑 Reset &amp; Resubmit Today's Evening Update
       </button>
     `;
     return;
@@ -247,27 +314,31 @@ function renderEveningUpdate() {
 
   // Build form
   inner.innerHTML = `
-    <!-- Study Log -->
-    <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">📖 Study Log</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">📖 Study Log</div>
       <div id="studyEntries"></div>
-      <button onclick="addStudyEntry()" style="width:100%;background:#1e3a5f;color:#93c5fd;font-size:12px;padding:8px;margin-top:6px;">+ Add Another Subject</button>
+      <button onclick="addStudyEntry()"
+        style="width:100%;background:#1e3a5f;color:#93c5fd;font-size:12px;padding:9px;margin-top:4px;border-radius:8px;">
+        + Add Another Subject
+      </button>
     </div>
 
-    <!-- Qbank Log -->
-    <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🧪 Qbank Log</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">🧪 Qbank Log</div>
       <div id="qbankEntries"></div>
-      <button onclick="addQbankEntry()" style="width:100%;background:#1e2a1e;color:#86efac;font-size:12px;padding:8px;margin-top:6px;">+ Add Another Subject</button>
+      <button onclick="addQbankEntry()"
+        style="width:100%;background:#1a2e1a;color:#86efac;font-size:12px;padding:9px;margin-top:4px;border-radius:8px;">
+        + Add Another Subject
+      </button>
     </div>
 
-    <!-- Revision Log -->
-    <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
-      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🔁 Revision Log</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:14px;border:1px solid #1e293b;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">🔁 Revision Log</div>
       <div id="revisionCheckboxList"></div>
     </div>
 
-    <button onclick="submitEvening()" style="width:100%;background:#16a34a;padding:12px;font-size:15px;font-weight:600;">
+    <button onclick="submitEvening()"
+      style="width:100%;background:linear-gradient(135deg,#16a34a,#15803d);padding:14px;font-size:15px;font-weight:700;border-radius:12px;">
       Submit Evening Update ✓
     </button>
   `;
@@ -288,20 +359,20 @@ function addStudyEntry() {
 
   let div = document.createElement("div");
   div.id = `studyEntry-${id}`;
-  div.style.cssText = "border:1px solid #1e293b;border-radius:8px;padding:10px;margin-bottom:8px;";
+  div.style.cssText = "border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:10px;background:#0a1628;";
 
   let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
 
   div.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-      <span style="font-size:12px;color:#94a3b8;font-weight:600;">Subject ${id + 1}</span>
-      ${id > 0 ? `<button onclick="removeStudyEntry(${id})" style="background:transparent;color:#ef4444;padding:2px 6px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:5px;">✕</button>` : ""}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span style="font-size:12px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">📖 Subject ${id + 1}</span>
+      ${id > 0 ? `<button onclick="removeStudyEntry(${id})" style="background:transparent;color:#ef4444;padding:2px 8px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:6px;">✕ Remove</button>` : ""}
     </div>
-    <select id="sSub-${id}" style="width:100%;margin-bottom:6px;" onchange="_studyFillUnits(${id})">${options}</select>
-    <select id="sUnit-${id}" style="width:100%;margin-bottom:6px;" onchange="_studyFillTopics(${id})"></select>
+    <select id="sSub-${id}" style="width:100%;margin-bottom:8px;" onchange="_studyFillUnits(${id})">${options}</select>
+    <select id="sUnit-${id}" style="width:100%;margin-bottom:10px;" onchange="_studyFillTopics(${id})"></select>
     <div id="sTopicsWrap-${id}">
-      <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Topics completed (multi-select)</label>
-      <select id="sTopics-${id}" multiple style="width:100%;height:90px;font-size:12px;"></select>
+      <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Topics Completed — tap to select</label>
+      <div id="sTopicsChips-${id}" style="display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow-y:auto;padding:2px;"></div>
     </div>
   `;
   container.appendChild(div);
@@ -326,12 +397,37 @@ function _studyFillUnits(id) {
 function _studyFillTopics(id) {
   let subj = document.getElementById(`sSub-${id}`)?.value;
   let ui   = parseInt(document.getElementById(`sUnit-${id}`)?.value) || 0;
-  let sel  = document.getElementById(`sTopics-${id}`);
-  if (!sel || !subj || !studyData.subjects[subj]) return;
+  let chipsContainer = document.getElementById(`sTopicsChips-${id}`);
+  if (!chipsContainer || !subj || !studyData.subjects[subj]) return;
   let chapters = studyData.subjects[subj].units[ui]?.chapters || [];
-  sel.innerHTML = chapters.map((ch, ci) =>
-    `<option value="${ci}">${ch.name}</option>`
-  ).join("");
+  chipsContainer.innerHTML = chapters.length === 0
+    ? `<span style="color:#64748b;font-size:12px;">No chapters in this unit</span>`
+    : chapters.map((ch, ci) => {
+        let completed = ch.status === "completed";
+        return `<button type="button" class="topic-chip${completed ? " already-done" : ""}" data-ci="${ci}"
+          onclick="toggleTopicChip(this)"
+          style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;
+            background:${completed ? "#1a3a1a" : "#1e293b"};
+            color:${completed ? "#4ade80" : "#94a3b8"};
+            border:1px solid ${completed ? "#166534" : "#334155"};
+            transition:all 0.15s;white-space:nowrap;">
+          ${completed ? "✓ " : ""}${ch.name}
+        </button>`;
+      }).join("");
+}
+
+function toggleTopicChip(btn) {
+  if (btn.classList.contains("selected")) {
+    btn.classList.remove("selected");
+    btn.style.background = btn.classList.contains("already-done") ? "#1a3a1a" : "#1e293b";
+    btn.style.color = btn.classList.contains("already-done") ? "#4ade80" : "#94a3b8";
+    btn.style.border = `1px solid ${btn.classList.contains("already-done") ? "#166534" : "#334155"}`;
+  } else {
+    btn.classList.add("selected");
+    btn.style.background = "#1e3a5f";
+    btn.style.color = "#93c5fd";
+    btn.style.border = "1px solid #3b82f6";
+  }
 }
 
 function addQbankEntry() {
