@@ -175,7 +175,7 @@ function renderStatus() {
 
 // ─── Phase Tracking ───────────────────────────────────────────
 function getGlobalPhaseStats() {
-  let totalChapters = 0, p1 = 0, p2 = 0, p3 = 0, r3 = 0;
+  let totalChapters = 0, completed = 0, r1 = 0, r2 = 0, r3 = 0;
   let totalUnits = 0, qbankUnits = 0;
 
   Object.values(studyData.subjects).forEach(subject => {
@@ -184,24 +184,28 @@ function getGlobalPhaseStats() {
       if (unit.qbankDone) qbankUnits++;
       unit.chapters.forEach(ch => {
         totalChapters++;
-        if (ch.status === "completed") p1++;
-        if (ch.revisionIndex >= 1) p2++;
-        if (ch.revisionIndex >= 2) p3++;
-        if (ch.revisionIndex >= 3) r3++;
+        if (ch.status === "completed")  completed++;
+        if (ch.revisionIndex >= 1)      r1++;
+        if (ch.revisionIndex >= 2)      r2++;
+        if (ch.revisionIndex >= 3)      r3++;
       });
     });
   });
 
   let tc = totalChapters || 1;
-  let tu = totalUnits || 1;
+  let tu = totalUnits    || 1;
   return {
-    total: totalChapters,
+    total:      totalChapters,
     totalUnits,
-    phase1: { count: p1, pct: (p1/tc*100).toFixed(1) },
-    phase2: { count: p2, pct: (p2/tc*100).toFixed(1) },
-    phase3: { count: p3, pct: (p3/tc*100).toFixed(1) },
-    r3:     { count: r3, pct: (r3/tc*100).toFixed(1) },
-    qbank:  { count: qbankUnits, pct: (qbankUnits/tu*100).toFixed(1) }
+    completed:  { count: completed, pct: (completed/tc*100).toFixed(1) },
+    r1:         { count: r1,        pct: (r1/tc*100).toFixed(1) },
+    r2:         { count: r2,        pct: (r2/tc*100).toFixed(1) },
+    r3:         { count: r3,        pct: (r3/tc*100).toFixed(1) },
+    qbank:      { count: qbankUnits,pct: (qbankUnits/tu*100).toFixed(1) },
+    // legacy aliases so old code calling phases.phase1/phase2/phase3 still works
+    phase1:     { count: completed, pct: (completed/tc*100).toFixed(1) },
+    phase2:     { count: r1,        pct: (r1/tc*100).toFixed(1) },
+    phase3:     { count: r2,        pct: (r2/tc*100).toFixed(1) },
   };
 }
 

@@ -103,20 +103,26 @@ function getOverdueCount(subjectName) {
 
 function detectPhaseStatus(subjectName) {
   let subject = studyData.subjects[subjectName];
-  let total = 0, completed = 0, rev1 = 0, rev2 = 0;
+  let total = 0, completed = 0, rev1 = 0, rev2 = 0, rev3 = 0;
   subject.units.forEach(unit => {
     unit.chapters.forEach(ch => {
       total++;
-      if (ch.status === "completed") completed++;
-      if (ch.revisionIndex >= 1) rev1++;
-      if (ch.revisionIndex >= 2) rev2++;
+      if (ch.status === "completed")  completed++;
+      if (ch.revisionIndex >= 1)      rev1++;
+      if (ch.revisionIndex >= 2)      rev2++;
+      if (ch.revisionIndex >= 3)      rev3++;
     });
   });
-  if (total === 0) return { phase1: false, phase2: false, phase3: false };
+  if (total === 0) return { completed: false, r1: false, r2: false, r3: false, phase1: false, phase2: false, phase3: false };
   return {
-    phase1: completed === total,
-    phase2: rev1 === total,
-    phase3: rev2 === total
+    completed: completed === total,
+    r1:        rev1 === total,
+    r2:        rev2 === total,
+    r3:        rev3 === total,
+    // legacy aliases
+    phase1:    completed === total,
+    phase2:    rev1 === total,
+    phase3:    rev2 === total,
   };
 }
 

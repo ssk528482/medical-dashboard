@@ -52,25 +52,31 @@ function renderSubjects() {
     <div class="section-title">📊 Phase Progress</div>
     <div class="phase-grid">
       <div class="phase-item">
-        <div class="phase-label">Phase 1<br><small>Completed</small></div>
-        <div class="phase-pct" style="color:#3b82f6">${phases.phase1.pct}%</div>
-        <div class="stat-bar"><div class="stat-fill" style="width:${phases.phase1.pct}%;background:#3b82f6"></div></div>
-        <div class="phase-count">${phases.phase1.count}/${phases.total} ch</div>
+        <div class="phase-label">Completed</div>
+        <div class="phase-pct" style="color:#3b82f6">${phases.completed.pct}%</div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${phases.completed.pct}%;background:#3b82f6"></div></div>
+        <div class="phase-count">${phases.completed.count}/${phases.total} ch</div>
       </div>
       <div class="phase-item">
-        <div class="phase-label">Phase 2<br><small>R1 Done</small></div>
-        <div class="phase-pct" style="color:#8b5cf6">${phases.phase2.pct}%</div>
-        <div class="stat-bar"><div class="stat-fill" style="width:${phases.phase2.pct}%;background:#8b5cf6"></div></div>
-        <div class="phase-count">${phases.phase2.count}/${phases.total} ch</div>
+        <div class="phase-label">R1</div>
+        <div class="phase-pct" style="color:#8b5cf6">${phases.r1.pct}%</div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${phases.r1.pct}%;background:#8b5cf6"></div></div>
+        <div class="phase-count">${phases.r1.count}/${phases.total} ch</div>
       </div>
       <div class="phase-item">
-        <div class="phase-label">Phase 3<br><small>R2 Done</small></div>
-        <div class="phase-pct" style="color:#f59e0b">${phases.phase3.pct}%</div>
-        <div class="stat-bar"><div class="stat-fill" style="width:${phases.phase3.pct}%;background:#f59e0b"></div></div>
-        <div class="phase-count">${phases.phase3.count}/${phases.total} ch</div>
+        <div class="phase-label">R2</div>
+        <div class="phase-pct" style="color:#f59e0b">${phases.r2.pct}%</div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${phases.r2.pct}%;background:#f59e0b"></div></div>
+        <div class="phase-count">${phases.r2.count}/${phases.total} ch</div>
       </div>
       <div class="phase-item">
-        <div class="phase-label">Qbank<br><small>Units</small></div>
+        <div class="phase-label">R3</div>
+        <div class="phase-pct" style="color:#f97316">${phases.r3.pct}%</div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${phases.r3.pct}%;background:#f97316"></div></div>
+        <div class="phase-count">${phases.r3.count}/${phases.total} ch</div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-label">Qbank</div>
         <div class="phase-pct" style="color:#10b981">${phases.qbank.pct}%</div>
         <div class="stat-bar"><div class="stat-fill" style="width:${phases.qbank.pct}%;background:#10b981"></div></div>
         <div class="phase-count">${phases.qbank.count}/${phases.totalUnits} un</div>
@@ -142,9 +148,10 @@ function renderSubjects() {
       </div>
       <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Next: ${nextText}</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px;">
-        ${phase.phase1 ? '<span class="phase-pill p1">P1✓</span>' : ""}
-        ${phase.phase2 ? '<span class="phase-pill p2">P2✓</span>' : ""}
-        ${phase.phase3 ? '<span class="phase-pill p3">P3✓</span>' : ""}
+        ${phase.completed ? '<span class="phase-pill p1">Done✓</span>' : ""}
+        ${phase.r1        ? '<span class="phase-pill p2">R1✓</span>'   : ""}
+        ${phase.r2        ? '<span class="phase-pill p3">R2✓</span>'   : ""}
+        ${phase.r3        ? '<span class="phase-pill" style="background:#f97316;color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">R3✓</span>' : ""}
       </div>
       <div class="stat-bar">
         <div class="stat-fill ${pct>=75?"green":pct>=40?"yellow":"red"}" style="width:${pct}%"></div>

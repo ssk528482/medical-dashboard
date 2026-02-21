@@ -132,10 +132,11 @@ function renderAnalytics() {
     <!-- Phase Tracker -->
     <div class="card">
       <div class="section-title">📈 Phase Tracker</div>
-      ${_phaseRow("Phase 1 — Chapters Studied", phases.phase1, "#3b82f6")}
-      ${_phaseRow("Phase 2 — Revision 2+ (chapters)", phases.phase2, "#8b5cf6")}
-      ${_phaseRow("Phase 3 — Revision 3+ (chapters)", phases.phase3, "#f59e0b")}
-      ${_phaseRowUnits("Qbank — Units Done", phases.qbank, "#10b981")}
+      ${_phaseRow("Completed — Chapters Studied", phases.completed, "#3b82f6")}
+      ${_phaseRow("R1 — First Revision Done",     phases.r1,        "#8b5cf6")}
+      ${_phaseRow("R2 — Second Revision Done",    phases.r2,        "#f59e0b")}
+      ${_phaseRow("R3 — Third Revision Done",     phases.r3,        "#f97316")}
+      ${_phaseRowUnits("Qbank — Units Done",      phases.qbank,     "#10b981")}
     </div>
 
     <!-- Weekly Report Card -->
@@ -259,11 +260,12 @@ function renderAnalytics() {
 }
 
 function _phaseRow(label, phaseData, color) {
+  let phases = getGlobalPhaseStats();
   return `
     <div style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
         <span>${label}</span>
-        <span style="color:${color};font-weight:600;">${phaseData.pct}% (${phaseData.count}/${phaseData.count + (parseInt(phaseData.pct) < 100 ? "…" : phaseData.count)})</span>
+        <span style="color:${color};font-weight:600;">${phaseData.pct}% (${phaseData.count}/${phases.total} ch)</span>
       </div>
       <div class="stat-bar" style="height:10px;"><div class="stat-fill" style="width:${phaseData.pct}%;background:${color};"></div></div>
     </div>`;
