@@ -27,7 +27,7 @@ function renderEditor() {
     subjectEl.innerHTML = `
       <div class="subject-header">
         <div class="subject-title" style="display:flex;align-items:center;gap:8px;cursor:default;">
-          <button class="collapse-btn" onclick="toggleSubjectCollapse('${esc(subjectName)}')">${isCollapsed ? "▶" : "▼"}</button>
+          <button class="collapse-btn" onclick="toggleSubjectCollapse(event,'${esc(subjectName)}')">${isCollapsed ? "▶" : "▼"}</button>
           <span>${subjectName}</span>
           <span style="font-size:11px;color:#64748b;font-weight:400;">${pct}% (${doneCh}/${totalCh} ch)</span>
         </div>
@@ -75,7 +75,7 @@ function renderEditor() {
         unitEl.innerHTML = `
           <div class="unit-header" style="flex-wrap:wrap;row-gap:6px;">
             <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-              <button class="collapse-btn" onclick="toggleUnitCollapse('${esc(subjectName)}',${ui})" style="font-size:12px;padding:2px 5px;">${isUnitCollapsed ? "▶" : "▼"}</button>
+              <button class="collapse-btn" onclick="toggleUnitCollapse(event,'${esc(subjectName)}',${ui})" style="font-size:12px;padding:2px 5px;">${isUnitCollapsed ? "▶" : "▼"}</button>
               <span class="unit-title">${unit.name}</span>
               <span style="font-size:10px;color:#475569;flex-shrink:0;">${unitPct}% (${unitDone}/${unit.chapters.length})</span>
             </div>
@@ -113,15 +113,12 @@ function renderEditor() {
           unit.chapters.forEach((ch, ci) => {
             let chRow = document.createElement("div");
             chRow.className = "chapter-row";
-            // Completed = green if status completed
-            // R1 green if revisionIndex >= 1, R2 green if >=2, R3 green if >=3
             let compActive = ch.status === "completed";
             let r1Active   = ch.revisionIndex >= 1;
             let r2Active   = ch.revisionIndex >= 2;
             let r3Active   = ch.revisionIndex >= 3;
             let diff = ch.difficulty || "medium";
             let diffColors = { easy: "#10b981", medium: "#eab308", hard: "#ef4444" };
-            let diffLabels = { easy: "Easy", medium: "Med", hard: "Hard" };
             chRow.innerHTML = `
               <div class="topic-left" style="flex:1;min-width:0;">
                 <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>
@@ -156,17 +153,25 @@ function renderEditor() {
 
 function esc(s) { return s.replace(/'/g, "\\'"); }
 
-function toggleSubjectCollapse(name) {
+function toggleSubjectCollapse(event, name) {
+  event.stopPropagation();
   if (!studyData.uiState) studyData.uiState = {};
   if (!studyData.uiState.editorCollapsed) studyData.uiState.editorCollapsed = {};
-  studyData.uiState.editorCollapsed[name] = !studyData.uiState.editorCollapsed[name];
+  // Read current stored value; treat undefined as true (default collapsed)
+  let current = studyData.uiState.editorCollapsed[name];
+  if (current === undefined) current = true;
+  studyData.uiState.editorCollapsed[name] = !current;
   saveData(); renderEditor();
 }
 
-function toggleUnitCollapse(subjectName, ui) {
+function toggleUnitCollapse(event, subjectName, ui) {
+  event.stopPropagation();
   if (!studyData.uiState.unitCollapsed) studyData.uiState.unitCollapsed = {};
   if (!studyData.uiState.unitCollapsed[subjectName]) studyData.uiState.unitCollapsed[subjectName] = {};
-  studyData.uiState.unitCollapsed[subjectName][ui] = !studyData.uiState.unitCollapsed[subjectName][ui];
+  // Read current stored value; treat undefined as true (default collapsed)
+  let current = studyData.uiState.unitCollapsed[subjectName][ui];
+  if (current === undefined) current = true;
+  studyData.uiState.unitCollapsed[subjectName][ui] = !current;
   saveData(); renderEditor();
 }
 
@@ -318,7 +323,6 @@ function setChapterDifficulty(subjectName, ui, ci, level) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
   if (!ch) return;
   ch.difficulty = level;
-  // Map difficulty to difficultyFactor: hard=1.5, medium=2.5, easy=3.5
   const factorMap = { easy: 3.5, medium: 2.5, hard: 1.5 };
   ch.difficultyFactor = factorMap[level] || 2.5;
   saveData(); renderEditor();
@@ -416,13 +420,14 @@ function renderQbank() {
     subjectEl.className = "subject-card";
     subjectEl.style.marginBottom = "14px";
 
+    // FIX: use explicit true/false check — undefined means "not set yet" → default collapsed (true)
     let isQbCollapsed = studyData.uiState?.qbankCollapsed?.[subjectName];
     if (isQbCollapsed === undefined) isQbCollapsed = true;
 
     subjectEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isQbCollapsed ? 0 : 10}px;">
         <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-          <button class="collapse-btn" onclick="toggleQbankCollapse('${esc(subjectName)}')" style="font-size:12px;padding:2px 5px;">${isQbCollapsed ? "▶" : "▼"}</button>
+          <button class="collapse-btn" onclick="toggleQbankCollapse(event,'${esc(subjectName)}')" style="font-size:12px;padding:2px 5px;">${isQbCollapsed ? "▶" : "▼"}</button>
           <div>
             <strong style="font-size:15px;">${subjectName}</strong>
             <div style="font-size:11px;color:#64748b;margin-top:2px;">${doneUnits}/${subject.units.length} units done</div>
@@ -430,45 +435,44 @@ function renderQbank() {
         </div>
         <span style="padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;color:white;
           background:${overallAcc===null?"#334155":overallAcc>=75?"#16a34a":overallAcc>=50?"#eab308":"#ef4444"};">
-          ${overallAcc !== null ? overallAcc + "%" : "—"}
+          ${overallAcc !== null ? overallAcc + "%" : "No data"}
         </span>
       </div>
     `;
 
     if (!isQbCollapsed) {
       subject.units.forEach((unit, ui) => {
-        let uTotal   = unit.qbankStats?.total   || 0;
-        let uCorrect = unit.qbankStats?.correct || 0;
+        let uTotal   = unit.qbankStats.total;
+        let uCorrect = unit.qbankStats.correct;
         let uAcc     = uTotal > 0 ? (uCorrect / uTotal * 100).toFixed(1) : null;
 
         let unitEl = document.createElement("div");
-        unitEl.className = "qbank-unit-row";
+        unitEl.style.cssText = "background:#0f172a;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #1e293b;";
 
         unitEl.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:600;color:#a8c0dc;">${unit.name}</div>
-              <div style="font-size:11px;color:#64748b;margin-top:2px;">
-                ${uAcc !== null ? `${uCorrect}/${uTotal} correct · ${uAcc}%` : "Not logged yet"}
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" ${unit.qbankDone ? "checked" : ""} onchange="toggleUnitQbankDone('${esc(subjectName)}',${ui},this.checked)" style="width:16px;height:16px;margin:0;">
+                <strong style="font-size:13px;">${unit.name}</strong>
+                ${uAcc !== null ? `<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;color:white;
+                  background:${uAcc>=75?"#16a34a":uAcc>=50?"#eab308":"#ef4444"};">${uAcc}%</span>` : ""}
               </div>
+              <div style="font-size:11px;color:#64748b;margin-top:4px;">${uTotal} questions • ${uCorrect} correct</div>
             </div>
-            <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;margin-left:8px;"
-              onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span class="pill qbank ${unit.qbankRevision>=1?"active":""}" style="font-size:10px;padding:2px 6px;" onclick="setQbankRevision('${esc(subjectName)}',${ui},1)">R1</span>
+              <span class="pill qbank ${unit.qbankRevision>=2?"active":""}" style="font-size:10px;padding:2px 6px;" onclick="setQbankRevision('${esc(subjectName)}',${ui},2)">R2</span>
+              <span class="pill qbank ${unit.qbankRevision>=3?"active":""}" style="font-size:10px;padding:2px 6px;" onclick="setQbankRevision('${esc(subjectName)}',${ui},3)">R3</span>
+            </div>
           </div>
-
-          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-            <div>
-              <label style="font-size:10px;color:#64748b;display:block;margin-bottom:2px;">Total Qs</label>
-              <input type="number" id="qb-total-${esc(subjectName)}-${ui}" placeholder="0" min="0"
-                style="width:72px;font-size:13px;padding:6px 8px;" value="">
-            </div>
-            <div>
-              <label style="font-size:10px;color:#64748b;display:block;margin-bottom:2px;">Correct</label>
-              <input type="number" id="qb-correct-${esc(subjectName)}-${ui}" placeholder="0" min="0"
-                style="width:72px;font-size:13px;padding:6px 8px;" value="">
-            </div>
+          <div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+            <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Total Qs" min="0"
+              style="width:90px;font-size:12px;padding:6px 8px;">
+            <input id="qb-correct-${subjectName}-${ui}" type="number" placeholder="Correct" min="0"
+              style="width:90px;font-size:12px;padding:6px 8px;">
             <button onclick="logUnitQbank('${esc(subjectName)}',${ui})"
-              style="padding:8px 14px;font-size:12px;margin:0;">Log ✓</button>
+              style="padding:8px 10px;font-size:11px;margin:0;background:#1d4ed8;">Log</button>
             ${uTotal > 0 ? `<button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
               style="padding:8px 10px;font-size:11px;margin:0;background:#334155;">Clear</button>` : ""}
           </div>
@@ -486,11 +490,18 @@ function renderQbank() {
   });
 }
 
-function toggleQbankCollapse(subjectName) {
+// FIX: toggleQbankCollapse — previous logic `(current === false) ? true : false`
+// was broken: when current=undefined (first click), it returned false (expand),
+// but the default rendering was already treating undefined as collapsed=true.
+// This mismatch caused "no visual change on first click" → double-press needed.
+// Fix: store explicit true/false, treat undefined as true, then negate.
+function toggleQbankCollapse(event, subjectName) {
+  event.stopPropagation();
   if (!studyData.uiState) studyData.uiState = {};
   if (!studyData.uiState.qbankCollapsed) studyData.uiState.qbankCollapsed = {};
   let current = studyData.uiState.qbankCollapsed[subjectName];
-  studyData.uiState.qbankCollapsed[subjectName] = (current === false) ? true : false;
+  if (current === undefined) current = true; // default is collapsed
+  studyData.uiState.qbankCollapsed[subjectName] = !current;
   saveData(); renderQbank();
 }
 
