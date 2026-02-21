@@ -115,11 +115,15 @@ function renderProfile() {
     <!-- Progress -->
     <div class="card">
       <div class="section-title">📚 Study Progress</div>
-      <div class="analytics-grid">
+      <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;">
         <div class="stat-box"><div class="stat-big" style="color:#3b82f6;">${completionPct}%</div><div class="stat-label">Completion</div></div>
         <div class="stat-box"><div class="stat-big" style="color:#f59e0b;">${daysLeft}</div><div class="stat-label">Days to Exam</div></div>
-        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6;">${phases.phase2.pct}%</div><div class="stat-label">Phase 2</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6;">${phases.phase2.pct}%</div><div class="stat-label">Phase 2 (R1)</div></div>
+      </div>
+      <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px;">
         <div class="stat-box"><div class="stat-big" style="color:#10b981;">${phases.qbank.pct}%</div><div class="stat-label">Qbank</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#06b6d4;">${phases.phase2.pct}%</div><div class="stat-label">Revision 1</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#f97316;">${(phases.r3 || phases.phase3).pct}%</div><div class="stat-label">Revision 3</div></div>
       </div>
     </div>
 

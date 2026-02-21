@@ -13,7 +13,8 @@ function renderEditor() {
 
   names.forEach(subjectName => {
     let subject = studyData.subjects[subjectName];
-    let isCollapsed = studyData.uiState?.editorCollapsed?.[subjectName] || false;
+    let isCollapsed = studyData.uiState?.editorCollapsed?.[subjectName];
+    if (isCollapsed === undefined) isCollapsed = true; // default collapsed
 
     let totalCh = 0, doneCh = 0;
     subject.units.forEach(u => { totalCh += u.chapters.length; u.chapters.forEach(ch => { if (ch.status === "completed") doneCh++; }); });
@@ -57,7 +58,8 @@ function renderEditor() {
 
       // Units
       subject.units.forEach((unit, ui) => {
-        let isUnitCollapsed = studyData.uiState?.unitCollapsed?.[subjectName]?.[ui] || false;
+        let isUnitCollapsed = studyData.uiState?.unitCollapsed?.[subjectName]?.[ui];
+        if (isUnitCollapsed === undefined) isUnitCollapsed = true; // default collapsed
         let unitDone = unit.chapters.filter(c => c.status === "completed").length;
         let unitPct  = unit.chapters.length > 0 ? ((unitDone / unit.chapters.length) * 100).toFixed(0) : 0;
 
@@ -99,15 +101,22 @@ function renderEditor() {
           unit.chapters.forEach((ch, ci) => {
             let chRow = document.createElement("div");
             chRow.className = "chapter-row";
+            // Completed = green if status completed
+            // R1 green if revisionIndex >= 1, R2 green if >=2, R3 green if >=3
+            // But only show current active level highlighted; all previous are also green
+            let compActive = ch.status === "completed";
+            let r1Active   = ch.revisionIndex >= 1;
+            let r2Active   = ch.revisionIndex >= 2;
+            let r3Active   = ch.revisionIndex >= 3;
             chRow.innerHTML = `
               <div class="topic-left">
                 <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>
               </div>
               <div class="topic-actions">
-                <span class="pill completed ${ch.status === "completed" ? "active" : ""}" onclick="toggleChapterCompleted('${esc(subjectName)}',${ui},${ci})">✓</span>
-                <span class="pill rev ${ch.revisionIndex === 1 ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},1)">R1</span>
-                <span class="pill rev ${ch.revisionIndex === 2 ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},2)">R2</span>
-                <span class="pill rev ${ch.revisionIndex >= 3 ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},3)">R3</span>
+                <span class="pill completed ${compActive ? "active" : ""}" onclick="toggleChapterCompleted('${esc(subjectName)}',${ui},${ci})">✓</span>
+                <span class="pill rev ${r1Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},1)">R1</span>
+                <span class="pill rev ${r2Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},2)">R2</span>
+                <span class="pill rev ${r3Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},3)">R3</span>
                 <button class="icon-btn" onclick="deleteChapter('${esc(subjectName)}',${ui},${ci})">✕</button>
               </div>
             `;
@@ -215,7 +224,44 @@ function toggleChapterCompleted(subjectName, ui, ci) {
 
 function markChapterRevised(subjectName, ui, ci, level) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
-  ch.revisionIndex = level;
+
+  // Require previous level: R2 needs R1, R3 needs R2
+  if (level === 2 && ch.revisionIndex < 1 && ch.status !== "completed") {
+    alert("Complete R1 first before marking R2.");
+    return;
+  }
+  if (level === 3 && ch.revisionIndex < 2) {
+    alert("Complete R2 first before marking R3.");
+    return;
+  }
+  // R1 requires completed
+  if (level === 1 && ch.status !== "completed") {
+    alert("Mark chapter as completed (✓) first before marking R1.");
+    return;
+  }
+
+  // Auto-mark completed when any revision is marked
+  if (ch.status !== "completed") {
+    ch.status = "completed";
+    ch.completedOn = today();
+    ch.lastReviewedOn = today();
+    let dates = [], cursor = today();
+    for (let i = 0; i < BASE_INTERVALS.length; i++) {
+      cursor = addDays(cursor, computeNextInterval(ch, i));
+      dates.push(cursor);
+    }
+    ch.revisionDates = dates;
+    ch.nextRevision  = dates[0];
+    ch.missedRevisions = 0;
+    fixPointer(subjectName);
+  }
+
+  // Toggle off if clicking same level
+  if (ch.revisionIndex === level) {
+    ch.revisionIndex = level - 1;
+  } else {
+    ch.revisionIndex = level;
+  }
   ch.lastReviewedOn = today();
   saveData(); renderEditor();
 }
@@ -244,31 +290,38 @@ function renderQbank() {
     subjectEl.className = "subject-card";
     subjectEl.style.marginBottom = "14px";
 
+    let isQbCollapsed = studyData.uiState?.qbankCollapsed?.[subjectName];
+    if (isQbCollapsed === undefined) isQbCollapsed = true;
+
     subjectEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div>
-          <strong style="font-size:15px;">${subjectName}</strong>
-          <div style="font-size:11px;color:#64748b;margin-top:2px;">${doneUnits}/${subject.units.length} units done</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isQbCollapsed ? 0 : 10}px;">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <button class="collapse-btn" onclick="toggleQbankCollapse('${esc(subjectName)}')" style="font-size:12px;padding:2px 5px;">${isQbCollapsed ? "▶" : "▼"}</button>
+          <div>
+            <strong style="font-size:15px;">${subjectName}</strong>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">${doneUnits}/${subject.units.length} units done</div>
+          </div>
         </div>
         <span style="padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;color:white;
           background:${overallAcc===null?"#334155":overallAcc>=75?"#16a34a":overallAcc>=50?"#eab308":"#ef4444"};">
           ${overallAcc !== null ? overallAcc + "%" : "—"}
         </span>
       </div>
-      ${totalQ > 0 ? `
+      ${!isQbCollapsed && totalQ > 0 ? `
         <div class="stat-bar" style="margin-bottom:12px;height:6px;">
           <div class="stat-fill ${overallAcc>=75?"green":overallAcc>=50?"yellow":"red"}" style="width:${overallAcc}%"></div>
         </div>` : ""}
     `;
 
-    if (!subject.units.length) {
-      let empty = document.createElement("div");
-      empty.style.cssText = "color:#64748b;font-size:13px;padding:6px 0;";
-      empty.textContent = "No units — add them in the Syllabus tab.";
-      subjectEl.appendChild(empty);
-    }
+    if (!isQbCollapsed) {
+      if (!subject.units.length) {
+        let empty = document.createElement("div");
+        empty.style.cssText = "color:#64748b;font-size:13px;padding:6px 0;";
+        empty.textContent = "No units — add them in the Syllabus tab.";
+        subjectEl.appendChild(empty);
+      }
 
-    subject.units.forEach((unit, ui) => {
+      subject.units.forEach((unit, ui) => {
       let uTotal   = unit.qbankStats.total;
       let uCorrect = unit.qbankStats.correct;
       let uAcc     = uTotal > 0 ? (uCorrect / uTotal * 100).toFixed(1) : null;
@@ -283,12 +336,14 @@ function renderQbank() {
               ${uAcc !== null ? `${uCorrect}/${uTotal} correct · ${uAcc}%` : "Not logged yet"}
             </div>
           </div>
-          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;
-            color:${unit.qbankDone ? "#10b981" : "#64748b"};flex-shrink:0;margin-left:8px;">
-            <input type="checkbox" ${unit.qbankDone ? "checked" : ""}
-              onchange="toggleUnitQbankDone('${esc(subjectName)}',${ui},this.checked)">
-            Done
-          </label>
+          <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;margin-left:8px;">
+            <span class="pill rev ${unit.qbankRevision >= 1 ? "active" : ""}" style="cursor:pointer;font-size:11px;padding:3px 8px;"
+              onclick="setQbankRevision('${esc(subjectName)}',${ui},1)">R1</span>
+            <span class="pill rev ${unit.qbankRevision >= 2 ? "active" : ""}" style="cursor:pointer;font-size:11px;padding:3px 8px;"
+              onclick="setQbankRevision('${esc(subjectName)}',${ui},2)">R2</span>
+            <span class="pill rev ${unit.qbankRevision >= 3 ? "active" : ""}" style="cursor:pointer;font-size:11px;padding:3px 8px;"
+              onclick="setQbankRevision('${esc(subjectName)}',${ui},3)">R3</span>
+          </div>
         </div>
 
         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
@@ -314,16 +369,36 @@ function renderQbank() {
           </div>` : ""}
       `;
       subjectEl.appendChild(unitEl);
-    });
+      }); // end units forEach
+    } // end if !isQbCollapsed
 
     container.appendChild(subjectEl);
   });
 }
 
-// ─── Qbank Actions ────────────────────────────────────────────
+function toggleQbankCollapse(subjectName) {
+  if (!studyData.uiState) studyData.uiState = {};
+  if (!studyData.uiState.qbankCollapsed) studyData.uiState.qbankCollapsed = {};
+  let current = studyData.uiState.qbankCollapsed[subjectName];
+  studyData.uiState.qbankCollapsed[subjectName] = (current === false) ? true : false;
+  saveData(); renderQbank();
+}
 
 function toggleUnitQbankDone(subjectName, ui, checked) {
   studyData.subjects[subjectName].units[ui].qbankDone = checked;
+  saveData(); renderQbank();
+}
+
+function setQbankRevision(subjectName, ui, level) {
+  let unit = studyData.subjects[subjectName].units[ui];
+  // Toggle off if same level clicked
+  if (unit.qbankRevision === level) {
+    unit.qbankRevision = 0;
+    unit.qbankDone = false;
+  } else {
+    unit.qbankRevision = level;
+    unit.qbankDone = true;
+  }
   saveData(); renderQbank();
 }
 
@@ -391,7 +466,16 @@ function bulkAddSubject() {
   if (!name) { alert("Enter subject name."); return; }
   if (!rawUnits) { alert("Enter at least one unit."); return; }
 
-  let units = rawUnits.split("\n").filter(t => t.trim()).map(t => makeUnitObj(t.trim()));
+  // Parse "Unit Name | Topic1, Topic2" format
+  let units = rawUnits.split("\n").filter(t => t.trim()).map(line => {
+    let [unitPart, topicsPart] = line.split("|").map(s => s.trim());
+    let unit = makeUnitObj(unitPart || line.trim());
+    if (topicsPart) {
+      unit.chapters = topicsPart.split(",").map(t => t.trim()).filter(Boolean).map(t => makeChapterObj(t));
+    }
+    return unit;
+  });
+
   _bulkSubjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   document.getElementById("bulkSubjectName").value = "";
   document.getElementById("bulkTopicsInput").value = "";
@@ -411,9 +495,10 @@ function _renderBulkPreview() {
 
   list.innerHTML = keys.map(name => {
     let s = _bulkSubjects[name];
+    let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
     return `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;font-size:13px;">
-        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.units.length} units)</span></span>
+        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.units.length} units, ${totalTopics} topics)</span></span>
         <div style="display:flex;gap:6px;align-items:center;">
           <span style="background:${sizeColors[s.size]};color:white;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;">${s.size}</span>
           <span onclick="bulkRemoveSubject('${esc(name)}')" style="color:#ef4444;cursor:pointer;font-size:18px;line-height:1;">×</span>

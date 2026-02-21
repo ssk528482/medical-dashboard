@@ -32,19 +32,19 @@ function renderSubjects() {
     <div class="section-title">📊 Phase Progress</div>
     <div class="phase-grid">
       <div class="phase-item">
-        <div class="phase-label">Phase 1<br><small>Study</small></div>
+        <div class="phase-label">Phase 1<br><small>Completed</small></div>
         <div class="phase-pct" style="color:#3b82f6">${phases.phase1.pct}%</div>
         <div class="stat-bar"><div class="stat-fill" style="width:${phases.phase1.pct}%;background:#3b82f6"></div></div>
         <div class="phase-count">${phases.phase1.count}/${phases.total} ch</div>
       </div>
       <div class="phase-item">
-        <div class="phase-label">Phase 2<br><small>Rev 2+</small></div>
+        <div class="phase-label">Phase 2<br><small>R1 Done</small></div>
         <div class="phase-pct" style="color:#8b5cf6">${phases.phase2.pct}%</div>
         <div class="stat-bar"><div class="stat-fill" style="width:${phases.phase2.pct}%;background:#8b5cf6"></div></div>
         <div class="phase-count">${phases.phase2.count}/${phases.total} ch</div>
       </div>
       <div class="phase-item">
-        <div class="phase-label">Phase 3<br><small>Rev 3+</small></div>
+        <div class="phase-label">Phase 3<br><small>R2 Done</small></div>
         <div class="phase-pct" style="color:#f59e0b">${phases.phase3.pct}%</div>
         <div class="stat-bar"><div class="stat-fill" style="width:${phases.phase3.pct}%;background:#f59e0b"></div></div>
         <div class="phase-count">${phases.phase3.count}/${phases.total} ch</div>
@@ -152,58 +152,179 @@ function renderRevisionSection() {
   container.appendChild(revDiv);
 }
 
-// ── Evening Update Selectors ──────────────────────────────────
+// ── Evening Update Rendering ──────────────────────────────────
 
-function populateAllEveningSelectors() {
-  _fillSubjectSelector("studySubject", () => {
-    _fillUnitSelector("studySubject", "studyUnit", () => {
-      _fillChapterSelector("studySubject", "studyUnit", "studyChapter");
-    });
-  });
-  _fillSubjectSelector("qbankSubject", () => {
-    _fillUnitSelector("qbankSubject", "qbankUnit", null);
-  });
+function renderEveningUpdate() {
+  let inner = document.getElementById("eveningUpdateInner");
+  if (!inner) return;
+  _studyEntryCount = 0;
+  _qbankEntryCount = 0;
+
+  let todayKey = today();
+  let submitted = studyData.dailyHistory?.[todayKey]?.eveningSubmitted;
+
+  if (submitted) {
+    // Show submitted card
+    let hist = studyData.dailyHistory[todayKey];
+    let studyLines = (hist.studyEntries || []).map(e =>
+      `<div style="font-size:12px;color:#cbd5e1;padding:2px 0;">📖 ${e.subject} — ${e.unit} — ${e.topics.join(", ")}</div>`
+    ).join("");
+    let qbankLines = (hist.qbankEntries || []).map(e =>
+      `<div style="font-size:12px;color:#cbd5e1;padding:2px 0;">🧪 ${e.subject} — ${e.unit} — ${e.total}Q / ${e.correct}✓</div>`
+    ).join("");
+    let revCount = (hist.revisedItems || []).length;
+
+    inner.innerHTML = `
+      <div style="background:#0f2b1a;border:1px solid #16a34a;border-radius:12px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:700;color:#4ade80;margin-bottom:10px;">✅ Today's Evening Update Submitted</div>
+        ${studyLines || '<div style="font-size:12px;color:#64748b;">No study logged</div>'}
+        ${qbankLines || '<div style="font-size:12px;color:#64748b;">No qbank logged</div>'}
+        ${revCount > 0 ? `<div style="font-size:12px;color:#cbd5e1;padding:2px 0;">🔁 ${revCount} revision(s) completed</div>` : ""}
+      </div>
+      <button onclick="deleteEveningUpdate()" style="width:100%;background:#7f1d1d;border:1px solid #ef4444;color:#fca5a5;padding:10px;font-size:13px;">
+        🗑 Delete & Resubmit Evening Update
+      </button>
+    `;
+    return;
+  }
+
+  // Build form
+  inner.innerHTML = `
+    <!-- Study Log -->
+    <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">📖 Study Log</div>
+      <div id="studyEntries"></div>
+      <button onclick="addStudyEntry()" style="width:100%;background:#1e3a5f;color:#93c5fd;font-size:12px;padding:8px;margin-top:6px;">+ Add Another Subject</button>
+    </div>
+
+    <!-- Qbank Log -->
+    <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🧪 Qbank Log</div>
+      <div id="qbankEntries"></div>
+      <button onclick="addQbankEntry()" style="width:100%;background:#1e2a1e;color:#86efac;font-size:12px;padding:8px;margin-top:6px;">+ Add Another Subject</button>
+    </div>
+
+    <!-- Revision Log -->
+    <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🔁 Revision Log</div>
+      <div id="revisionCheckboxList"></div>
+    </div>
+
+    <button onclick="submitEvening()" style="width:100%;background:#16a34a;padding:12px;font-size:15px;font-weight:600;">
+      Submit Evening Update ✓
+    </button>
+  `;
+
+  addStudyEntry();
+  addQbankEntry();
   renderRevisionCheckboxList();
 }
 
-function _fillSubjectSelector(selectId, onChange) {
-  let sel = document.getElementById(selectId);
-  if (!sel) return;
-  sel.innerHTML = "";
-  Object.keys(studyData.subjects).forEach(name => {
-    let opt = document.createElement("option");
-    opt.value = name; opt.text = name;
-    sel.appendChild(opt);
-  });
-  sel.onchange = () => onChange && onChange();
-  if (onChange) onChange();
+let _studyEntryCount = 0;
+let _qbankEntryCount = 0;
+
+function addStudyEntry() {
+  let container = document.getElementById("studyEntries");
+  if (!container) return;
+  let id = _studyEntryCount++;
+  let subjectNames = Object.keys(studyData.subjects);
+
+  let div = document.createElement("div");
+  div.id = `studyEntry-${id}`;
+  div.style.cssText = "border:1px solid #1e293b;border-radius:8px;padding:10px;margin-bottom:8px;";
+
+  let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
+
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:12px;color:#94a3b8;font-weight:600;">Subject ${id + 1}</span>
+      ${id > 0 ? `<button onclick="removeStudyEntry(${id})" style="background:transparent;color:#ef4444;padding:2px 6px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:5px;">✕</button>` : ""}
+    </div>
+    <select id="sSub-${id}" style="width:100%;margin-bottom:6px;" onchange="_studyFillUnits(${id})">${options}</select>
+    <select id="sUnit-${id}" style="width:100%;margin-bottom:6px;" onchange="_studyFillTopics(${id})"></select>
+    <div id="sTopicsWrap-${id}">
+      <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Topics completed (multi-select)</label>
+      <select id="sTopics-${id}" multiple style="width:100%;height:90px;font-size:12px;"></select>
+    </div>
+  `;
+  container.appendChild(div);
+  _studyFillUnits(id);
 }
 
-function _fillUnitSelector(subjectSelectId, unitSelectId, onChange) {
-  let subj = document.getElementById(subjectSelectId)?.value;
-  let sel  = document.getElementById(unitSelectId);
-  if (!sel || !subj || !studyData.subjects[subj]) return;
-  sel.innerHTML = "";
-  studyData.subjects[subj].units.forEach((u, i) => {
-    let opt = document.createElement("option");
-    opt.value = i; opt.text = u.name;
-    sel.appendChild(opt);
-  });
-  sel.onchange = () => onChange && onChange();
-  if (onChange) onChange();
+function removeStudyEntry(id) {
+  let el = document.getElementById(`studyEntry-${id}`);
+  if (el) el.remove();
 }
 
-function _fillChapterSelector(subjectSelectId, unitSelectId, chapterSelectId) {
-  let subj = document.getElementById(subjectSelectId)?.value;
-  let ui   = parseInt(document.getElementById(unitSelectId)?.value) || 0;
-  let sel  = document.getElementById(chapterSelectId);
+function _studyFillUnits(id) {
+  let subj = document.getElementById(`sSub-${id}`)?.value;
+  let unitSel = document.getElementById(`sUnit-${id}`);
+  if (!unitSel || !subj || !studyData.subjects[subj]) return;
+  unitSel.innerHTML = studyData.subjects[subj].units.map((u, i) =>
+    `<option value="${i}">${u.name}</option>`
+  ).join("");
+  _studyFillTopics(id);
+}
+
+function _studyFillTopics(id) {
+  let subj = document.getElementById(`sSub-${id}`)?.value;
+  let ui   = parseInt(document.getElementById(`sUnit-${id}`)?.value) || 0;
+  let sel  = document.getElementById(`sTopics-${id}`);
   if (!sel || !subj || !studyData.subjects[subj]) return;
-  sel.innerHTML = "";
-  studyData.subjects[subj].units[ui]?.chapters.forEach((ch, i) => {
-    let opt = document.createElement("option");
-    opt.value = i; opt.text = ch.name;
-    sel.appendChild(opt);
-  });
+  let chapters = studyData.subjects[subj].units[ui]?.chapters || [];
+  sel.innerHTML = chapters.map((ch, ci) =>
+    `<option value="${ci}">${ch.name}</option>`
+  ).join("");
+}
+
+function addQbankEntry() {
+  let container = document.getElementById("qbankEntries");
+  if (!container) return;
+  let id = _qbankEntryCount++;
+  let subjectNames = Object.keys(studyData.subjects);
+
+  let div = document.createElement("div");
+  div.id = `qbankEntry-${id}`;
+  div.style.cssText = "border:1px solid #1e293b;border-radius:8px;padding:10px;margin-bottom:8px;";
+
+  let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
+
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:12px;color:#94a3b8;font-weight:600;">Qbank ${id + 1}</span>
+      ${id > 0 ? `<button onclick="removeQbankEntry(${id})" style="background:transparent;color:#ef4444;padding:2px 6px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:5px;">✕</button>` : ""}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <select id="qSub-${id}" style="flex:1;min-width:100px;" onchange="_qbankFillUnits(${id})">${options}</select>
+      <select id="qUnit-${id}" style="flex:1;min-width:100px;"></select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+      <div>
+        <label style="font-size:11px;color:#94a3b8;display:block;">Total Qs</label>
+        <input type="number" id="qTotal-${id}" style="width:70px;" min="0" placeholder="0">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#94a3b8;display:block;">Correct</label>
+        <input type="number" id="qCorrect-${id}" style="width:70px;" min="0" placeholder="0">
+      </div>
+    </div>
+  `;
+  container.appendChild(div);
+  _qbankFillUnits(id);
+}
+
+function removeQbankEntry(id) {
+  let el = document.getElementById(`qbankEntry-${id}`);
+  if (el) el.remove();
+}
+
+function _qbankFillUnits(id) {
+  let subj = document.getElementById(`qSub-${id}`)?.value;
+  let sel  = document.getElementById(`qUnit-${id}`);
+  if (!sel || !subj || !studyData.subjects[subj]) return;
+  sel.innerHTML = studyData.subjects[subj].units.map((u, i) =>
+    `<option value="${i}">${u.name}</option>`
+  ).join("");
 }
 
 function renderRevisionCheckboxList() {
@@ -225,6 +346,52 @@ function renderRevisionCheckboxList() {
     `;
     container.appendChild(label);
   });
+}
+
+function deleteEveningUpdate() {
+  if (!confirm("Delete today's evening update and resubmit?")) return;
+  let todayKey = today();
+  if (studyData.dailyHistory?.[todayKey]) {
+    // Reverse study entries
+    (studyData.dailyHistory[todayKey].studyEntries || []).forEach(entry => {
+      let subject = studyData.subjects[entry.subject];
+      if (!subject) return;
+      let unit = subject.units.find(u => u.name === entry.unit);
+      if (!unit) return;
+      entry.topicIndices.forEach(ci => {
+        let ch = unit.chapters[ci];
+        if (ch) {
+          ch.status = "not-started";
+          ch.revisionDates = [];
+          ch.nextRevision = null;
+          ch.revisionIndex = 0;
+          ch.completedOn = null;
+        }
+      });
+      fixPointer(entry.subject);
+    });
+    // Reverse qbank entries
+    (studyData.dailyHistory[todayKey].qbankEntries || []).forEach(entry => {
+      let subject = studyData.subjects[entry.subject];
+      if (!subject) return;
+      let ui = subject.units.findIndex(u => u.name === entry.unit);
+      if (ui < 0) return;
+      let unit = subject.units[ui];
+      unit.qbankStats.total   = Math.max(0, (unit.qbankStats.total || 0) - entry.total);
+      unit.qbankStats.correct = Math.max(0, (unit.qbankStats.correct || 0) - entry.correct);
+    });
+    delete studyData.dailyHistory[todayKey];
+  }
+  _studyEntryCount = 0;
+  _qbankEntryCount = 0;
+  saveData();
+  renderEveningUpdate();
+  renderSubjects();
+}
+
+// Keep backward compatibility: old populateAllEveningSelectors calls now just render the form
+function populateAllEveningSelectors() {
+  renderEveningUpdate();
 }
 
 function renderSavedPlan() {

@@ -130,53 +130,100 @@ function resetTodayPlan() {
 }
 
 function submitEvening() {
-  let studiedSubject = null;
+  let todayKey = today();
 
-  // ── STUDY ──
-  if (document.getElementById("studyDone")?.checked) {
-    let subjectName  = document.getElementById("studySubject")?.value;
-    let unitIndex    = parseInt(document.getElementById("studyUnit")?.value) || 0;
-    let chapterIndex = parseInt(document.getElementById("studyChapter")?.value) || 0;
-    studiedSubject   = subjectName;
-
-    let chapter = studyData.subjects[subjectName]?.units[unitIndex]?.chapters[chapterIndex];
-    if (chapter) {
-      chapter.status = "completed";
-      chapter.completedOn = today();
-      chapter.lastReviewedOn = today();
-      let dates = [], cursor = today();
-      for (let i = 0; i < BASE_INTERVALS.length; i++) {
-        cursor = addDays(cursor, computeNextInterval(chapter, i));
-        dates.push(cursor);
-      }
-      chapter.revisionDates = dates;
-      chapter.nextRevision = dates[0];
-      chapter.revisionIndex = 0;
-      chapter.missedRevisions = 0;
-      fixPointer(subjectName);
-    }
+  // Guard: once per day
+  if (studyData.dailyHistory?.[todayKey]?.eveningSubmitted) {
+    alert("Already submitted today. Delete and resubmit if you need to change.");
+    return;
   }
 
-  // ── QBANK ──
-  if (document.getElementById("qbankDone")?.checked) {
-    let subjectName = document.getElementById("qbankSubject")?.value;
-    let unitIndex   = parseInt(document.getElementById("qbankUnit")?.value) || 0;
-    let total       = parseInt(document.getElementById("qbankTotal")?.value) || 0;
-    let correct     = parseInt(document.getElementById("qbankCorrect")?.value) || 0;
+  if (!studyData.dailyHistory[todayKey]) {
+    studyData.dailyHistory[todayKey] = { study: false, qbank: false, revision: false, studySubject: null };
+  }
 
-    let unit = studyData.subjects[subjectName]?.units[unitIndex];
-    if (unit && total > 0) {
+  let hist = studyData.dailyHistory[todayKey];
+  hist.studyEntries  = [];
+  hist.qbankEntries  = [];
+  hist.revisedItems  = [];
+
+  // ── STUDY ENTRIES ──
+  let studyContainer = document.getElementById("studyEntries");
+  if (studyContainer) {
+    studyContainer.querySelectorAll("[id^='studyEntry-']").forEach(entryDiv => {
+      let id = entryDiv.id.replace("studyEntry-", "");
+      let subjectName = document.getElementById(`sSub-${id}`)?.value;
+      let ui          = parseInt(document.getElementById(`sUnit-${id}`)?.value) || 0;
+      let topicSel    = document.getElementById(`sTopics-${id}`);
+      if (!subjectName || !topicSel) return;
+
+      let selectedOpts = Array.from(topicSel.selectedOptions);
+      if (!selectedOpts.length) return;
+
+      let unit     = studyData.subjects[subjectName]?.units[ui];
+      let unitName = unit?.name || "";
+      let topicNames   = [];
+      let topicIndices = [];
+
+      selectedOpts.forEach(opt => {
+        let ci = parseInt(opt.value);
+        let ch = unit?.chapters[ci];
+        if (!ch) return;
+        topicNames.push(ch.name);
+        topicIndices.push(ci);
+
+        ch.status = "completed";
+        ch.completedOn = today();
+        ch.lastReviewedOn = today();
+        let dates = [], cursor = today();
+        for (let i = 0; i < BASE_INTERVALS.length; i++) {
+          cursor = addDays(cursor, computeNextInterval(ch, i));
+          dates.push(cursor);
+        }
+        ch.revisionDates = dates;
+        ch.nextRevision  = dates[0];
+        ch.revisionIndex = 0;
+        ch.missedRevisions = 0;
+      });
+
+      if (topicNames.length) {
+        fixPointer(subjectName);
+        hist.study = true;
+        hist.studySubject = subjectName;
+        hist.studyEntries.push({ subject: subjectName, unit: unitName, topics: topicNames, topicIndices });
+      }
+    });
+  }
+
+  // ── QBANK ENTRIES ──
+  let qbankContainer = document.getElementById("qbankEntries");
+  if (qbankContainer) {
+    qbankContainer.querySelectorAll("[id^='qbankEntry-']").forEach(entryDiv => {
+      let id = entryDiv.id.replace("qbankEntry-", "");
+      let subjectName = document.getElementById(`qSub-${id}`)?.value;
+      let ui          = parseInt(document.getElementById(`qUnit-${id}`)?.value) || 0;
+      let total       = parseInt(document.getElementById(`qTotal-${id}`)?.value) || 0;
+      let correct     = parseInt(document.getElementById(`qCorrect-${id}`)?.value) || 0;
+      if (!subjectName || total <= 0) return;
+
+      let unit     = studyData.subjects[subjectName]?.units[ui];
+      let unitName = unit?.name || "";
+      if (!unit) return;
+
       unit.qbankStats.total   += total;
       unit.qbankStats.correct += correct;
       unit.qbankDone = true;
-      // Update difficulty factors for all chapters in this unit
+
       let q = Math.round((correct / total) * 5);
       unit.chapters.forEach(ch => {
         let ef = ch.difficultyFactor || 2.5;
         ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
         ch.difficultyFactor = clamp(ef, 1.3, 3.0);
       });
-    }
+
+      hist.qbank = true;
+      hist.qbankEntries.push({ subject: subjectName, unit: unitName, unitIndex: ui, total, correct });
+    });
   }
 
   // ── REVISION ──
@@ -184,29 +231,17 @@ function submitEvening() {
   revBoxes.forEach(box => {
     let [subjectName, ui, ci] = box.value.split("|");
     markRevisionDone(subjectName, parseInt(ui), parseInt(ci));
+    hist.revisedItems.push({ subjectName, ui, ci });
   });
+  if (revBoxes.length > 0) hist.revision = true;
 
-  // ── Log daily history ──
-  let todayKey = today();
-  if (!studyData.dailyHistory[todayKey]) {
-    studyData.dailyHistory[todayKey] = { study: false, qbank: false, revision: false, studySubject: null };
-  }
-  if (document.getElementById("studyDone")?.checked) {
-    studyData.dailyHistory[todayKey].study = true;
-    studyData.dailyHistory[todayKey].studySubject = studiedSubject;
-  }
-  if (document.getElementById("qbankDone")?.checked) {
-    studyData.dailyHistory[todayKey].qbank = true;
-  }
-  if (revBoxes.length > 0) {
-    studyData.dailyHistory[todayKey].revision = true;
-  }
-
-  if (studyData.dailyPlan?.date === today() && document.getElementById("studyDone")?.checked) {
+  if (studyData.dailyPlan?.date === today() && hist.study) {
     studyData.dailyPlan.completed = true;
   }
 
+  hist.eveningSubmitted = true;
   saveData();
   renderSubjects();
+  renderEveningUpdate();
   alert("Evening update saved ✓");
 }
