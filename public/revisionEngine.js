@@ -1,89 +1,68 @@
-// ─── Adaptive Revision Engine (SM-2 inspired + exam compression) ─────────────
+// ─── Adaptive Revision Engine (SM-2 + exam compression) ──────
 
 const BASE_INTERVALS = [1, 3, 7, 21, 45];
 
-// Compute next interval with difficulty factor and exam proximity
-function computeNextInterval(topic, revIndex) {
+function computeNextInterval(chapter, revIndex) {
   let base = BASE_INTERVALS[revIndex] || 60;
-  let ef = topic.difficultyFactor || 2.5;
-
-  // Exam proximity compression: shrink intervals as exam approaches
+  let ef = chapter.difficultyFactor || 2.5;
   let proximity = examProximityFactor();
-  let compressionFactor = 1 - (proximity * 0.5); // at exam: intervals shrink 50%
-  compressionFactor = Math.max(0.3, compressionFactor);
-
-  // Missed revision penalty: shrink interval if overdue before
-  let penalty = 1 - Math.min(0.4, (topic.missedRevisions || 0) * 0.1);
-
-  let interval = Math.round(base * ef * compressionFactor * penalty / 2.5);
-  return Math.max(1, interval);
+  let compressionFactor = Math.max(0.3, 1 - proximity * 0.5);
+  let penalty = 1 - Math.min(0.4, (chapter.missedRevisions || 0) * 0.1);
+  return Math.max(1, Math.round(base * ef * compressionFactor * penalty / 2.5));
 }
 
+// Mark the pointer's chapter as complete and schedule revisions
 function completeTopic(subjectName) {
   let subject = studyData.subjects[subjectName];
-  let pointer = subject.pointer;
-  if (pointer >= subject.topics.length) return;
+  let ptr = subject.pointer || { unit: 0, chapter: 0 };
+  let unit = subject.units[ptr.unit];
+  if (!unit) return;
+  let chapter = unit.chapters[ptr.chapter];
+  if (!chapter) return;
 
-  let topic = subject.topics[pointer];
-  topic.status = "completed";
-  topic.completedOn = today();
-  topic.lastReviewedOn = today();
+  chapter.status = "completed";
+  chapter.completedOn = today();
+  chapter.lastReviewedOn = today();
 
-  // Generate adaptive schedule
-  let dates = [];
-  let cursor = today();
+  let dates = [], cursor = today();
   for (let i = 0; i < BASE_INTERVALS.length; i++) {
-    let interval = computeNextInterval(topic, i);
-    cursor = addDays(cursor, i === 0 ? interval : computeNextInterval(topic, i));
+    cursor = addDays(cursor, computeNextInterval(chapter, i));
     dates.push(cursor);
   }
+  chapter.revisionDates = dates;
+  chapter.revisionIndex = 0;
+  chapter.nextRevision = dates[0];
+  chapter.missedRevisions = 0;
 
-  // Recalculate properly as cumulative
-  dates = [];
-  cursor = today();
-  for (let i = 0; i < BASE_INTERVALS.length; i++) {
-    let days = computeNextInterval(topic, i);
-    cursor = addDays(cursor, days);
-    dates.push(cursor);
-  }
-
-  topic.revisionDates = dates;
-  topic.revisionIndex = 0;
-  topic.nextRevision = dates[0];
-  topic.missedRevisions = 0;
-
-  subject.pointer++;
+  fixPointer(subjectName);
   saveData();
 }
 
-function markRevisionDone(subjectName, topicIndex, qualityScore) {
-  let topic = studyData.subjects[subjectName].topics[topicIndex];
-  if (!topic.revisionDates || !topic.revisionDates.length) return;
+// Called with unit + chapter indices
+function markRevisionDone(subjectName, unitIndex, chapterIndex, qualityScore) {
+  let chapter = studyData.subjects[subjectName]?.units[unitIndex]?.chapters[chapterIndex];
+  if (!chapter || !chapter.revisionDates?.length) return;
 
-  // quality 0-5: affects difficulty factor (SM-2 update)
   let q = qualityScore !== undefined ? qualityScore : 4;
-  let ef = topic.difficultyFactor || 2.5;
-  // SM-2 EF update formula
+  let ef = chapter.difficultyFactor || 2.5;
   ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-  topic.difficultyFactor = clamp(ef, 1.3, 3.0);
+  chapter.difficultyFactor = clamp(ef, 1.3, 3.0);
 
-  // Check if overdue → penalize
-  if (topic.nextRevision && topic.nextRevision < today()) {
-    topic.missedRevisions = (topic.missedRevisions || 0) + 1;
+  if (chapter.nextRevision && chapter.nextRevision < today()) {
+    chapter.missedRevisions = (chapter.missedRevisions || 0) + 1;
   } else {
-    topic.missedRevisions = Math.max(0, (topic.missedRevisions || 0) - 1);
+    chapter.missedRevisions = Math.max(0, (chapter.missedRevisions || 0) - 1);
   }
 
-  topic.lastReviewedOn = today();
-  topic.revisionIndex++;
+  chapter.lastReviewedOn = today();
+  chapter.revisionIndex++;
 
-  if (topic.revisionIndex < topic.revisionDates.length) {
-    // Recompute next interval adaptively
-    let interval = computeNextInterval(topic, topic.revisionIndex);
-    topic.nextRevision = addDays(today(), interval);
-    topic.revisionDates[topic.revisionIndex] = topic.nextRevision;
+  if (chapter.revisionIndex < chapter.revisionDates.length) {
+    let interval = computeNextInterval(chapter, chapter.revisionIndex);
+    chapter.nextRevision = addDays(today(), interval);
+    chapter.revisionDates[chapter.revisionIndex] = chapter.nextRevision;
   } else {
-    topic.nextRevision = null;
+    chapter.nextRevision = null;
   }
 
   saveData();
@@ -92,54 +71,62 @@ function markRevisionDone(subjectName, topicIndex, qualityScore) {
 function getRevisionsDueToday() {
   let due = [];
   Object.keys(studyData.subjects).forEach(subjectName => {
-    studyData.subjects[subjectName].topics.forEach((topic, index) => {
-      if (topic.nextRevision && topic.nextRevision <= today()) {
-        let overdueDays = daysBetween(topic.nextRevision, today());
-        due.push({
-          subjectName,
-          topicIndex: index,
-          topicName: topic.name,
-          overdueDays,
-          isOverdue: overdueDays > 0
-        });
-      }
+    studyData.subjects[subjectName].units.forEach((unit, ui) => {
+      unit.chapters.forEach((ch, ci) => {
+        if (ch.nextRevision && ch.nextRevision <= today()) {
+          let overdueDays = daysBetween(ch.nextRevision, today());
+          due.push({
+            subjectName,
+            unitIndex: ui,
+            chapterIndex: ci,
+            unitName: unit.name,
+            topicName: ch.name,
+            overdueDays,
+            isOverdue: overdueDays > 0
+          });
+        }
+      });
     });
   });
-  // Sort: most overdue first
-  due.sort((a, b) => b.overdueDays - a.overdueDays);
-  return due;
+  return due.sort((a, b) => b.overdueDays - a.overdueDays);
 }
 
 function getOverdueCount(subjectName) {
-  let subject = studyData.subjects[subjectName];
-  return subject.topics.filter(t => t.nextRevision && t.nextRevision < today()).length;
+  let count = 0;
+  studyData.subjects[subjectName].units.forEach(unit => {
+    unit.chapters.forEach(ch => {
+      if (ch.nextRevision && ch.nextRevision < today()) count++;
+    });
+  });
+  return count;
 }
 
 function detectPhaseStatus(subjectName) {
   let subject = studyData.subjects[subjectName];
-  let total = subject.topics.length;
+  let total = 0, completed = 0, rev1 = 0, rev2 = 0;
+  subject.units.forEach(unit => {
+    unit.chapters.forEach(ch => {
+      total++;
+      if (ch.status === "completed") completed++;
+      if (ch.revisionIndex >= 1) rev1++;
+      if (ch.revisionIndex >= 2) rev2++;
+    });
+  });
   if (total === 0) return { phase1: false, phase2: false, phase3: false };
-  let completed = subject.topics.filter(t => t.status === "completed").length;
-  let revisedOnce = subject.topics.filter(t => t.revisionIndex >= 1).length;
-  let revisedTwice = subject.topics.filter(t => t.revisionIndex >= 2).length;
   return {
     phase1: completed === total,
-    phase2: revisedOnce === total,
-    phase3: revisedTwice === total
+    phase2: rev1 === total,
+    phase3: rev2 === total
   };
 }
 
-// Get subjects with critical overdue (>= 3 topics overdue)
 function getCriticalSubjects() {
-  return Object.keys(studyData.subjects).filter(name => getOverdueCount(name) >= 3);
+  return Object.keys(studyData.subjects).filter(n => getOverdueCount(n) >= 3);
 }
 
-// Projected retention for a topic based on time since last review
-function topicRetentionEstimate(topic) {
-  if (!topic.lastReviewedOn) return 0;
-  let daysSince = daysBetween(topic.lastReviewedOn, today());
-  let ef = topic.difficultyFactor || 2.5;
-  // Ebbinghaus forgetting curve approximation
-  let r = Math.exp(-daysSince / (ef * 10)) * 100;
-  return Math.max(0, Math.min(100, r));
+function topicRetentionEstimate(chapter) {
+  if (!chapter.lastReviewedOn) return 0;
+  let daysSince = daysBetween(chapter.lastReviewedOn, today());
+  let ef = chapter.difficultyFactor || 2.5;
+  return Math.max(0, Math.min(100, Math.exp(-daysSince / (ef * 10)) * 100));
 }

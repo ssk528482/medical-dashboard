@@ -1,105 +1,164 @@
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 
 let studyData = JSON.parse(localStorage.getItem("studyData")) || {};
 
-// ─── Migrations ───────────────────────────────────────────────
-function migrateData(data) {
-  if (!data.version || data.version < 2) {
-    // v2: add qbankStats to all topics
-    Object.values(data.subjects || {}).forEach(subject => {
-      subject.topics.forEach(topic => {
-        if (!topic.qbankStats) topic.qbankStats = { total: 0, correct: 0 };
-        if (!topic.qbankDone) topic.qbankDone = false;
-      });
-    });
-    data.version = 2;
-  }
-  if (data.version < 3) {
-    // v3: add adaptive revision fields
-    Object.values(data.subjects || {}).forEach(subject => {
-      subject.topics.forEach(topic => {
-        if (!topic.difficultyFactor) topic.difficultyFactor = 2.5; // SM-2 EF
-        if (!topic.missedRevisions) topic.missedRevisions = 0;
-        if (!topic.lastReviewedOn) topic.lastReviewedOn = null;
-      });
-    });
-    data.version = 3;
-  }
-  return data;
-}
-
-// ─── Init / Defaults ──────────────────────────────────────────
-studyData = migrateData(studyData);
-if (!studyData.setupComplete) studyData.setupComplete = false;
-if (!studyData.subjects) studyData.subjects = {};
-if (!studyData.dailyHistory) studyData.dailyHistory = {};
-if (!studyData.uiState) studyData.uiState = {};
-if (!studyData.uiState.qbankCollapsed) studyData.uiState.qbankCollapsed = {};
-if (!studyData.uiState.editorCollapsed) studyData.uiState.editorCollapsed = {};
-if (!studyData.examDate) studyData.examDate = "2026-12-01";
-if (!studyData.startDate) studyData.startDate = today();
-if (!studyData.version) studyData.version = DATA_VERSION;
-
-// ─── Save ─────────────────────────────────────────────────────
-async function saveData() {
-  studyData.updatedAt = new Date().toISOString();
-  localStorage.setItem("studyData", JSON.stringify(studyData));
-  if (typeof saveToCloud === "function") {
-    await saveToCloud();
-  }
-}
-
-// ─── Conflict-safe merge ──────────────────────────────────────
-function mergeData(local, cloud) {
-  if (!local.updatedAt) return cloud;
-  if (!cloud.updatedAt) return local;
-  // Last-write-wins with timestamp
-  return new Date(local.updatedAt) >= new Date(cloud.updatedAt) ? local : cloud;
-}
-
-// ─── Subject setup (index.html wizard) ───────────────────────
-function addSubject() {
-  let name = document.getElementById("subjectName").value.trim();
-  let size = document.getElementById("subjectSize").value;
-  let topicsRaw = document.getElementById("topicsInput").value.trim();
-
-  if (!name || !topicsRaw) { alert("Enter subject and topics."); return; }
-
-  let topicsArray = topicsRaw.split("\n").filter(t => t.trim()).map(t => makeTopicObj(t.trim()));
-
-  studyData.subjects[name] = {
-    size: size,
-    topics: topicsArray,
-    pointer: 0,
-    qbank: { total: 0, correct: 0 }
-  };
-
-  saveData();
-  document.getElementById("subjectName").value = "";
-  document.getElementById("topicsInput").value = "";
-  alert("Subject Added.");
-}
-
-function makeTopicObj(name) {
+// ─── Object Factories ─────────────────────────────────────────
+function makeUnitObj(name) {
   return {
-    name: name,
+    name,
+    collapsed: false,
+    qbankStats: { total: 0, correct: 0 },
+    qbankDone: false,
+    chapters: []
+  };
+}
+
+function makeChapterObj(name) {
+  return {
+    name,
     status: "not-started",
     completedOn: null,
     revisionDates: [],
     revisionIndex: 0,
     nextRevision: null,
-    qbankDone: false,
-    qbankStats: { total: 0, correct: 0 },
     difficultyFactor: 2.5,
     missedRevisions: 0,
     lastReviewedOn: null
   };
 }
 
-function finishSetup() {
-  if (Object.keys(studyData.subjects).length === 0) {
-    alert("Add at least one subject."); return;
+// Alias so setup.html / bulk import still work
+function makeTopicObj(name) { return makeUnitObj(name); }
+
+// ─── Migrations ───────────────────────────────────────────────
+function migrateData(data) {
+  if (!data.version || data.version < 2) {
+    Object.values(data.subjects || {}).forEach(subject => {
+      subject.topics = subject.topics || [];
+      subject.topics.forEach(topic => {
+        if (!topic.qbankStats) topic.qbankStats = { total: 0, correct: 0 };
+        if (topic.qbankDone === undefined) topic.qbankDone = false;
+      });
+    });
+    data.version = 2;
   }
+
+  if (data.version < 3) {
+    Object.values(data.subjects || {}).forEach(subject => {
+      subject.topics.forEach(topic => {
+        if (!topic.difficultyFactor) topic.difficultyFactor = 2.5;
+        if (!topic.missedRevisions) topic.missedRevisions = 0;
+        if (!topic.lastReviewedOn) topic.lastReviewedOn = null;
+      });
+    });
+    data.version = 3;
+  }
+
+  if (data.version < 4) {
+    // v3 → v4: topics[] → units[{name, chapters[]}]
+    Object.values(data.subjects || {}).forEach(subject => {
+      if (subject.topics !== undefined) {
+        // All old topics become chapters inside a single "General" unit
+        let oldPointer = typeof subject.pointer === "number" ? subject.pointer : 0;
+        subject.units = [{
+          name: "General",
+          collapsed: false,
+          qbankStats: subject.qbank || { total: 0, correct: 0 },
+          qbankDone: false,
+          chapters: (subject.topics || []).map(t => ({
+            name: t.name,
+            status: t.status || "not-started",
+            completedOn: t.completedOn || null,
+            revisionDates: t.revisionDates || [],
+            revisionIndex: t.revisionIndex || 0,
+            nextRevision: t.nextRevision || null,
+            difficultyFactor: t.difficultyFactor || 2.5,
+            missedRevisions: t.missedRevisions || 0,
+            lastReviewedOn: t.lastReviewedOn || null
+          }))
+        }];
+        delete subject.topics;
+        delete subject.qbank;
+        subject.pointer = { unit: 0, chapter: oldPointer };
+      }
+
+      // Fix pointer shape
+      if (typeof subject.pointer === "number") {
+        subject.pointer = { unit: 0, chapter: subject.pointer };
+      }
+      if (!subject.pointer || typeof subject.pointer !== "object") {
+        subject.pointer = { unit: 0, chapter: 0 };
+      }
+      if (!subject.units) subject.units = [];
+    });
+    data.version = 4;
+  }
+
+  return data;
+}
+
+// ─── Init / Defaults ──────────────────────────────────────────
+studyData = migrateData(studyData);
+
+if (!studyData.setupComplete)   studyData.setupComplete = false;
+if (!studyData.subjects)        studyData.subjects = {};
+if (!studyData.dailyHistory)    studyData.dailyHistory = {};
+if (!studyData.uiState)         studyData.uiState = {};
+if (!studyData.uiState.editorCollapsed) studyData.uiState.editorCollapsed = {};
+if (!studyData.uiState.unitCollapsed)   studyData.uiState.unitCollapsed = {};
+if (!studyData.examDate)        studyData.examDate = "2026-12-01";
+if (!studyData.startDate)       studyData.startDate = today();
+if (!studyData.version)         studyData.version = DATA_VERSION;
+
+// ─── Save ─────────────────────────────────────────────────────
+async function saveData() {
+  studyData.updatedAt = new Date().toISOString();
+  localStorage.setItem("studyData", JSON.stringify(studyData));
+  if (typeof saveToCloud === "function") await saveToCloud();
+}
+
+// ─── Conflict-safe merge ──────────────────────────────────────
+function mergeData(local, cloud) {
+  if (!local.updatedAt) return cloud;
+  if (!cloud.updatedAt) return local;
+  return new Date(local.updatedAt) >= new Date(cloud.updatedAt) ? local : cloud;
+}
+
+// ─── Pointer ──────────────────────────────────────────────────
+function fixPointer(subjectName) {
+  let subject = studyData.subjects[subjectName];
+  for (let ui = 0; ui < subject.units.length; ui++) {
+    for (let ci = 0; ci < subject.units[ui].chapters.length; ci++) {
+      if (subject.units[ui].chapters[ci].status !== "completed") {
+        subject.pointer = { unit: ui, chapter: ci };
+        return;
+      }
+    }
+  }
+  let lastUi = Math.max(0, subject.units.length - 1);
+  subject.pointer = {
+    unit: lastUi,
+    chapter: subject.units[lastUi] ? subject.units[lastUi].chapters.length : 0
+  };
+}
+
+// ─── Subject setup ────────────────────────────────────────────
+function addSubject() {
+  let name = document.getElementById("subjectName")?.value.trim();
+  let size = document.getElementById("subjectSize")?.value || "medium";
+  let topicsRaw = document.getElementById("topicsInput")?.value.trim();
+  if (!name || !topicsRaw) { alert("Enter subject and units."); return; }
+
+  let units = topicsRaw.split("\n").filter(t => t.trim()).map(t => makeUnitObj(t.trim()));
+  studyData.subjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
+  saveData();
+  if (document.getElementById("subjectName")) document.getElementById("subjectName").value = "";
+  if (document.getElementById("topicsInput")) document.getElementById("topicsInput").value = "";
+  alert("Subject added.");
+}
+
+function finishSetup() {
+  if (Object.keys(studyData.subjects).length === 0) { alert("Add at least one subject."); return; }
   studyData.setupComplete = true;
   saveData();
   renderStatus();
@@ -107,96 +166,93 @@ function finishSetup() {
 
 function renderStatus() {
   if (!studyData.setupComplete) return;
-  let setupSection = document.getElementById("setupSection");
-  let statusSection = document.getElementById("statusSection");
-  if (setupSection) setupSection.style.display = "none";
-  if (statusSection) statusSection.style.display = "block";
-}
-
-function fixPointer(subjectName) {
-  let subject = studyData.subjects[subjectName];
-  subject.pointer = subject.topics.findIndex(t => t.status !== "completed");
-  if (subject.pointer === -1) subject.pointer = subject.topics.length;
+  let setup = document.getElementById("setupSection");
+  let status = document.getElementById("statusSection");
+  if (setup) setup.style.display = "none";
+  if (status) status.style.display = "block";
 }
 
 // ─── Phase Tracking ───────────────────────────────────────────
 function getGlobalPhaseStats() {
-  let total = 0, p1 = 0, p2 = 0, p3 = 0, qbankDone = 0;
+  let totalChapters = 0, p1 = 0, p2 = 0, p3 = 0;
+  let totalUnits = 0, qbankUnits = 0;
 
   Object.values(studyData.subjects).forEach(subject => {
-    subject.topics.forEach(topic => {
-      total++;
-      if (topic.status === "completed") p1++;
-      if (topic.revisionIndex >= 2) p2++;
-      if (topic.revisionIndex >= 3) p3++;
-      if (topic.qbankDone) qbankDone++;
+    subject.units.forEach(unit => {
+      totalUnits++;
+      if (unit.qbankDone) qbankUnits++;
+      unit.chapters.forEach(ch => {
+        totalChapters++;
+        if (ch.status === "completed") p1++;
+        if (ch.revisionIndex >= 2) p2++;
+        if (ch.revisionIndex >= 3) p3++;
+      });
     });
   });
 
+  let tc = totalChapters || 1;
+  let tu = totalUnits || 1;
   return {
-    total,
-    phase1: { count: p1, pct: total ? (p1/total*100).toFixed(1) : 0 },
-    phase2: { count: p2, pct: total ? (p2/total*100).toFixed(1) : 0 },
-    phase3: { count: p3, pct: total ? (p3/total*100).toFixed(1) : 0 },
-    qbank:  { count: qbankDone, pct: total ? (qbankDone/total*100).toFixed(1) : 0 }
+    total: totalChapters,
+    totalUnits,
+    phase1: { count: p1, pct: (p1/tc*100).toFixed(1) },
+    phase2: { count: p2, pct: (p2/tc*100).toFixed(1) },
+    phase3: { count: p3, pct: (p3/tc*100).toFixed(1) },
+    qbank:  { count: qbankUnits, pct: (qbankUnits/tu*100).toFixed(1) }
   };
 }
 
-// ─── Analytics helpers ────────────────────────────────────────
+// ─── Analytics Helpers ────────────────────────────────────────
+
+// FIX: Returns 0 when nothing studied — no phantom 10%
 function calculateRetention() {
-  let totalTopics = 0, revisedOnTime = 0;
+  let totalChapters = 0, revisedOnce = 0;
+  let totalQ = 0, totalCorrect = 0;
+
   Object.values(studyData.subjects).forEach(subject => {
-    subject.topics.forEach(topic => {
-      totalTopics++;
-      if (topic.revisionIndex > 0) revisedOnTime++;
+    subject.units.forEach(unit => {
+      totalQ += unit.qbankStats?.total || 0;
+      totalCorrect += unit.qbankStats?.correct || 0;
+      unit.chapters.forEach(ch => {
+        totalChapters++;
+        if (ch.revisionIndex > 0) revisedOnce++;
+      });
     });
   });
-  let revisionCompliance = (revisedOnTime / (totalTopics || 1)) * 100;
 
-  let accuracySum = 0, count = 0;
-  Object.values(studyData.subjects).forEach(subject => {
-    accuracySum += subjectAccuracy(subject);
-    count++;
-  });
-  let avgAccuracy = count > 0 ? accuracySum / count : 0;
+  if (totalChapters === 0) return "0.0";
 
-  let retention = revisionCompliance * 0.4 + avgAccuracy * 0.4 + (revisionCompliance > 80 ? 20 : 10);
-  return retention.toFixed(1);
+  let revisionCompliance = (revisedOnce / totalChapters) * 100;
+  let avgAccuracy = totalQ > 0 ? (totalCorrect / totalQ) * 100 : 0;
+
+  // FIX: No phantom base bonus — pure weighted score
+  return (revisionCompliance * 0.6 + avgAccuracy * 0.4).toFixed(1);
 }
 
 function calculateConsistencyForDays(days) {
   if (!studyData.dailyHistory) return 0;
-  let totalScore = 0, maxScore = days * 3;
+  let total = 0, max = days * 3;
   for (let i = 0; i < days; i++) {
-    let d = new Date();
-    d.setDate(d.getDate() - i);
+    let d = new Date(); d.setDate(d.getDate() - i);
     let key = d.toISOString().split("T")[0];
-    if (studyData.dailyHistory[key]) {
-      let e = studyData.dailyHistory[key];
-      totalScore += (e.study?1:0) + (e.qbank?1:0) + (e.revision?1:0);
-    }
+    let e = studyData.dailyHistory[key];
+    if (e) total += (e.study?1:0) + (e.qbank?1:0) + (e.revision?1:0);
   }
-  return (totalScore / maxScore) * 100;
+  return (total / max) * 100;
 }
 
-function calculateWeeklyConsistency() { return calculateConsistencyForDays(7); }
+function calculateWeeklyConsistency()  { return calculateConsistencyForDays(7);  }
 function calculateMonthlyConsistency() { return calculateConsistencyForDays(30); }
 
 function calculateAverageDailyCompletion() {
-  if (!studyData.dailyHistory) return 0;
-  let days = Object.keys(studyData.dailyHistory).length;
-  if (days === 0) return 0;
-  let completedCount = 0;
-  Object.keys(studyData.dailyHistory).forEach(date => {
-    if (studyData.dailyHistory[date].study) completedCount++;
-  });
-  return completedCount / days;
+  let days = Object.keys(studyData.dailyHistory || {}).length;
+  if (!days) return 0;
+  let studyDays = Object.values(studyData.dailyHistory).filter(e => e.study).length;
+  return studyDays / days;
 }
 
 function getBurnoutIndex() {
   let weekly = calculateWeeklyConsistency();
   let monthly = calculateMonthlyConsistency();
-  // Burnout score 0-100: higher = worse
-  let drop = Math.max(0, monthly - weekly);
-  return clamp(drop * 1.5, 0, 100).toFixed(0);
+  return clamp((Math.max(0, monthly - weekly)) * 1.5, 0, 100).toFixed(0);
 }

@@ -18,29 +18,11 @@
       <div id="userGreeting" style="font-weight:600;font-size:14px;"></div>
       <div id="authStatus" style="font-size:12px;color:#64748b;"></div>
     </div>
-    <a href="profile.html" style="background:#334155;color:#e2e8f0;padding:6px 12px;border-radius:8px;font-size:12px;text-decoration:none;">
-      👤 Profile
-    </a>
+    <a href="profile.html" style="background:#334155;color:#e2e8f0;padding:6px 12px;border-radius:8px;font-size:12px;text-decoration:none;">👤 Profile</a>
   </div>
 </div>
 
-<div id="setupSection" style="display:none;">
-  <div class="card">
-    <div class="section-title">Initial Setup</div>
-    <input id="subjectName" placeholder="Subject Name" style="width:100%;">
-    <select id="subjectSize" style="width:100%;">
-      <option value="large">Large</option>
-      <option value="medium">Medium</option>
-      <option value="small">Small</option>
-    </select>
-    <textarea id="topicsInput" rows="6" placeholder="Paste topics (one per line)" style="width:100%;margin-top:8px;"></textarea>
-    <div style="display:flex;gap:8px;">
-      <button onclick="addSubject()">Add Subject</button>
-      <button onclick="finishSetup()" style="background:#16a34a;">Finish Setup</button>
-    </div>
-  </div>
-</div>
-
+<!-- Morning Plan -->
 <div class="card">
   <div class="section-title">☀️ Morning Planner</div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -56,34 +38,43 @@
   <div id="planOutput" style="margin-top:10px;"></div>
 </div>
 
+<!-- Heatmap -->
 <div class="card">
   <div class="section-title">📅 60-Day Consistency</div>
   <div id="heatmapContainer"></div>
 </div>
 
+<!-- Subjects / Revisions -->
 <div id="statusSection" style="display:none;">
   <div id="subjectsContainer"></div>
 </div>
 
+<!-- Evening Update -->
 <div class="card">
   <div class="section-title">🌙 Evening Update</div>
 
+  <!-- Study Log -->
   <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
     <div style="font-weight:600;font-size:13px;margin-bottom:8px;">📖 Study Log</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <select id="studySubject" style="flex:1;min-width:120px;"></select>
-      <select id="studyTopic" style="flex:1;min-width:140px;"></select>
+      <select id="studySubject" style="flex:1;min-width:100px;"
+        onchange="_fillUnitSelector('studySubject','studyUnit',()=>_fillChapterSelector('studySubject','studyUnit','studyChapter'))"></select>
+      <select id="studyUnit" style="flex:1;min-width:100px;"
+        onchange="_fillChapterSelector('studySubject','studyUnit','studyChapter')"></select>
     </div>
+    <select id="studyChapter" style="width:100%;margin-top:6px;"></select>
     <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;cursor:pointer;">
       <input type="checkbox" id="studyDone"> Completed today
     </label>
   </div>
 
+  <!-- Qbank Log -->
   <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
     <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🧪 Qbank Log</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <select id="qbankSubject" style="flex:1;min-width:120px;"></select>
-      <select id="qbankTopic" style="flex:1;min-width:140px;"></select>
+      <select id="qbankSubject" style="flex:1;min-width:100px;"
+        onchange="_fillUnitSelector('qbankSubject','qbankUnit',null)"></select>
+      <select id="qbankUnit" style="flex:1;min-width:100px;"></select>
     </div>
     <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
       <div>
@@ -100,6 +91,7 @@
     </label>
   </div>
 
+  <!-- Revision Log -->
   <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:10px;">
     <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🔁 Revision Log</div>
     <div id="revisionCheckboxList"></div>
@@ -110,10 +102,11 @@
   </button>
 </div>
 
+<!-- Bottom Nav -->
 <div class="bottom-nav">
   <a href="index.html" class="active">🏠<br>Plan</a>
   <a href="editor.html">📚<br>Syllabus</a>
-  <a href="qbank.html">🧪<br>Qbank</a>
+  <a href="editor.html?tab=qbank">🧪<br>Qbank</a>
   <a href="analytics.html">📊<br>Stats</a>
   <a href="profile.html">👤<br>Profile</a>
 </div>

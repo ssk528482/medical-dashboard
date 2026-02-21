@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Syllabus Editor — Medical Study OS</title>
+  <title>Syllabus & Qbank — Medical Study OS</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -10,44 +10,59 @@
 
 <script src="router.js"></script>
 
-<h1>📚 Syllabus Editor</h1>
+<h1>📚 Syllabus & Qbank</h1>
 
-<div class="card">
-  <div class="section-title">Add New Subject</div>
-  <input id="newSubjectName" placeholder="Subject Name" style="width:100%;">
-  <select id="newSubjectSize" style="width:100%;">
-    <option value="large">Large</option>
-    <option value="medium">Medium</option>
-    <option value="small">Small</option>
-  </select>
-  <div style="display:flex;gap:8px;margin-top:8px;">
-    <button onclick="addNewSubject()" style="flex:1;">Add Subject</button>
-    <button onclick="openBulkModal()" style="flex:1;background:#8b5cf6;">📥 Bulk Import</button>
-  </div>
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tabEditor" onclick="switchTab('editor')">📚 Syllabus</button>
+  <button class="tab-btn" id="tabQbank" onclick="switchTab('qbank')">🧪 Qbank</button>
 </div>
 
-<div id="subjectsEditorContainer" style="padding:0 14px;"></div>
+<!-- ── Editor Tab ── -->
+<div id="editorTab">
+  <div class="card">
+    <div class="section-title">Add New Subject</div>
+    <input id="newSubjectName" placeholder="Subject Name" style="width:100%;">
+    <select id="newSubjectSize" style="width:100%;">
+      <option value="large">Large</option>
+      <option value="medium">Medium</option>
+      <option value="small">Small</option>
+    </select>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button onclick="addNewSubject()" style="flex:1;">Add Subject</button>
+      <button onclick="openBulkModal()" style="flex:1;background:#8b5cf6;">📥 Bulk Import</button>
+    </div>
+  </div>
+
+  <div id="editorContainer" style="padding:0 14px;"></div>
+</div>
+
+<!-- ── Qbank Tab ── -->
+<div id="qbankTab" style="display:none;">
+  <div class="card" style="font-size:13px;color:#94a3b8;">
+    📊 Track Qbank progress per unit. Log questions after each session.
+  </div>
+  <div id="qbankContainer" style="padding:0 14px;"></div>
+</div>
 
 <!-- ── Bulk Import Modal ── -->
-<div id="bulkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;overflow-y:auto;padding:20px;">
+<div id="bulkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999;overflow-y:auto;padding:20px;">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;max-width:500px;margin:0 auto;padding:24px;">
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <div style="font-size:16px;font-weight:700;">📥 Bulk Import Subjects</div>
-      <button onclick="closeBulkModal()" style="background:#334155;padding:6px 12px;margin-top:0;font-size:13px;">✕ Close</button>
+      <button onclick="closeBulkModal()" style="background:#334155;padding:6px 12px;margin:0;font-size:13px;">✕ Close</button>
     </div>
 
-    <!-- Step indicator -->
+    <!-- Step dots -->
     <div style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:20px;">
-      <div id="bDot1" style="width:28px;height:28px;border-radius:50%;background:#3b82f6;border:2px solid #3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;z-index:1;">1</div>
-      <div id="bLine1" style="flex:1;height:2px;background:#334155;max-width:60px;"></div>
-      <div id="bDot2" style="width:28px;height:28px;border-radius:50%;background:#1e293b;border:2px solid #334155;color:#64748b;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;z-index:1;">2</div>
+      <div id="bDot1" style="width:28px;height:28px;border-radius:50%;background:#3b82f6;border:2px solid #3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</div>
+      <div id="bLine1" style="width:60px;height:2px;background:#334155;"></div>
+      <div id="bDot2" style="width:28px;height:28px;border-radius:50%;background:#1e293b;border:2px solid #334155;color:#64748b;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</div>
     </div>
 
-    <!-- Step 1: Add subjects -->
+    <!-- Step 1 -->
     <div id="bulkStep1">
-      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:10px;">ADD SUBJECT</div>
-
       <label style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Subject Name</label>
       <input type="text" id="bulkSubjectName" placeholder="e.g. Anatomy" style="width:100%;margin-bottom:10px;">
 
@@ -58,12 +73,11 @@
         <option value="small">Small</option>
       </select>
 
-      <label style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Topics (one per line)</label>
-      <textarea id="bulkTopicsInput" rows="7" placeholder="Upper Limb&#10;Lower Limb&#10;Head & Neck&#10;Thorax&#10;Abdomen&#10;Pelvis" style="width:100%;margin-bottom:10px;"></textarea>
+      <label style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Units (one per line)</label>
+      <textarea id="bulkTopicsInput" rows="7" placeholder="Unit 1&#10;Unit 2&#10;Unit 3" style="width:100%;margin-bottom:10px;"></textarea>
 
       <button onclick="bulkAddSubject()" style="width:100%;background:#8b5cf6;">+ Add Subject</button>
 
-      <!-- Preview list -->
       <div id="bulkPreview" style="display:none;margin-top:14px;">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">SUBJECTS TO IMPORT</div>
         <div id="bulkPreviewList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:160px;overflow-y:auto;"></div>
@@ -74,10 +88,8 @@
       </button>
     </div>
 
-    <!-- Step 2: Review & Confirm -->
+    <!-- Step 2 -->
     <div id="bulkStep2" style="display:none;">
-      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:10px;">REVIEW</div>
-
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div style="background:#0f172a;border-radius:10px;padding:12px;text-align:center;">
           <div id="bulkSummarySubjects" style="font-size:28px;font-weight:800;color:#8b5cf6;">0</div>
@@ -85,25 +97,24 @@
         </div>
         <div style="background:#0f172a;border-radius:10px;padding:12px;text-align:center;">
           <div id="bulkSummaryTopics" style="font-size:28px;font-weight:800;color:#3b82f6;">0</div>
-          <div style="font-size:11px;color:#64748b;">Topics</div>
+          <div style="font-size:11px;color:#64748b;">Total Units</div>
         </div>
       </div>
-
       <div id="bulkReviewList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:200px;overflow-y:auto;margin-bottom:14px;"></div>
-
       <div style="display:flex;gap:8px;">
-        <button onclick="bulkGoStep1()" style="flex:1;background:#334155;margin-top:0;">← Back</button>
-        <button onclick="bulkConfirmImport()" style="flex:1;background:#16a34a;margin-top:0;">🚀 Import All</button>
+        <button onclick="bulkGoStep1()" style="flex:1;background:#334155;margin:0;">← Back</button>
+        <button onclick="bulkConfirmImport()" style="flex:1;background:#16a34a;margin:0;">🚀 Import All</button>
       </div>
     </div>
 
   </div>
 </div>
 
+<!-- Bottom Nav -->
 <div class="bottom-nav">
   <a href="index.html">🏠<br>Plan</a>
-  <a href="editor.html" class="active">📚<br>Syllabus</a>
-  <a href="qbank.html">🧪<br>Qbank</a>
+  <a href="editor.html" class="active" id="navEditor">📚<br>Syllabus</a>
+  <a href="editor.html?tab=qbank" id="navQbank">🧪<br>Qbank</a>
   <a href="analytics.html">📊<br>Stats</a>
   <a href="profile.html">👤<br>Profile</a>
 </div>
@@ -113,6 +124,18 @@
 <script src="revisionEngine.js"></script>
 <script src="editor.js"></script>
 <script src="supabase.js"></script>
+<script>
+  // Read URL param to decide which tab to show on load
+  document.addEventListener("DOMContentLoaded", () => {
+    let tab = new URLSearchParams(window.location.search).get("tab") || "editor";
+    // Highlight active nav
+    if (tab === "qbank") {
+      document.getElementById("navQbank").classList.add("active");
+      document.getElementById("navEditor").classList.remove("active");
+    }
+    switchTab(tab);
+  });
+</script>
 
 </body>
 </html>

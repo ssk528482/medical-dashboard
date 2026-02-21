@@ -14,10 +14,44 @@
 
 <div id="profileContainer"></div>
 
+<!-- Reset Confirmation Modal -->
+<div id="resetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#1e293b;border:2px solid #ef4444;border-radius:16px;max-width:380px;width:100%;padding:24px;">
+
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;">⚠️</div>
+      <div style="font-size:17px;font-weight:800;color:#fca5a5;margin-top:8px;">Reset Everything?</div>
+    </div>
+
+    <div style="background:#450a0a;border-radius:10px;padding:12px;font-size:13px;color:#fca5a5;margin-bottom:18px;line-height:1.6;">
+      This will permanently erase:<br>
+      • All subjects, units &amp; chapters<br>
+      • All qbank stats<br>
+      • All revision history &amp; analytics<br>
+      • Your exam date &amp; daily plans<br><br>
+      <strong>Your name will be kept.</strong> You'll be taken back to setup.
+    </div>
+
+    <label style="display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+      Type <strong style="color:#ef4444;">RESET</strong> to confirm
+    </label>
+    <input type="text" id="resetConfirmInput" placeholder="Type RESET here"
+      style="width:100%;margin-bottom:6px;border-color:#ef4444;"
+      oninput="document.getElementById('resetError').textContent=''">
+    <div id="resetError" style="color:#ef4444;font-size:12px;min-height:16px;margin-bottom:12px;"></div>
+
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeResetModal()" style="flex:1;background:#334155;margin:0;">Cancel</button>
+      <button onclick="confirmReset()" style="flex:1;background:#dc2626;margin:0;font-weight:700;">🗑️ Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
 <div class="bottom-nav">
   <a href="index.html">🏠<br>Plan</a>
   <a href="editor.html">📚<br>Syllabus</a>
-  <a href="qbank.html">🧪<br>Qbank</a>
+  <a href="editor.html?tab=qbank">🧪<br>Qbank</a>
   <a href="analytics.html">📊<br>Stats</a>
   <a href="profile.html" class="active">👤<br>Profile</a>
 </div>
@@ -35,17 +69,18 @@ function renderProfile() {
   let container = document.getElementById("profileContainer");
   if (!container) return;
 
-  let phases = getGlobalPhaseStats();
-  let streak = calculateStreak();
+  let phases        = getGlobalPhaseStats();
+  let streak        = calculateStreak();
   let longestStreak = calculateLongestStreak();
-  let daysLeft = daysUntilExam();
-  let weekly = calculateWeeklyConsistency().toFixed(0);
-  let monthly = calculateMonthlyConsistency().toFixed(0);
-  let burnout = getBurnoutIndex();
+  let daysLeft      = daysUntilExam();
+  let weekly        = calculateWeeklyConsistency().toFixed(0);
+  let monthly       = calculateMonthlyConsistency().toFixed(0);
+  let burnout       = getBurnoutIndex();
   let completionPct = phases.total > 0 ? (phases.phase1.count / phases.total * 100).toFixed(1) : 0;
 
   container.innerHTML = `
 
+    <!-- Identity -->
     <div class="card">
       <div style="display:flex;align-items:center;gap:14px;">
         <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);
@@ -58,23 +93,13 @@ function renderProfile() {
       </div>
     </div>
 
+    <!-- Streaks -->
     <div class="card">
       <div class="section-title">🔥 Streaks & Consistency</div>
       <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;">
-        <div class="stat-box">
-          <div class="stat-big" style="color:#f97316;">${streak}</div>
-          <div class="stat-label">Current Streak</div>
-          <div style="font-size:10px;color:#64748b;margin-top:2px;">days</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-big" style="color:#eab308;">${longestStreak}</div>
-          <div class="stat-label">Best Streak</div>
-          <div style="font-size:10px;color:#64748b;margin-top:2px;">days</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-big" style="color:${burnout>50?"#ef4444":burnout>25?"#f59e0b":"#10b981"}">${burnout}</div>
-          <div class="stat-label">Burnout Index</div>
-        </div>
+        <div class="stat-box"><div class="stat-big" style="color:#f97316;">${streak}</div><div class="stat-label">Streak</div><div style="font-size:10px;color:#64748b;">days</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#eab308;">${longestStreak}</div><div class="stat-label">Best</div><div style="font-size:10px;color:#64748b;">days</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:${burnout>50?"#ef4444":burnout>25?"#f59e0b":"#10b981"}">${burnout}</div><div class="stat-label">Burnout</div></div>
       </div>
       <div style="margin-top:12px;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px;">
@@ -88,36 +113,48 @@ function renderProfile() {
       </div>
     </div>
 
+    <!-- Progress -->
     <div class="card">
       <div class="section-title">📚 Study Progress</div>
       <div class="analytics-grid">
         <div class="stat-box"><div class="stat-big" style="color:#3b82f6;">${completionPct}%</div><div class="stat-label">Completion</div></div>
         <div class="stat-box"><div class="stat-big" style="color:#f59e0b;">${daysLeft}</div><div class="stat-label">Days to Exam</div></div>
-        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6;">${phases.phase2.pct}%</div><div class="stat-label">Phase 2 Done</div></div>
-        <div class="stat-box"><div class="stat-big" style="color:#10b981;">${phases.qbank.pct}%</div><div class="stat-label">Qbank Done</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6;">${phases.phase2.pct}%</div><div class="stat-label">Phase 2</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#10b981;">${phases.qbank.pct}%</div><div class="stat-label">Qbank</div></div>
       </div>
     </div>
 
+    <!-- Settings -->
     <div class="card">
       <div class="section-title">⚙️ Settings</div>
       <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Your Name</label>
       <input type="text" id="settingName" value="${studyData.userName || ""}" style="width:100%;margin-bottom:12px;">
-
       <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Exam Date</label>
       <input type="date" id="settingExamDate" value="${studyData.examDate || "2026-12-01"}" style="width:100%;margin-bottom:12px;">
-
       <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Default Daily Hours</label>
       <input type="number" id="settingHours" value="${studyData.defaultHours || 8}" min="1" max="18" style="width:100%;margin-bottom:16px;">
-
       <button onclick="saveSettings()" style="width:100%;background:#16a34a;">Save Settings ✓</button>
     </div>
 
-    <div class="card" style="border-color:#7f1d1d;">
-      <div class="section-title" style="color:#fca5a5;">⚠️ Account</div>
-      <button onclick="doLogout()" style="width:100%;background:#ef4444;">Logout</button>
+    <!-- Logout -->
+    <div class="card" style="border-color:#334155;">
+      <div class="section-title">⚠️ Account</div>
+      <button onclick="doLogout()" style="width:100%;background:#ef4444;margin-bottom:0;">Logout</button>
+    </div>
+
+    <!-- Reset Everything -->
+    <div class="card" style="border-color:#7f1d1d;border-width:2px;">
+      <div class="section-title" style="color:#fca5a5;">🗑️ Reset Everything</div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:12px;line-height:1.5;">
+        Erase all study data, subjects, qbank, analytics, and history. Keeps your name. Takes you back to setup.
+      </div>
+      <button onclick="openResetModal()" style="width:100%;background:#dc2626;font-weight:700;">
+        Reset Everything
+      </button>
     </div>
   `;
 
+  // Load email
   supabaseClient.auth.getUser().then(({ data: { user } }) => {
     let el = document.getElementById("displayEmail");
     if (el && user) el.textContent = user.email;
@@ -125,8 +162,8 @@ function renderProfile() {
 }
 
 function saveSettings() {
-  studyData.userName = document.getElementById("settingName").value.trim();
-  studyData.examDate = document.getElementById("settingExamDate").value;
+  studyData.userName    = document.getElementById("settingName").value.trim();
+  studyData.examDate    = document.getElementById("settingExamDate").value;
   studyData.defaultHours = parseFloat(document.getElementById("settingHours").value) || 8;
   saveData();
   alert("Settings saved ✓");
@@ -137,6 +174,50 @@ async function doLogout() {
   await supabaseClient.auth.signOut();
   localStorage.removeItem("studyData");
   window.location.href = "login.html";
+}
+
+// ── Reset Modal ───────────────────────────────────────────────
+
+function openResetModal() {
+  document.getElementById("resetModal").style.display = "flex";
+  document.getElementById("resetConfirmInput").value = "";
+  document.getElementById("resetError").textContent = "";
+}
+
+function closeResetModal() {
+  document.getElementById("resetModal").style.display = "none";
+}
+
+async function confirmReset() {
+  let input = document.getElementById("resetConfirmInput").value.trim();
+  if (input !== "RESET") {
+    document.getElementById("resetError").textContent = '✕ Type the word RESET exactly (all caps).';
+    return;
+  }
+
+  let name = studyData.userName || "";
+
+  // Wipe everything — keep only name and start fresh
+  studyData = {
+    version: 4,
+    setupComplete: false,
+    userName: name,
+    subjects: {},
+    dailyHistory: {},
+    dailyPlan: null,
+    uiState: { editorCollapsed: {}, unitCollapsed: {} },
+    startDate: today(),
+    examDate: null,
+    defaultHours: 8,
+    updatedAt: new Date().toISOString()
+  };
+
+  localStorage.setItem("studyData", JSON.stringify(studyData));
+
+  // Sync wipe to cloud
+  if (typeof saveToCloud === "function") await saveToCloud();
+
+  window.location.href = "setup.html";
 }
 
 </script>

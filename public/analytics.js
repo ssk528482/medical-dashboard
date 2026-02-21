@@ -3,70 +3,78 @@ function renderAnalytics() {
   if (!container) return;
   container.innerHTML = "";
 
-  let totalTopics = 0, completedTopics = 0, totalOverdue = 0;
-  let subjectStats = [], weakTopics = [];
+  let totalCh = 0, doneCh = 0, totalOverdue = 0;
+  let subjectStats = [], weakUnits = [];
 
   Object.keys(studyData.subjects).forEach(subjectName => {
     let subject = studyData.subjects[subjectName];
-    let subjectTotal = 0, subjectCorrect = 0, overdueCount = 0;
+    let subjectQ = 0, subjectCorrect = 0, overdueCount = 0;
 
-    subject.topics.forEach(topic => {
-      totalTopics++;
-      if (topic.status === "completed") completedTopics++;
-      if (topic.nextRevision && topic.nextRevision < today()) { overdueCount++; totalOverdue++; }
-      if (topic.qbankStats) {
-        subjectTotal += topic.qbankStats.total;
-        subjectCorrect += topic.qbankStats.correct;
-        if (topic.qbankStats.total > 0 && (topic.qbankStats.correct / topic.qbankStats.total) < 0.6) {
-          weakTopics.push({
-            subject: subjectName, topic: topic.name,
-            accuracy: (topic.qbankStats.correct / topic.qbankStats.total) * 100,
-            revIndex: topic.revisionIndex,
-            ef: (topic.difficultyFactor || 2.5).toFixed(2)
+    subject.units.forEach(unit => {
+      subjectQ       += unit.qbankStats.total;
+      subjectCorrect += unit.qbankStats.correct;
+
+      // Weak unit detection
+      if (unit.qbankStats.total > 0) {
+        let uAcc = (unit.qbankStats.correct / unit.qbankStats.total) * 100;
+        if (uAcc < 60) {
+          weakUnits.push({
+            subject: subjectName,
+            unit: unit.name,
+            accuracy: uAcc,
+            chapters: unit.chapters.length
           });
         }
       }
+
+      unit.chapters.forEach(ch => {
+        totalCh++;
+        if (ch.status === "completed") doneCh++;
+        if (ch.nextRevision && ch.nextRevision < today()) { overdueCount++; totalOverdue++; }
+      });
     });
 
-    let accuracy = subjectTotal > 0 ? (subjectCorrect / subjectTotal) * 100 : 0;
+    let accuracy = subjectQ > 0 ? (subjectCorrect / subjectQ) * 100 : 0;
     let phase = detectPhaseStatus(subjectName);
     subjectStats.push({ name: subjectName, accuracy, overdue: overdueCount, phase, size: subject.size });
   });
 
-  let completionPct = totalTopics > 0 ? (completedTopics / totalTopics * 100) : 0;
-  let retention = calculateRetention();
-  let daysLeft = daysUntilExam();
-  let avgDailyCompletion = calculateAverageDailyCompletion();
-  let remainingTopics = totalTopics - completedTopics;
-  let requiredPace = daysLeft > 0 ? (remainingTopics / daysLeft) : 0;
-  let weeklyConsistency = calculateWeeklyConsistency();
-  let monthlyConsistency = calculateMonthlyConsistency();
-  let burnout = getBurnoutIndex();
-  let phases = getGlobalPhaseStats();
-  let proximity = (examProximityFactor() * 100).toFixed(0);
-  let streak = calculateStreak();
+  let completionPct = totalCh > 0 ? (doneCh / totalCh * 100) : 0;
+  let retention     = calculateRetention();
+  let daysLeft      = daysUntilExam();
+  let avgDaily      = calculateAverageDailyCompletion();
+  let remaining     = totalCh - doneCh;
+  let reqPace       = daysLeft > 0 ? remaining / daysLeft : 0;
+  let weekly        = calculateWeeklyConsistency();
+  let monthly       = calculateMonthlyConsistency();
+  let burnout       = getBurnoutIndex();
+  let phases        = getGlobalPhaseStats();
+  let proximity     = (examProximityFactor() * 100).toFixed(0);
+  let streak        = calculateStreak();
   let longestStreak = calculateLongestStreak();
 
   let riskLevel = "Low", riskColor = "#16a34a";
-  if (avgDailyCompletion < requiredPace * 0.6) { riskLevel = "Critical"; riskColor = "#ef4444"; }
-  else if (avgDailyCompletion < requiredPace) { riskLevel = "High"; riskColor = "#f97316"; }
-  else if (avgDailyCompletion - requiredPace < 0.5) { riskLevel = "Moderate"; riskColor = "#eab308"; }
+  if (avgDaily < reqPace * 0.6)                    { riskLevel = "Critical"; riskColor = "#ef4444"; }
+  else if (reqPace > 0 && avgDaily < reqPace)       { riskLevel = "High";     riskColor = "#f97316"; }
+  else if (reqPace > 0 && avgDaily - reqPace < 0.5) { riskLevel = "Moderate"; riskColor = "#eab308"; }
 
   subjectStats.sort((a, b) => a.accuracy - b.accuracy);
-  weakTopics.sort((a, b) => a.accuracy - b.accuracy);
+  weakUnits.sort((a, b) => a.accuracy - b.accuracy);
 
-  let prediction = getPrediction();
-  let accuracyTrendData = buildGlobalAccuracyTrend(30);
+  let prediction         = getPrediction();
+  let accuracyTrendData  = buildGlobalAccuracyTrend(30);
   let consistencyBarData = buildConsistencyBarData(30);
-  let retentionData = buildRetentionProjection(14);
+  let retentionData      = buildRetentionProjection(14);
 
   container.innerHTML = `
 
+    <!-- Intelligence Alerts -->
     <div class="card">
       <div class="section-title">🧠 Intelligence Alerts</div>
       <div id="analyticsAlerts"></div>
     </div>
 
+    <!-- Command Summary -->
     <div class="card">
       <div class="section-title">🎯 Command Summary</div>
       <div class="analytics-grid">
@@ -83,20 +91,21 @@ function renderAnalytics() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;">
         <div style="background:#0f172a;padding:10px;border-radius:8px;text-align:center;">
-          <div style="font-size:14px;font-weight:700;color:#f59e0b;">${requiredPace.toFixed(2)}</div>
+          <div style="font-size:14px;font-weight:700;color:#f59e0b;">${reqPace.toFixed(2)}</div>
           <div style="font-size:10px;color:#64748b;">Req. Pace</div>
         </div>
         <div style="background:#0f172a;padding:10px;border-radius:8px;text-align:center;">
-          <div style="font-size:14px;font-weight:700;color:${avgDailyCompletion>=requiredPace?"#10b981":"#ef4444"};">${avgDailyCompletion.toFixed(2)}</div>
+          <div style="font-size:14px;font-weight:700;color:${avgDaily>=reqPace?"#10b981":"#ef4444"};">${avgDaily.toFixed(2)}</div>
           <div style="font-size:10px;color:#64748b;">Your Pace</div>
         </div>
         <div style="background:#0f172a;padding:10px;border-radius:8px;text-align:center;">
           <div style="font-size:14px;font-weight:700;color:#f97316;">🔥 ${streak}</div>
-          <div style="font-size:10px;color:#64748b;">Day Streak</div>
+          <div style="font-size:10px;color:#64748b;">Streak</div>
         </div>
       </div>
     </div>
 
+    <!-- Prediction -->
     <div class="card">
       <div class="section-title">🔮 Exam Prediction</div>
       <div style="text-align:center;padding:8px 0 14px;">
@@ -117,36 +126,38 @@ function renderAnalytics() {
       <div style="font-size:12px;color:#64748b;margin-top:10px;padding:10px;background:#0f172a;border-radius:8px;">
         📅 Phase 1 est. completion: <strong style="color:#e2e8f0;">${prediction.phase1CompletionDate}</strong>
       </div>
-      <div style="font-size:11px;color:#475569;margin-top:6px;line-height:1.5;">
-        Model: Accuracy 40% · Revision compliance 30% · Completion 20% · Consistency 10%
-      </div>
+      <div style="font-size:11px;color:#475569;margin-top:6px;">Model: Accuracy 40% · Rev compliance 30% · Completion 20% · Consistency 10%</div>
     </div>
 
+    <!-- Phase Tracker -->
     <div class="card">
       <div class="section-title">📈 Phase Tracker</div>
-      ${renderPhaseRow("Phase 1 — Study Complete", phases.phase1, "#3b82f6")}
-      ${renderPhaseRow("Phase 2 — Revision 2+ (all topics)", phases.phase2, "#8b5cf6")}
-      ${renderPhaseRow("Phase 3 — Revision 3+ (all topics)", phases.phase3, "#f59e0b")}
-      ${renderPhaseRow("Qbank — Done (all topics)", phases.qbank, "#10b981")}
+      ${_phaseRow("Phase 1 — Chapters Studied", phases.phase1, "#3b82f6")}
+      ${_phaseRow("Phase 2 — Revision 2+ (chapters)", phases.phase2, "#8b5cf6")}
+      ${_phaseRow("Phase 3 — Revision 3+ (chapters)", phases.phase3, "#f59e0b")}
+      ${_phaseRowUnits("Qbank — Units Done", phases.qbank, "#10b981")}
     </div>
 
+    <!-- Accuracy Trend Chart -->
     <div class="card">
       <div class="section-title">📊 Qbank Accuracy Trend (30 days)</div>
       ${accuracyTrendData.length >= 2
         ? buildLineChart(accuracyTrendData, { color: "#3b82f6", unit: "%" })
-        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Complete some Qbank sessions to see your trend.</div>'
+        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Log some Qbank sessions to see your trend.</div>'
       }
     </div>
 
+    <!-- Retention Projection -->
     <div class="card">
       <div class="section-title">🧠 Retention Projection (14 days)</div>
       ${retentionData.length >= 2
         ? buildLineChart(retentionData, { color: "#10b981", unit: "%" })
-        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Complete topics to see your retention curve.</div>'
+        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Complete chapters to see your retention curve.</div>'
       }
-      <div style="font-size:11px;color:#475569;margin-top:6px;">Based on Ebbinghaus curve + your topic difficulty factors.</div>
+      <div style="font-size:11px;color:#475569;margin-top:6px;">Ebbinghaus curve based on your topic difficulty factors.</div>
     </div>
 
+    <!-- Daily Consistency Bars -->
     <div class="card">
       <div class="section-title">📅 Daily Consistency (30 days)</div>
       ${buildBarChart(consistencyBarData, { height: 70 })}
@@ -158,12 +169,13 @@ function renderAnalytics() {
       </div>
     </div>
 
+    <!-- Consistency & Burnout -->
     <div class="card">
       <div class="section-title">🔥 Consistency & Burnout</div>
       <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;">
-        <div class="stat-box"><div class="stat-big" style="color:#3b82f6">${weeklyConsistency.toFixed(0)}%</div><div class="stat-label">7-Day</div></div>
-        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6">${monthlyConsistency.toFixed(0)}%</div><div class="stat-label">30-Day</div></div>
-        <div class="stat-box"><div class="stat-big" style="color:${burnout>50?"#ef4444":burnout>25?"#f59e0b":"#10b981"}">${burnout}</div><div class="stat-label">Burnout Index</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#3b82f6">${weekly.toFixed(0)}%</div><div class="stat-label">7-Day</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6">${monthly.toFixed(0)}%</div><div class="stat-label">30-Day</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:${burnout>50?"#ef4444":burnout>25?"#f59e0b":"#10b981"}">${burnout}</div><div class="stat-label">Burnout</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
         <div style="background:#0f172a;border-radius:10px;padding:10px;text-align:center;">
@@ -177,52 +189,56 @@ function renderAnalytics() {
       </div>
     </div>
 
+    <!-- Subject Ranking -->
     <div class="card">
       <div class="section-title">📉 Subject Ranking (Weakest First)</div>
       ${subjectStats.map(s => `
         <div style="margin-bottom:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <strong style="font-size:14px;">${s.name}</strong>
+            <strong>${s.name}</strong>
             <div style="display:flex;gap:6px;align-items:center;">
               ${s.overdue > 0 ? `<span class="badge-overdue">⚠ ${s.overdue}</span>` : ""}
               <span class="accuracy-badge ${s.accuracy>=75?"accuracy-high":s.accuracy>=50?"accuracy-mid":"accuracy-low"}">${s.accuracy.toFixed(1)}%</span>
             </div>
           </div>
-          <div class="stat-bar"><div class="stat-fill ${s.accuracy>=75?"green":s.accuracy>=50?"yellow":"red"}" style="width:${s.accuracy}%"></div></div>
-          <div style="font-size:11px;color:#64748b;margin-top:3px;">${s.phase.phase1?"✓P1 ":""}${s.phase.phase2?"✓P2 ":""}${s.phase.phase3?"✓P3 ":" "}· ${s.size}</div>
+          <div class="stat-bar"><div class="stat-fill ${s.accuracy>=75?"green":s.accuracy>=50?"yellow":"red"}" style="width:${Math.max(s.accuracy,0)}%"></div></div>
+          <div style="font-size:11px;color:#64748b;margin-top:3px;">
+            ${s.phase.phase1?"✓P1 ":""}${s.phase.phase2?"✓P2 ":""}${s.phase.phase3?"✓P3":""}· ${s.size}
+          </div>
         </div>
       `).join("")}
     </div>
 
+    <!-- Weak Units -->
     <div class="card">
-      <div class="section-title">🎯 Top Weak Topics (< 60%)</div>
-      ${weakTopics.length === 0
-        ? '<div style="color:#9ca3af;font-size:13px;">No weak topics detected ✓</div>'
-        : weakTopics.slice(0, 8).map(t => `
+      <div class="section-title">🎯 Weak Units (< 60% accuracy)</div>
+      ${weakUnits.length === 0
+        ? '<div style="color:#9ca3af;font-size:13px;">No weak units ✓</div>'
+        : weakUnits.slice(0, 8).map(u => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0f172a;">
             <div>
-              <div style="font-size:13px;font-weight:600;">${t.topic}</div>
-              <div style="font-size:11px;color:#9ca3af;">${t.subject} · Rev ${t.revIndex} · EF ${t.ef}</div>
+              <div style="font-size:13px;font-weight:600;">${u.unit}</div>
+              <div style="font-size:11px;color:#9ca3af;">${u.subject} · ${u.chapters} chapters</div>
             </div>
-            <span class="accuracy-badge accuracy-low">${t.accuracy.toFixed(1)}%</span>
-          </div>
-        `).join("")
+            <span class="accuracy-badge accuracy-low">${u.accuracy.toFixed(1)}%</span>
+          </div>`).join("")
       }
     </div>
 
+    <!-- Overdue -->
     <div class="card">
       <div class="section-title">⏰ Overdue Revisions</div>
       ${totalOverdue === 0
         ? '<div style="color:#10b981;font-size:13px;">No overdue revisions ✓</div>'
-        : `<div style="font-size:28px;font-weight:700;color:#ef4444;">${totalOverdue} topics overdue</div>
-           <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Memory decay is accelerating. Do revisions today.</div>`
+        : `<div style="font-size:28px;font-weight:700;color:#ef4444;">${totalOverdue} chapters overdue</div>
+           <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Memory decay is accelerating. Revise today.</div>`
       }
     </div>
 
+    <!-- Settings -->
     <div class="card">
-      <div class="section-title">⚙️ Settings</div>
-      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;">Exam Date</label><br>
-      <input type="date" id="examDateInput" value="${studyData.examDate || '2026-12-01'}" style="width:100%;margin:6px 0;">
+      <div class="section-title">⚙️ Exam Date</div>
+      <input type="date" id="examDateInput" value="${studyData.examDate || "2026-12-01"}" style="width:100%;margin:6px 0;">
       <button onclick="updateExamDate()" style="width:100%;">Save ✓</button>
     </div>
   `;
@@ -230,19 +246,30 @@ function renderAnalytics() {
   renderIntelligenceAlerts("analyticsAlerts");
 }
 
-function renderPhaseRow(label, phaseData, color) {
+function _phaseRow(label, phaseData, color) {
   return `
     <div style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
         <span>${label}</span>
-        <span style="color:${color};font-weight:600;">${phaseData.pct}% (${phaseData.count}/${phaseData.total})</span>
+        <span style="color:${color};font-weight:600;">${phaseData.pct}% (${phaseData.count}/${phaseData.count + (parseInt(phaseData.pct) < 100 ? "…" : phaseData.count)})</span>
       </div>
-      <div class="stat-bar" style="height:10px;">
-        <div class="stat-fill" style="width:${phaseData.pct}%;background:${color};"></div>
-      </div>
-    </div>
-  `;
+      <div class="stat-bar" style="height:10px;"><div class="stat-fill" style="width:${phaseData.pct}%;background:${color};"></div></div>
+    </div>`;
 }
+
+// Separate row for qbank (units denominator shown)
+function _phaseRowUnits(label, phaseData, color) {
+  return `
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+        <span>${label}</span>
+        <span style="color:${color};font-weight:600;">${phaseData.pct}% (${phaseData.count} units)</span>
+      </div>
+      <div class="stat-bar" style="height:10px;"><div class="stat-fill" style="width:${phaseData.pct}%;background:${color};"></div></div>
+    </div>`;
+}
+
+function renderPhaseRow(label, phaseData, color) { return _phaseRow(label, phaseData, color); }
 
 function updateExamDate() {
   let val = document.getElementById("examDateInput").value;
