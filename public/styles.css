@@ -452,8 +452,11 @@ label {
   border-radius: 5px;
   transition: color 0.15s, background 0.15s;
   min-height: auto;
+  touch-action: manipulation;   /* ← NEW: eliminates 300ms mobile tap delay */
+  -webkit-tap-highlight-color: transparent; /* ← NEW: removes grey flash on tap */
 }
 .collapse-btn:hover { color: var(--text); background: var(--border); box-shadow: none; }
+
 
 /* ─── Add Row ─────────────────────────────────────────────── */
 .add-topic-row {
