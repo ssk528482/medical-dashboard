@@ -150,11 +150,22 @@ function renderIntelligenceAlerts(containerId) {
 }
 
 // ─── Streak ───────────────────────────────────────────────────
+// A day counts if it has eveningSubmitted OR any of study/qbank/revision logged
+function _dayIsActive(key) {
+  let e = studyData.dailyHistory[key];
+  if (!e) return false;
+  return !!(e.eveningSubmitted || e.study || e.qbank || e.revision);
+}
+
 function calculateStreak() {
-  let streak = 0, d = new Date();
+  let streak = 0;
+  let d = new Date();
+  // If today has no data yet, start counting from yesterday
+  let todayKey = d.toISOString().split("T")[0];
+  if (!_dayIsActive(todayKey)) d.setDate(d.getDate() - 1);
   while (true) {
     let key = d.toISOString().split("T")[0];
-    if (studyData.dailyHistory[key]?.study) { streak++; d.setDate(d.getDate() - 1); }
+    if (_dayIsActive(key)) { streak++; d.setDate(d.getDate() - 1); }
     else break;
   }
   return streak;
@@ -163,7 +174,10 @@ function calculateStreak() {
 function calculateLongestStreak() {
   let dates = Object.keys(studyData.dailyHistory).sort();
   let max = 0, cur = 0;
-  dates.forEach(d => { if (studyData.dailyHistory[d].study) { cur++; max = Math.max(max, cur); } else cur = 0; });
+  dates.forEach(d => {
+    if (_dayIsActive(d)) { cur++; max = Math.max(max, cur); }
+    else cur = 0;
+  });
   return max;
 }
 
@@ -172,12 +186,14 @@ function getPrediction() {
   let phases    = getGlobalPhaseStats();
   let daysLeft  = daysUntilExam();
   let avgDaily  = calculateAverageDailyCompletion();
-  let remaining = phases.total - phases.phase1.count;
+  let remaining = phases.total - phases.completed.count;
 
-  let phase1Date = remaining > 0 && avgDaily > 0
+  // Study completion date estimate (using 7-day rolling pace)
+  let studyCompletionDate = remaining > 0 && avgDaily > 0
     ? addDays(today(), Math.ceil(remaining / avgDaily))
     : "Already complete";
 
+  // ── Factor 1: Qbank Accuracy (40% weight) ──
   let totalQ = 0, totalCorrect = 0;
   Object.values(studyData.subjects).forEach(sub => {
     sub.units.forEach(u => {
@@ -187,12 +203,40 @@ function getPrediction() {
   });
   let overallAcc = totalQ > 0 ? (totalCorrect / totalQ) * 100 : 0;
 
-  let completionPct    = phases.total > 0 ? (phases.phase1.count / phases.total) * 100 : 0;
-  let revCompliance    = parseFloat(phases.phase2.pct);
+  // ── Factor 2: Revision coverage — penalise by levels missing (30% weight) ──
+  // r1 = 15%, r2 = 10%, r3 = 5%
+  let r1Pct  = parseFloat(phases.r1.pct);
+  let r2Pct  = parseFloat(phases.r2.pct);
+  let r3Pct  = parseFloat(phases.r3.pct);
+  let revScore = r1Pct * 0.50 + r2Pct * 0.33 + r3Pct * 0.17; // 0–100
+
+  // ── Factor 3: Completion progress (15% weight) ──
+  let completionPct = phases.total > 0 ? (phases.completed.count / phases.total) * 100 : 0;
+
+  // ── Factor 4: Consistency (10% weight) ──
   let weeklyConsistency = calculateWeeklyConsistency();
 
-  let predictedScore = overallAcc * 0.40 + revCompliance * 0.30 + completionPct * 0.20 + weeklyConsistency * 0.10;
+  // ── Factor 5: Time penalty — if exam is soon and you're far from done (5% weight) ──
+  // Each day left gives diminishing confidence. If daysLeft < 30 and revision < 50%, penalise hard.
+  let timePressurePenalty = 0;
+  if (daysLeft > 0 && daysLeft <= 60) {
+    let revGap    = Math.max(0, 50 - r1Pct);     // gap from 50% r1 target
+    let urgency   = Math.max(0, 1 - daysLeft / 60); // 0=60 days out, 1=exam day
+    timePressurePenalty = revGap * urgency * 0.5;
+  }
 
+  // ── Weighted composite ──
+  let rawScore = (
+    overallAcc       * 0.40 +
+    revScore         * 0.30 +
+    completionPct    * 0.15 +
+    weeklyConsistency * 0.10 +
+    0                * 0.05  // placeholder — time penalty subtracted below
+  ) - timePressurePenalty;
+
+  let predictedScore = Math.max(0, Math.min(100, rawScore));
+
+  // ── Average per-chapter retention ──
   let avgRetention = 0, topicCount = 0;
   Object.values(studyData.subjects).forEach(sub => {
     sub.units.forEach(u => {
@@ -203,14 +247,38 @@ function getPrediction() {
   });
   avgRetention = topicCount > 0 ? avgRetention / topicCount : 0;
 
-  let riskColor = predictedScore >= 70 ? "#16a34a" : predictedScore >= 55 ? "#eab308" : "#ef4444";
-  let riskLevel = predictedScore >= 70 ? "Low"     : predictedScore >= 55 ? "Moderate" : "High";
+  // ── Risk level — also considers if study won't finish before exam ──
+  let willFinishBeforeExam = studyCompletionDate === "Already complete" ||
+    (daysLeft > 0 && studyCompletionDate <= addDays(today(), daysLeft));
+  let riskLevel, riskColor;
+  if (!willFinishBeforeExam || predictedScore < 45) {
+    riskLevel = "Critical"; riskColor = "#ef4444";
+  } else if (predictedScore < 55) {
+    riskLevel = "High";     riskColor = "#f97316";
+  } else if (predictedScore < 70) {
+    riskLevel = "Moderate"; riskColor = "#eab308";
+  } else {
+    riskLevel = "Low";      riskColor = "#16a34a";
+  }
+
+  // ── Score breakdown for display ──
+  let breakdown = {
+    qbankAcc:    (overallAcc * 0.40).toFixed(1),
+    revScore:    (revScore   * 0.30).toFixed(1),
+    completion:  (completionPct * 0.15).toFixed(1),
+    consistency: (weeklyConsistency * 0.10).toFixed(1),
+    timePenalty: timePressurePenalty.toFixed(1),
+  };
 
   return {
     predictedScore: predictedScore.toFixed(1),
-    phase1CompletionDate: phase1Date,
+    studyCompletionDate,
     overallAccuracy: overallAcc.toFixed(1),
     avgRetention: avgRetention.toFixed(1),
-    daysLeft, riskLevel, riskColor
+    r1Pct: r1Pct.toFixed(1), r2Pct: r2Pct.toFixed(1), r3Pct: r3Pct.toFixed(1),
+    willFinishBeforeExam,
+    daysLeft, riskLevel, riskColor, breakdown,
+    // legacy alias
+    phase1CompletionDate: studyCompletionDate,
   };
 }

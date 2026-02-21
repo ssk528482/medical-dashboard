@@ -178,20 +178,48 @@ function buildConsistencyBarData(days) {
 }
 
 function buildRetentionProjection(days) {
-  let avgEF = 0, count = 0;
+  // For each completed chapter, compute its real Ebbinghaus retention at each future day
+  // based on actual lastReviewedOn and difficultyFactor, then average across all chapters
+
+  let chapters = [];
   Object.values(studyData.subjects).forEach(sub => {
     sub.units.forEach(u => {
       u.chapters.forEach(ch => {
-        if (ch.status === "completed") { avgEF += ch.difficultyFactor || 2.5; count++; }
+        if (ch.status === "completed" && ch.lastReviewedOn) {
+          chapters.push({
+            lastReviewedOn: ch.lastReviewedOn,
+            ef: ch.difficultyFactor || 2.5,
+            ri: ch.revisionIndex || 0,
+          });
+        }
       });
     });
   });
-  avgEF = count > 0 ? avgEF / count : 2.5;
+
   let data = [];
   for (let i = 0; i <= days; i++) {
-    let d = new Date(); d.setDate(d.getDate() + i);
+    let futureDate = addDays(today(), i);
+    let d = new Date(futureDate.replace(/-/g, '/'));
     let label = (d.getMonth()+1) + "/" + d.getDate();
-    data.push({ label, value: Math.max(0, Math.exp(-i / (avgEF * 10)) * 100) });
+
+    if (chapters.length === 0) {
+      data.push({ label, value: 0 });
+      continue;
+    }
+
+    let totalRetention = 0;
+    chapters.forEach(ch => {
+      // Days since last review at this future point
+      let daysSince = daysBetween(ch.lastReviewedOn, futureDate);
+      if (daysSince < 0) daysSince = 0;
+      // SM-2-like stability: each revision extends retention interval
+      // Base stability = ef * 10 * (1 + ri * 0.5)
+      let stability = ch.ef * 10 * (1 + ch.ri * 0.5);
+      let retention = Math.max(0, Math.min(100, Math.exp(-daysSince / stability) * 100));
+      totalRetention += retention;
+    });
+
+    data.push({ label, value: totalRetention / chapters.length });
   }
   return data;
 }

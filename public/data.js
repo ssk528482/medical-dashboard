@@ -251,11 +251,25 @@ function calculateConsistencyForDays(days) {
 function calculateWeeklyConsistency()  { return calculateConsistencyForDays(7);  }
 function calculateMonthlyConsistency() { return calculateConsistencyForDays(30); }
 
+// Weighted 7-day rolling average (recent days count more)
+// Weight: day-1=7, day-2=6, ..., day-7=1 → total weight = 28
 function calculateAverageDailyCompletion() {
-  let days = Object.keys(studyData.dailyHistory || {}).length;
-  if (!days) return 0;
-  let studyDays = Object.values(studyData.dailyHistory).filter(e => e.study).length;
-  return studyDays / days;
+  let weighted = 0, totalWeight = 0;
+  for (let i = 1; i <= 7; i++) {
+    let d = addDays(today(), -i);
+    let hist = studyData.dailyHistory?.[d];
+    let topics = 0;
+    if (hist) {
+      // Count topics studied this day from studyEntries
+      (hist.studyEntries || []).forEach(e => { topics += (e.topics || []).length || 1; });
+      // Fallback: if old-style study=true but no entries, count as 1
+      if (!hist.studyEntries && hist.study) topics = 1;
+    }
+    let w = 8 - i; // weight: 7 for yesterday, 1 for 7 days ago
+    weighted    += topics * w;
+    totalWeight += w;
+  }
+  return totalWeight > 0 ? weighted / totalWeight : 0;
 }
 
 function getBurnoutIndex() {

@@ -113,7 +113,13 @@ function renderAnalytics() {
         <div style="font-size:52px;font-weight:900;color:${prediction.riskColor};line-height:1;">${prediction.predictedScore}%</div>
         <div style="font-size:13px;color:${prediction.riskColor};margin-top:4px;font-weight:600;">Risk: ${prediction.riskLevel}</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+      ${!prediction.willFinishBeforeExam ? `
+        <div style="background:#450a0a;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#fca5a5;">
+          ⚠ At current pace, study won't complete before exam day. Accelerate.
+        </div>` : ""}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
         <div style="background:#0f172a;border-radius:10px;padding:10px;text-align:center;">
           <div style="font-size:18px;font-weight:700;color:#3b82f6;">${prediction.overallAccuracy}%</div>
           <div style="font-size:10px;color:#64748b;">Qbank Accuracy</div>
@@ -122,11 +128,34 @@ function renderAnalytics() {
           <div style="font-size:18px;font-weight:700;color:#10b981;">${prediction.avgRetention}%</div>
           <div style="font-size:10px;color:#64748b;">Avg Retention</div>
         </div>
+        <div style="background:#0f172a;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:18px;font-weight:700;color:#8b5cf6;">${prediction.r1Pct}%</div>
+          <div style="font-size:10px;color:#64748b;">R1 Coverage</div>
+        </div>
+        <div style="background:#0f172a;border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:18px;font-weight:700;color:#f59e0b;">${prediction.r2Pct}%</div>
+          <div style="font-size:10px;color:#64748b;">R2 Coverage</div>
+        </div>
       </div>
-      <div style="font-size:12px;color:#64748b;margin-top:10px;padding:10px;background:#0f172a;border-radius:8px;">
-        📅 Study est. completion: <strong style="color:#e2e8f0;">${prediction.phase1CompletionDate}</strong>
+
+      <!-- Score breakdown -->
+      <div style="background:#0f172a;border-radius:8px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Score Breakdown</div>
+        ${[
+          ["Qbank accuracy ×40%",    prediction.breakdown.qbankAcc,    "#3b82f6"],
+          ["Revision coverage ×30%", prediction.breakdown.revScore,    "#8b5cf6"],
+          ["Completion ×15%",        prediction.breakdown.completion,  "#10b981"],
+          ["Consistency ×10%",       prediction.breakdown.consistency, "#eab308"],
+          ["Time pressure −",        `-${prediction.breakdown.timePenalty}`, "#ef4444"],
+        ].map(([label, val, color]) => `
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;padding:2px 0;">
+            <span>${label}</span><span style="color:${color};font-weight:700;">${val}</span>
+          </div>`).join("")}
       </div>
-      <div style="font-size:11px;color:#475569;margin-top:6px;">Model: Accuracy 40% · Rev compliance 30% · Completion 20% · Consistency 10%</div>
+
+      <div style="font-size:12px;color:#64748b;padding:10px;background:#0f172a;border-radius:8px;">
+        📅 Study est. completion: <strong style="color:#e2e8f0;">${prediction.studyCompletionDate}</strong>
+      </div>
     </div>
 
     <!-- Phase Tracker -->
@@ -151,23 +180,100 @@ function renderAnalytics() {
       ${buildSubjectQbankSparklines()}
     </div>
 
-    <!-- Accuracy Trend Chart -->
+    <!-- Per-Subject Qbank Accuracy Trend -->
     <div class="card">
-      <div class="section-title">📊 Qbank Accuracy Trend (30 days)</div>
+      <div class="section-title">📊 Qbank Accuracy — Per Subject</div>
+      ${(() => {
+        let subjectNames = Object.keys(studyData.subjects);
+        if (!subjectNames.length) return '<div style="color:#64748b;font-size:13px;">No subjects yet.</div>';
+
+        // Build per-subject session arrays
+        let allSubjectData = {};
+        subjectNames.forEach(name => {
+          let sessions = [];
+          Object.keys(studyData.dailyHistory || {}).sort().forEach(day => {
+            let hist = studyData.dailyHistory[day];
+            (hist.qbankEntries || []).forEach(e => {
+              if (e.subject === name && e.total > 0)
+                sessions.push({ label: day.slice(5), value: (e.correct / e.total) * 100 });
+            });
+          });
+          allSubjectData[name] = sessions;
+        });
+
+        // Render tabs + charts via inline JS rendered at display time
+        let tabButtons = subjectNames.map((name, i) => {
+          let sessions = allSubjectData[name];
+          let lastAcc  = sessions.length ? sessions[sessions.length-1].value : null;
+          let trend    = sessions.length >= 2
+            ? (sessions[sessions.length-1].value >= sessions[0].value ? "↑" : "↓") : "";
+          let trendC   = trend === "↑" ? "#10b981" : trend === "↓" ? "#ef4444" : "#64748b";
+          return `<div onclick="showSubjectChart('${name.replace(/'/g,"\\'")}',this)"
+            style="cursor:pointer;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;
+              background:${i===0?"#1e3a5f":"#0f172a"};color:${i===0?"#93c5fd":"#64748b"};
+              display:flex;flex-direction:column;align-items:center;gap:2px;min-width:70px;text-align:center;">
+            <span>${name}</span>
+            <span style="font-size:11px;color:${trendC};">${lastAcc !== null ? lastAcc.toFixed(1)+"%" : "—"} ${trend}</span>
+          </div>`;
+        }).join("");
+
+        // Embed session data as JSON for JS to read
+        let dataJson = JSON.stringify(allSubjectData).replace(/</g,"\\x3c");
+        let firstSubject = subjectNames[0];
+        let firstData    = allSubjectData[firstSubject];
+
+        return `
+          <div style="overflow-x:auto;display:flex;gap:6px;padding-bottom:8px;margin-bottom:10px;" id="subjectAccTabs">
+            ${tabButtons}
+          </div>
+          <div id="subjectAccChart">
+            ${firstData.length >= 2
+              ? buildLineChart(firstData, { color: "#3b82f6", unit: "%" })
+              : `<div style="color:#64748b;font-size:13px;text-align:center;padding:24px;">
+                  ${firstData.length === 0 ? "No Qbank sessions logged for " + firstSubject + " yet." : "Need at least 2 sessions to show trend."}
+                </div>`}
+          </div>
+          <script>
+            var _sAccData = ${dataJson};
+            function showSubjectChart(name, el) {
+              document.querySelectorAll('#subjectAccTabs > div').forEach(d => {
+                d.style.background='#0f172a'; d.style.color='#64748b';
+              });
+              el.style.background='#1e3a5f'; el.style.color='#93c5fd';
+              var container = document.getElementById('subjectAccChart');
+              var sessions = _sAccData[name] || [];
+              if (sessions.length < 2) {
+                container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:24px;">'
+                  + (sessions.length === 0 ? 'No Qbank sessions logged for '+name+' yet.' : 'Need at least 2 sessions to show trend.')
+                  + '</div>';
+                return;
+              }
+              container.innerHTML = buildLineChart(sessions, { color: '#3b82f6', unit: '%' });
+            }
+          <\/script>
+        `;
+      })()}
+    </div>
+
+    <!-- Global Accuracy Trend (all subjects combined) -->
+    <div class="card">
+      <div class="section-title">📊 Global Qbank Trend (30 days)</div>
       ${accuracyTrendData.length >= 2
-        ? buildLineChart(accuracyTrendData, { color: "#3b82f6", unit: "%" })
-        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Log some Qbank sessions to see your trend.</div>'
+        ? buildLineChart(accuracyTrendData, { color: "#8b5cf6", unit: "%" })
+        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Log Qbank sessions to see your global trend.</div>'
       }
     </div>
 
     <!-- Retention Projection -->
     <div class="card">
-      <div class="section-title">🧠 Retention Projection (14 days)</div>
+      <div class="section-title">🧠 Retention Forecast (14 days)</div>
       ${retentionData.length >= 2
         ? buildLineChart(retentionData, { color: "#10b981", unit: "%" })
-        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Complete chapters to see your retention curve.</div>'
+        : '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Complete and review chapters to see your retention forecast.</div>'
       }
-      <div style="font-size:11px;color:#475569;margin-top:6px;">Ebbinghaus curve based on your topic difficulty factors.</div>
+      <div style="font-size:11px;color:#475569;margin-top:6px;">
+        Average across ${(() => { let n=0; Object.values(studyData.subjects).forEach(s=>s.units.forEach(u=>u.chapters.forEach(ch=>{if(ch.status==="completed"&&ch.lastReviewedOn)n++;}))); return n; })()} reviewed chapters · SM-2 decay model · accounts for revision depth
+      </div>
     </div>
 
     <!-- Daily Consistency Bars -->
