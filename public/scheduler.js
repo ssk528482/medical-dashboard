@@ -133,7 +133,10 @@ function generatePlan() {
       study: { subject: null },
       qbank: { subject: topSubject },
       revisionCount: revisionDue.length,
+      overdueCount,
       hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
+      studyTime: "0", qbankTime, revisionTime,
+      burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
       completed: false,
       examCountdownMode: true
     };
@@ -155,7 +158,11 @@ function generatePlan() {
     study: { subject: topSubject, unitIndex: ptr.unit, chapterIndex: ptr.chapter },
     qbank: { subject: topSubject },
     revisionCount: revisionDue.length,
+    overdueCount,
     hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
+    studyTime, qbankTime, revisionTime,
+    nextText,
+    burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
     completed: false
   };
 

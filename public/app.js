@@ -551,23 +551,54 @@ function renderSavedPlan() {
   let plan = studyData.dailyPlan;
   let planEl = document.getElementById("planOutput");
   if (!plan || !planEl) return;
+  if (plan.date !== today()) return; // stale plan from a previous day
 
+  // Restore hours input field
+  let hoursInput = document.getElementById("dailyHours");
+  if (hoursInput && plan.hours) hoursInput.value = plan.hours;
+
+  let daysLeft = daysUntilExam();
+  let burnoutWarn = (plan.burnoutAdj && plan.burnoutAdj < 1.0)
+    ? `<div style="color:#ef4444;font-size:12px;margin-top:6px;">⚠ Burnout detected — load reduced ${((1 - plan.burnoutAdj) * 100).toFixed(0)}%</div>` : "";
+  let examAlert = daysLeft <= 30
+    ? `<div style="color:#f59e0b;font-size:12px;margin-top:4px;">🔔 ${daysLeft} days to exam — revision priority elevated</div>` : "";
+
+  // Exam countdown mode
+  if (plan.examCountdownMode) {
+    planEl.innerHTML = `
+      <div style="background:#450a0a;border:1px solid #ef4444;border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:800;color:#fca5a5;margin-bottom:4px;">🚨 EXAM COUNTDOWN MODE — ${daysLeft} days left</div>
+        <div style="font-size:12px;color:#fca5a5;opacity:0.85;">New study paused. Focus 100% on revision and Qbank mastery.</div>
+      </div>
+      <div style="padding:4px 0;font-size:14px;line-height:1.9;">
+        <strong>🔁 Revision:</strong> ${plan.revisionTime} hrs — ${plan.revisionCount} chapters due${(plan.overdueCount||0) > 0 ? ` (${plan.overdueCount} overdue)` : ""}<br>
+        <strong>🧪 Qbank:</strong> ${plan.qbankTime} hrs — weak units first
+        ${burnoutWarn}${examAlert}
+      </div>`;
+    document.getElementById("generateButton").disabled = true;
+    return;
+  }
+
+  // Normal mode — use saved values (studyTime/qbankTime/revisionTime/nextText)
   let subjectObj = studyData.subjects[plan.study.subject];
   if (!subjectObj) { planEl.innerHTML = "<strong>Plan subject was deleted.</strong>"; return; }
 
-  let ptr = subjectObj.pointer || { unit: 0, chapter: 0 };
-  let nextUnit    = subjectObj.units[ptr.unit];
-  let nextChapter = nextUnit?.chapters[ptr.chapter];
-  let nextText    = nextChapter ? `${nextUnit.name} → ${nextChapter.name}` : "All done";
+  // Use saved nextText if available, otherwise recalculate from current pointer
+  let nextText = plan.nextText;
+  if (!nextText) {
+    let ptr = subjectObj.pointer || { unit: 0, chapter: 0 };
+    let nextUnit    = subjectObj.units[ptr.unit];
+    let nextChapter = nextUnit?.chapters[ptr.chapter];
+    nextText = nextChapter ? `${nextUnit.name} → ${nextChapter.name}` : "All done";
+  }
 
   planEl.innerHTML = `
     <div style="padding:8px 0;font-size:14px;line-height:1.8;">
-      <strong>📖 Study:</strong> ${plan.study.subject} — <em>${nextText}</em><br>
-      <strong>🧪 Qbank:</strong> ${plan.qbank.subject}<br>
-      <strong>🔁 Revision:</strong> ${plan.revisionCount} chapters
-      <div style="font-size:12px;color:#9ca3af;margin-top:4px;">⏱ ${daysUntilExam()} days to exam</div>
-    </div>
-  `;
+      <strong>📖 Study:</strong> ${plan.studyTime} hrs — ${plan.study.subject} — <em>${nextText}</em><br>
+      <strong>🧪 Qbank:</strong> ${plan.qbankTime} hrs — ${plan.qbank.subject}<br>
+      <strong>🔁 Revision:</strong> ${plan.revisionTime} hrs — ${plan.revisionCount} chapters due${(plan.overdueCount||0) > 0 ? ` (${plan.overdueCount} overdue)` : ""}
+      ${burnoutWarn}${examAlert}
+    </div>`;
   document.getElementById("generateButton").disabled = true;
 }
 
