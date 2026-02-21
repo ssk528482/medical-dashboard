@@ -481,3 +481,19 @@ function bulkConfirmImport() {
   renderEditor();
   alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
 }
+
+function toggleSubjectCollapse(buttonElement, contentId) {
+  // Find the div we want to collapse/expand
+  const contentDiv = document.getElementById(contentId);
+  
+  // Check its current display status
+  if (contentDiv.style.display === "none") {
+    // If hidden, show it and change arrow to down
+    contentDiv.style.display = "block"; 
+    buttonElement.innerHTML = "▼";
+  } else {
+    // If showing, hide it and change arrow to right
+    contentDiv.style.display = "none";
+    buttonElement.innerHTML = "▶";
+  }
+}
