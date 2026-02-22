@@ -228,10 +228,50 @@ function deleteUnit(subjectName, ui) {
 function editUnitQuestionCount(subjectName, ui) {
   let unit = studyData.subjects[subjectName].units[ui];
   let current = unit.questionCount || 0;
-  let val = prompt(`Total questions in "${unit.name}":`, current);
-  if (val === null) return;
-  unit.questionCount = parseInt(val) || 0;
-  saveData(); renderEditor();
+
+  // Build popup
+  let overlay = document.createElement("div");
+  overlay.id = "qcountOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;";
+
+  overlay.innerHTML = `
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px;width:100%;max-width:320px;">
+      <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px;">📚 Total Questions</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:16px;">${unit.name}</div>
+      <input id="qcountInput" type="number" min="0" value="${current}"
+        placeholder="e.g. 180"
+        style="width:100%;font-size:18px;padding:10px 14px;border-radius:10px;border:2px solid #3b82f6;background:#0f172a;color:#f1f5f9;margin-bottom:16px;text-align:center;">
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('qcountOverlay').remove()"
+          style="flex:1;background:#334155;margin:0;padding:10px;">Cancel</button>
+        <button onclick="_saveQcount('${subjectName.replace(/'/g,"\\'")}',${ui})"
+          style="flex:1;background:#8b5cf6;margin:0;padding:10px;font-weight:700;">Save</button>
+      </div>
+    </div>`;
+
+  // Close on backdrop click
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  // Focus & select input
+  setTimeout(() => {
+    let inp = document.getElementById("qcountInput");
+    if (inp) {
+      inp.focus();
+      inp.select();
+      inp.addEventListener("keydown", e => {
+        if (e.key === "Enter") _saveQcount(subjectName, ui);
+        if (e.key === "Escape") document.getElementById("qcountOverlay")?.remove();
+      });
+    }
+  }, 50);
+}
+
+function _saveQcount(subjectName, ui) {
+  let val = parseInt(document.getElementById("qcountInput")?.value) || 0;
+  studyData.subjects[subjectName].units[ui].questionCount = val;
+  document.getElementById("qcountOverlay")?.remove();
+  saveData();
+  renderQbank();  // re-render the qbank tab instantly — no full page refresh needed
 }
 
 // ─── Unit-level Bulk Actions ──────────────────────────────────
