@@ -113,7 +113,14 @@ function swInject(type, targetHrs) {
   if (!_swEnsure()) return;
   let sw = _sw(type);
   let targetSecs = Math.round(parseFloat(targetHrs||0) * 3600);
-  if (!sw.running && sw.accumulated === 0) { sw.targetSecs = targetSecs; saveData(); }
+  // Only set target if timer is fresh (don't overwrite running/paused timer)
+  if (!sw.running && sw.accumulated === 0 && sw.targetSecs === 0) {
+    sw.targetSecs = targetSecs; saveData();
+  }
+  // If target changed (new plan generated), update it
+  if (sw.targetSecs === 0 && targetSecs > 0) {
+    sw.targetSecs = targetSecs; saveData();
+  }
   slot.innerHTML = `<div class="sw-block"><div id="sw-${type}"></div></div>`;
   _swRender(type);
   if (sw.running) _swTick(type);
