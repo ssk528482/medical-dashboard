@@ -291,10 +291,38 @@ function generatePlan() {
   let qbankHtml    = qbankLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
   let revisionHtml = revLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
 
-  let _planHTML = `<div style="font-size:13px;line-height:1.6;"><div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #1e293b;"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">📖 STUDY — ${studyTime} hrs total${pagesBudget > 0 ? " · ~" + pagesBudget + " pages" : ""}</div>${studyHtml}</div><div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #1e293b;"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">🧪 QBANK — ${qbankTime} hrs · ~${qTotal} questions</div>${qbankHtml}</div><div style="background:#0f172a;border-radius:10px;padding:10px;border:1px solid #1e293b;"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">🔁 REVISION — ${revisionTime} hrs · ${revisionDue.length} due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}</div>${revisionHtml}</div>${burnoutWarn}${examAlert}</div>`;
+  // Build plan HTML with stopwatch slots after each section
+  let _planHTML = `<div style="font-size:13px;line-height:1.6;">
+    <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;border:1px solid #1e293b;border-bottom:none;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+        📖 STUDY — ${studyTime} hrs total${pagesBudget > 0 ? " · ~" + pagesBudget + " pages" : ""}
+      </div>
+      ${studyHtml}
+    </div>
+    <div id="sw-slot-study"></div>
+
+    <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;margin-top:8px;border:1px solid #1e293b;border-bottom:none;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+        🧪 QBANK — ${qbankTime} hrs · ~${qTotal} questions
+      </div>
+      ${qbankHtml}
+    </div>
+    <div id="sw-slot-qbank"></div>
+
+    <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;margin-top:8px;border:1px solid #1e293b;border-bottom:none;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+        🔁 REVISION — ${revisionTime} hrs · ${revisionDue.length} due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}
+      </div>
+      ${revisionHtml}
+    </div>
+    <div id="sw-slot-revision"></div>
+
+    ${burnoutWarn}${examAlert}
+  </div>`;
 
   document.getElementById("planOutput").innerHTML = _planHTML;
 
+  // Reset stopwatches for fresh plan, inject with targets
   studyData.dailyPlan = {
     date: today(),
     study: { subject: topSubject, unitIndex: ptr.unit, chapterIndex: ptr.chapter, planChapters },
@@ -304,10 +332,23 @@ function generatePlan() {
     studyTime, qbankTime, revisionTime,
     burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
     completed: false,
-    renderedHTML: _planHTML
+    renderedHTML: _planHTML,
+    stopwatches: {
+      study:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(studyTime)*3600) },
+      qbank:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(qbankTime)*3600) },
+      revision: { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revisionTime)*3600) }
+    }
   };
 
   saveData();
+
+  // Inject stopwatches into the slots
+  if (typeof swInject === "function") {
+    swInject("study",    parseFloat(studyTime));
+    swInject("qbank",    parseFloat(qbankTime));
+    swInject("revision", parseFloat(revisionTime));
+  }
+
   document.getElementById("generateButton").disabled = true;
 }
 
@@ -441,6 +482,8 @@ function submitEvening() {
   });
 
   // ── Log daily history ──
+  let timeTracking = (typeof swGetTodaySummary === "function") ? swGetTodaySummary() : null;
+
   studyData.dailyHistory[todayKey] = {
     study: anyStudy,
     qbank: anyQbank,
@@ -449,7 +492,8 @@ function submitEvening() {
     studyEntries,
     qbankEntries,
     revisedItems,
-    submittedAt: new Date().toISOString()
+    submittedAt: new Date().toISOString(),
+    timeTracking
   };
 
   if (studyData.dailyPlan?.date === todayKey && anyStudy) {
