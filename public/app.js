@@ -274,8 +274,34 @@ function renderEveningUpdate() {
 
     let revCount = (hist.revisedItems || []).length;
     let submittedTime = hist.submittedAt ? new Date(hist.submittedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : "";
-    let topicsCount = (hist.studyEntries||[]).reduce((s,e)=>s+(e.topics||[]).length,0);
+    let topicsCount   = (hist.studyEntries||[]).reduce((s,e)=>s+(e.topics||[]).length,0);
     let questionsCount = (hist.qbankEntries||[]).reduce((s,e)=>s+(e.total||0),0);
+
+    // ── Time tracking summary ──
+    let tt = hist.timeTracking;
+    let timeHtml = "";
+    if (tt) {
+      const _row = (label, icon, data) => {
+        if (!data) return "";
+        let overUnder = data.overUnder;
+        let badge = overUnder > 5
+          ? `<span style="color:#f87171;font-size:11px;">+${overUnder}m over</span>`
+          : overUnder < -5
+            ? `<span style="color:#93c5fd;font-size:11px;">${overUnder}m under</span>`
+            : `<span style="color:#4ade80;font-size:11px;">on target</span>`;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;">
+          <span style="color:#94a3b8;">${icon} ${label}</span>
+          <span style="color:#f1f5f9;font-weight:600;">${data.actualMins}m <span style="color:#475569;font-weight:400;">/ ${data.targetMins}m target</span> ${badge}</span>
+        </div>`;
+      };
+      timeHtml = `
+        <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:12px;border:1px solid #1e293b;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">⏱ Time Tracked</div>
+          ${_row("Study",    "📖", tt.study)}
+          ${_row("Qbank",    "🧪", tt.qbank)}
+          ${_row("Revision", "🔁", tt.revision)}
+        </div>`;
+    }
 
     inner.innerHTML = `
       <div style="background:linear-gradient(135deg,#0f2b1a,#0a1f12);border:1px solid #16a34a;border-radius:14px;padding:16px;margin-bottom:12px;">
@@ -283,11 +309,10 @@ function renderEveningUpdate() {
           <div style="font-size:14px;font-weight:800;color:#4ade80;">✅ Evening Update Submitted</div>
           ${submittedTime ? `<div style="font-size:11px;color:#64748b;">at ${submittedTime}</div>` : ""}
         </div>
-
+        ${timeHtml}
         ${studyLines || '<div style="font-size:12px;color:#475569;padding:7px 0;">No study logged</div>'}
         ${qbankLines || '<div style="font-size:12px;color:#475569;padding:7px 0;">No Qbank logged</div>'}
         ${revCount > 0 ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;"><span style="font-size:15px;">🔁</span><div style="font-size:13px;">${revCount} revision${revCount>1?"s":""} completed</div></div>` : ""}
-
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
           <div style="flex:1;min-width:70px;background:#0a2b15;border-radius:8px;padding:9px;text-align:center;">
             <div style="font-size:18px;font-weight:700;color:#4ade80;">${topicsCount}</div>
@@ -303,7 +328,6 @@ function renderEveningUpdate() {
           </div>
         </div>
       </div>
-
       <button onclick="deleteEveningUpdate()"
         style="width:100%;background:#1a0a0a;border:1px solid #450a0a;color:#fca5a5;padding:10px;font-size:12px;font-weight:600;border-radius:10px;">
         🗑 Reset &amp; Resubmit Today's Evening Update
@@ -313,7 +337,35 @@ function renderEveningUpdate() {
   }
 
   // Build form
+  // ── Live time summary from stopwatches ──
+  let liveTT = (typeof swGetTodaySummary === "function") ? swGetTodaySummary() : null;
+  let liveTimeHtml = "";
+  if (liveTT) {
+    const _row = (label, icon, data) => {
+      if (!data || data.actualMins === 0) return "";
+      let badge = data.overUnder > 5
+        ? `<span style="color:#f87171;">+${data.overUnder}m</span>`
+        : data.overUnder < -5
+          ? `<span style="color:#93c5fd;">${data.overUnder}m</span>`
+          : `<span style="color:#4ade80;">✓</span>`;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px;">
+        <span style="color:#94a3b8;">${icon} ${label}</span>
+        <span style="color:#f1f5f9;font-weight:600;">${data.actualMins}m / ${data.targetMins}m ${badge}</span>
+      </div>`;
+    };
+    let rows = [_row("Study","📖",liveTT.study), _row("Qbank","🧪",liveTT.qbank), _row("Revision","🔁",liveTT.revision)].filter(Boolean).join("");
+    if (rows) {
+      liveTimeHtml = `
+        <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:12px;border:1px solid #1e3a5f;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">⏱ Today's Tracked Time</div>
+          ${rows}
+          <div style="font-size:10px;color:#334155;margin-top:6px;">Auto-submitted with your evening report</div>
+        </div>`;
+    }
+  }
+
   inner.innerHTML = `
+    ${liveTimeHtml}
     <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
       <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">📖 Study Log</div>
       <div id="studyEntries"></div>
@@ -551,26 +603,31 @@ function renderSavedPlan() {
   let plan = studyData.dailyPlan;
   let planEl = document.getElementById("planOutput");
   if (!plan || !planEl) return;
-  if (plan.date !== today()) return; // stale plan from a previous day
+  if (plan.date !== today()) return;
 
-  // Restore hours input field
   let hoursInput = document.getElementById("dailyHours");
   if (hoursInput && plan.hours) hoursInput.value = plan.hours;
 
-  let daysLeft = daysUntilExam();
+  let daysLeft   = daysUntilExam();
   let burnoutWarn = (plan.burnoutAdj && plan.burnoutAdj < 1.0)
-    ? `<div style="color:#ef4444;font-size:12px;margin-top:6px;">⚠ Burnout detected — load reduced ${((1 - plan.burnoutAdj) * 100).toFixed(0)}%</div>` : "";
+    ? `<div style="color:#ef4444;font-size:12px;margin-top:6px;">⚠ Burnout detected — load reduced ${((1-plan.burnoutAdj)*100).toFixed(0)}%</div>` : "";
   let examAlert = daysLeft <= 30
     ? `<div style="color:#f59e0b;font-size:12px;margin-top:4px;">🔔 ${daysLeft} days to exam — revision priority elevated</div>` : "";
 
-  // ── If we saved the full rendered HTML, just replay it exactly ──
+  // ── Replay saved HTML (with stopwatch slots) ──
   if (plan.renderedHTML) {
     planEl.innerHTML = plan.renderedHTML;
     document.getElementById("generateButton").disabled = true;
+    // Re-inject stopwatches into restored slots
+    if (typeof swInject === "function") {
+      swInject("study",    parseFloat(plan.studyTime    || 0));
+      swInject("qbank",    parseFloat(plan.qbankTime    || 0));
+      swInject("revision", parseFloat(plan.revisionTime || 0));
+    }
     return;
   }
 
-  // ── Exam countdown mode (legacy fallback) ──
+  // ── Exam countdown mode (legacy) ──
   if (plan.examCountdownMode) {
     planEl.innerHTML = `
       <div style="background:#450a0a;border:1px solid #ef4444;border-radius:10px;padding:10px;margin-bottom:10px;">
@@ -578,7 +635,7 @@ function renderSavedPlan() {
         <div style="font-size:12px;color:#fca5a5;opacity:0.85;">New study paused. Focus 100% on revision and Qbank mastery.</div>
       </div>
       <div style="padding:4px 0;font-size:14px;line-height:1.9;">
-        <strong>🔁 Revision:</strong> ${plan.revisionTime} hrs — ${plan.revisionCount} chapters due${(plan.overdueCount||0) > 0 ? ` (${plan.overdueCount} overdue)` : ""}<br>
+        <strong>🔁 Revision:</strong> ${plan.revisionTime} hrs — ${plan.revisionCount} chapters due${(plan.overdueCount||0)>0?` (${plan.overdueCount} overdue)`:""}<br>
         <strong>🧪 Qbank:</strong> ${plan.qbankTime} hrs — weak units first
         ${burnoutWarn}${examAlert}
       </div>`;
@@ -586,23 +643,19 @@ function renderSavedPlan() {
     return;
   }
 
-  // ── Legacy fallback for old plans without renderedHTML ──
+  // ── Legacy fallback ──
   let subjectObj = studyData.subjects[plan.study?.subject];
   if (!subjectObj) { planEl.innerHTML = "<strong>Plan subject was deleted.</strong>"; return; }
-
-  let nextText = plan.nextText;
-  if (!nextText) {
-    let ptr = subjectObj.pointer || { unit: 0, chapter: 0 };
-    let nextUnit    = subjectObj.units[ptr.unit];
-    let nextChapter = nextUnit?.chapters[ptr.chapter];
-    nextText = nextChapter ? `${nextUnit.name} → ${nextChapter.name}` : "All done";
-  }
-
+  let nextText = plan.nextText || (() => {
+    let ptr = subjectObj.pointer || { unit:0, chapter:0 };
+    let nu = subjectObj.units[ptr.unit], nc = nu?.chapters[ptr.chapter];
+    return nc ? `${nu.name} → ${nc.name}` : "All done";
+  })();
   planEl.innerHTML = `
     <div style="padding:8px 0;font-size:14px;line-height:1.8;">
       <strong>📖 Study:</strong> ${plan.studyTime} hrs — ${plan.study.subject} — <em>${nextText}</em><br>
       <strong>🧪 Qbank:</strong> ${plan.qbankTime} hrs — ${plan.qbank.subject}<br>
-      <strong>🔁 Revision:</strong> ${plan.revisionTime} hrs — ${plan.revisionCount} chapters due${(plan.overdueCount||0) > 0 ? ` (${plan.overdueCount} overdue)` : ""}
+      <strong>🔁 Revision:</strong> ${plan.revisionTime} hrs — ${plan.revisionCount} chapters due${(plan.overdueCount||0)>0?` (${plan.overdueCount} overdue)`:""}
       ${burnoutWarn}${examAlert}
     </div>`;
   document.getElementById("generateButton").disabled = true;
