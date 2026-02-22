@@ -228,50 +228,10 @@ function deleteUnit(subjectName, ui) {
 function editUnitQuestionCount(subjectName, ui) {
   let unit = studyData.subjects[subjectName].units[ui];
   let current = unit.questionCount || 0;
-
-  // Build popup
-  let overlay = document.createElement("div");
-  overlay.id = "qcountOverlay";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;";
-
-  overlay.innerHTML = `
-    <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px;width:100%;max-width:320px;">
-      <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px;">📚 Total Questions</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:16px;">${unit.name}</div>
-      <input id="qcountInput" type="number" min="0" value="${current}"
-        placeholder="e.g. 180"
-        style="width:100%;font-size:18px;padding:10px 14px;border-radius:10px;border:2px solid #3b82f6;background:#0f172a;color:#f1f5f9;margin-bottom:16px;text-align:center;">
-      <div style="display:flex;gap:8px;">
-        <button onclick="document.getElementById('qcountOverlay').remove()"
-          style="flex:1;background:#334155;margin:0;padding:10px;">Cancel</button>
-        <button onclick="_saveQcount('${subjectName.replace(/'/g,"\\'")}',${ui})"
-          style="flex:1;background:#8b5cf6;margin:0;padding:10px;font-weight:700;">Save</button>
-      </div>
-    </div>`;
-
-  // Close on backdrop click
-  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
-  // Focus & select input
-  setTimeout(() => {
-    let inp = document.getElementById("qcountInput");
-    if (inp) {
-      inp.focus();
-      inp.select();
-      inp.addEventListener("keydown", e => {
-        if (e.key === "Enter") _saveQcount(subjectName, ui);
-        if (e.key === "Escape") document.getElementById("qcountOverlay")?.remove();
-      });
-    }
-  }, 50);
-}
-
-function _saveQcount(subjectName, ui) {
-  let val = parseInt(document.getElementById("qcountInput")?.value) || 0;
-  studyData.subjects[subjectName].units[ui].questionCount = val;
-  document.getElementById("qcountOverlay")?.remove();
-  saveData();
-  renderQbank();  // re-render the qbank tab instantly — no full page refresh needed
+  let val = prompt(`Total questions in "${unit.name}":`, current);
+  if (val === null) return;
+  unit.questionCount = parseInt(val) || 0;
+  saveData(); renderEditor();
 }
 
 // ─── Unit-level Bulk Actions ──────────────────────────────────
@@ -483,9 +443,14 @@ function renderQbank() {
 
   names.forEach(subjectName => {
     let subject = studyData.subjects[subjectName];
-    let totalQ = 0, totalCorrect = 0;
-    subject.units.forEach(u => { totalQ += u.qbankStats.total; totalCorrect += u.qbankStats.correct; });
-    let overallAcc = totalQ > 0 ? (totalCorrect / totalQ * 100).toFixed(1) : null;
+    let totalQ = 0, totalCorrect = 0, totalSyllabus = 0;
+    subject.units.forEach(u => {
+      totalQ       += u.qbankStats.total;
+      totalCorrect += u.qbankStats.correct;
+      totalSyllabus += u.questionCount || 0;
+    });
+    let overallAcc     = totalQ > 0 ? (totalCorrect / totalQ * 100).toFixed(1) : null;
+    let overallAttempt = totalSyllabus > 0 ? Math.min(100, Math.round(totalQ / totalSyllabus * 100)) : null;
     let doneUnits  = subject.units.filter(u => u.qbankDone).length;
 
     let subjectEl = document.createElement("div");
@@ -497,7 +462,7 @@ function renderQbank() {
     if (isQbCollapsed === undefined) isQbCollapsed = true;
 
     subjectEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isQbCollapsed ? 0 : 10}px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${isQbCollapsed ? 0 : 10}px;gap:8px;">
         <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
           <button class="collapse-btn" onclick="toggleQbankCollapse(event,'${esc(subjectName)}')" style="font-size:12px;padding:2px 5px;">${isQbCollapsed ? "▶" : "▼"}</button>
           <div>
@@ -505,10 +470,15 @@ function renderQbank() {
             <div style="font-size:11px;color:#64748b;margin-top:2px;">${doneUnits}/${subject.units.length} units done</div>
           </div>
         </div>
-        <span style="padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;color:white;
-          background:${overallAcc===null?"#334155":overallAcc>=75?"#16a34a":overallAcc>=50?"#eab308":"#ef4444"};">
-          ${overallAcc !== null ? overallAcc + "%" : "No data"}
-        </span>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          ${overallAttempt !== null ? `<span style="padding:3px 8px;border-radius:7px;font-size:11px;font-weight:600;color:white;background:#1d4ed8;" title="Attempted">
+            📝 ${overallAttempt}%</span>` : ""}
+          <span style="padding:3px 8px;border-radius:7px;font-size:11px;font-weight:600;color:white;
+            background:${overallAcc===null?"#334155":overallAcc>=75?"#16a34a":overallAcc>=50?"#eab308":"#ef4444"};"
+            title="Accuracy">
+            ${overallAcc !== null ? "🎯 " + overallAcc + "%" : "No data"}
+          </span>
+        </div>
       </div>
     `;
 
@@ -521,34 +491,59 @@ function renderQbank() {
         let unitEl = document.createElement("div");
         unitEl.style.cssText = "background:#0f172a;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #1e293b;";
 
+        // Attempted % — how much of the syllabus has been attempted
+        let attemptPct  = unit.questionCount > 0 ? Math.min(100, Math.round(uTotal / unit.questionCount * 100)) : null;
+        let remaining   = unit.questionCount > 0 ? Math.max(0, unit.questionCount - uTotal) : null;
+        // Accuracy % — correct out of attempted
+        let accPct      = uTotal > 0 ? parseFloat((uCorrect / uTotal * 100).toFixed(1)) : null;
+
         unitEl.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
             <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <strong style="font-size:13px;">${unit.name}</strong>
-                ${uAcc !== null ? `<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;color:white;
-                  background:${uAcc>=75?"#16a34a":uAcc>=50?"#eab308":"#ef4444"};">${uAcc}%</span>` : ""}
+                ${unit.questionCount > 0 ? `<span style="font-size:11px;color:#8b5cf6;">📚 ${unit.questionCount}Q syllabus</span>` : ""}
               </div>
-              <div style="font-size:11px;color:#64748b;margin-top:4px;">${uTotal} questions • ${uCorrect} correct
-                ${unit.questionCount > 0 ? ` • <span style="color:#8b5cf6;">📚 ${unit.questionCount} total in syllabus</span>` : ""}
+
+              ${/* ── Attempted row ── */ ""}
+              <div style="margin-top:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+                  <span style="font-size:11px;color:#94a3b8;font-weight:600;">ATTEMPTED</span>
+                  <span style="font-size:11px;font-weight:700;color:${attemptPct===null?"#475569":attemptPct>=75?"#10b981":attemptPct>=40?"#eab308":"#ef4444"};">
+                    ${attemptPct !== null ? `${uTotal} / ${unit.questionCount} (${attemptPct}%)` : `${uTotal} done`}
+                  </span>
+                </div>
+                <div class="stat-bar" style="height:5px;">
+                  <div class="stat-fill ${attemptPct===null?"":attemptPct>=75?"green":attemptPct>=40?"yellow":"red"}"
+                    style="width:${attemptPct ?? Math.min(100, uTotal > 0 ? 100 : 0)}%"></div>
+                </div>
+                ${remaining !== null && remaining > 0 ? `<div style="font-size:10px;color:#475569;margin-top:2px;">${remaining} Qs remaining</div>` : ""}
               </div>
-              ${unit.questionCount > 0 ? (() => {
-                let remaining = Math.max(0, unit.questionCount - uTotal);
-                let pct = Math.min(100, Math.round(uTotal / unit.questionCount * 100));
-                return `<div style="font-size:11px;color:#64748b;margin-top:2px;">
-                  ${pct}% done · ${remaining} Qs remaining to attempt
-                  <div class="stat-bar" style="margin-top:4px;height:4px;"><div class="stat-fill ${pct>=75?"green":pct>=40?"yellow":"red"}" style="width:${pct}%"></div></div>
-                </div>`;
-              })() : ""}
+
+              ${/* ── Accuracy row ── */ ""}
+              <div style="margin-top:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+                  <span style="font-size:11px;color:#94a3b8;font-weight:600;">ACCURACY</span>
+                  <span style="font-size:11px;font-weight:700;color:${accPct===null?"#475569":accPct>=75?"#10b981":accPct>=50?"#eab308":"#ef4444"};">
+                    ${accPct !== null ? `${uCorrect} / ${uTotal} correct (${accPct}%)` : "No data yet"}
+                  </span>
+                </div>
+                <div class="stat-bar" style="height:5px;">
+                  <div class="stat-fill ${accPct===null?"":accPct>=75?"green":accPct>=50?"yellow":"red"}"
+                    style="width:${accPct ?? 0}%"></div>
+                </div>
+              </div>
             </div>
-            <div style="display:flex;gap:4px;align-items:center;">
-              <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;"
-                onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
+
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0;">
+              <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;"
+                onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})" title="Mark unit qbank done">✓</span>
               <button onclick="editUnitQuestionCount('${esc(subjectName)}',${ui})"
-                style="padding:4px 8px;font-size:11px;margin:0;background:#4c1d95;border-radius:6px;"
+                style="padding:4px 8px;font-size:11px;margin:0;background:#4c1d95;border-radius:6px;white-space:nowrap;"
                 title="Set total Qs in this unit">${unit.questionCount > 0 ? unit.questionCount + "Q" : "Set Qs"}</button>
             </div>
           </div>
+
           <div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap;">
             <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Total Qs done" min="0"
               style="width:110px;font-size:12px;padding:6px 8px;">
@@ -559,11 +554,6 @@ function renderQbank() {
             ${uTotal > 0 ? `<button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
               style="padding:8px 10px;font-size:11px;margin:0;background:#334155;">Clear</button>` : ""}
           </div>
-
-          ${uAcc !== null ? `
-            <div class="stat-bar" style="margin-top:8px;height:6px;">
-              <div class="stat-fill ${uAcc>=75?"green":uAcc>=50?"yellow":"red"}" style="width:${uAcc}%"></div>
-            </div>` : ""}
         `;
         subjectEl.appendChild(unitEl);
       }); // end units forEach
