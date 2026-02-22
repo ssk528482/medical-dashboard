@@ -529,23 +529,78 @@ function renderQbank() {
         let uAcc     = uTotal > 0 ? (uCorrect / uTotal * 100).toFixed(1) : null;
 
         let unitEl = document.createElement("div");
-        unitEl.style.cssText = "background:#0f172a;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #1e293b;";
+        let isLocked = !!unit.qbankLocked;
+        let isFullyAttempted = unit.questionCount > 0 && uTotal >= unit.questionCount;
+
+        unitEl.style.cssText = `background:#0f172a;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid ${unit.qbankDone ? "#16a34a" : "#1e293b"};`;
 
         // Attempted % — how much of the syllabus has been attempted
-        let attemptPct  = unit.questionCount > 0 ? Math.min(100, Math.round(uTotal / unit.questionCount * 100)) : null;
-        let remaining   = unit.questionCount > 0 ? Math.max(0, unit.questionCount - uTotal) : null;
+        let attemptPct = unit.questionCount > 0 ? Math.min(100, Math.round(uTotal / unit.questionCount * 100)) : null;
+        let remaining  = unit.questionCount > 0 ? Math.max(0, unit.questionCount - uTotal) : null;
         // Accuracy % — correct out of attempted
-        let accPct      = uTotal > 0 ? parseFloat((uCorrect / uTotal * 100).toFixed(1)) : null;
+        let accPct     = uTotal > 0 ? parseFloat((uCorrect / uTotal * 100).toFixed(1)) : null;
+
+        // Lock button — unlocked = editable + logging ON; locked = both OFF
+        let lockBtn = isLocked
+          ? `<button onclick="unlockUnitQbank('${esc(subjectName)}',${ui})"
+               style="padding:4px 8px;font-size:11px;margin:0;background:#064e3b;border:1px solid #10b981;border-radius:6px;white-space:nowrap;color:#10b981;" title="Locked — click to unlock and re-enable editing/logging">🔒 Locked</button>`
+          : `<button onclick="lockUnitQbank('${esc(subjectName)}',${ui})"
+               style="padding:4px 8px;font-size:11px;margin:0;background:#1e293b;border:1px solid #475569;border-radius:6px;white-space:nowrap;color:#94a3b8;" title="Lock to disable editing and logging">🔓 Lock</button>`;
+
+        // Set Qs button — only editable when NOT locked
+        let setQsBtn = !isLocked
+          ? `<button onclick="editUnitQuestionCount('${esc(subjectName)}',${ui})"
+               style="padding:4px 8px;font-size:11px;margin:0;background:#4c1d95;border-radius:6px;white-space:nowrap;"
+               title="Set total Qs in this unit">${unit.questionCount > 0 ? unit.questionCount + "Q" : "Set Qs"}</button>`
+          : `<span style="font-size:11px;color:#8b5cf6;font-weight:600;">${unit.questionCount > 0 ? unit.questionCount + "Q" : ""}</span>`;
+
+        // Complete button
+        let completeBtn = `<span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;"
+          onclick="markUnitQbankComplete('${esc(subjectName)}',${ui})" title="${unit.qbankDone ? "Mark incomplete" : "Mark complete — enter score"}">✓</span>`;
+
+        // Logging section — ENABLED when unlocked, DISABLED when locked
+        let logSection = "";
+        if (isLocked) {
+          // Locked: no editing, no logging
+          logSection = `<div style="margin-top:10px;background:#0a1628;border-radius:8px;padding:8px 10px;border:1px dashed #334155;">
+            <div style="font-size:11px;color:#475569;text-align:center;">🔒 Locked — unlock to edit total Qs or log more</div>
+            ${uTotal > 0 ? `<div style="display:flex;justify-content:center;margin-top:8px;">
+              <button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
+                style="padding:6px 14px;font-size:11px;margin:0;background:#334155;">Clear All</button>
+            </div>` : ""}
+          </div>`;
+        } else if (unit.qbankDone && isFullyAttempted) {
+          // Unlocked but complete — show clear option
+          logSection = `<div style="margin-top:10px;background:#052e16;border-radius:8px;padding:8px 10px;border:1px solid #16a34a;">
+            <div style="font-size:11px;color:#4ade80;text-align:center;">✅ Unit complete — use Clear to reset</div>
+            <div style="display:flex;justify-content:center;margin-top:8px;">
+              <button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
+                style="padding:6px 14px;font-size:11px;margin:0;background:#334155;">Clear All</button>
+            </div>
+          </div>`;
+        } else {
+          // Unlocked — full logging available
+          logSection = `<div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+            <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Attempted" min="0"
+              style="width:100px;font-size:12px;padding:6px 8px;">
+            <input id="qb-correct-${subjectName}-${ui}" type="number" placeholder="Correct" min="0"
+              style="width:90px;font-size:12px;padding:6px 8px;">
+            <button onclick="logUnitQbank('${esc(subjectName)}',${ui})"
+              style="padding:8px 10px;font-size:11px;margin:0;background:#1d4ed8;">Log</button>
+            ${uTotal > 0 ? `<button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
+              style="padding:8px 10px;font-size:11px;margin:0;background:#334155;">Clear</button>` : ""}
+          </div>`;
+        }
 
         unitEl.innerHTML = `
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
             <div style="flex:1;min-width:0;">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <strong style="font-size:13px;">${unit.name}</strong>
-                ${unit.questionCount > 0 ? `<span style="font-size:11px;color:#8b5cf6;">📚 ${unit.questionCount}Q syllabus</span>` : ""}
+                ${unit.questionCount > 0 ? `<span style="font-size:11px;color:#8b5cf6;">📚 ${unit.questionCount}Q</span>` : ""}
+                ${unit.qbankDone ? `<span style="font-size:10px;background:#052e16;color:#4ade80;padding:1px 6px;border-radius:4px;border:1px solid #16a34a;">DONE ✓</span>` : ""}
               </div>
 
-              ${/* ── Attempted row ── */ ""}
               <div style="margin-top:8px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
                   <span style="font-size:11px;color:#94a3b8;font-weight:600;">ATTEMPTED</span>
@@ -555,12 +610,11 @@ function renderQbank() {
                 </div>
                 <div class="stat-bar" style="height:5px;">
                   <div class="stat-fill ${attemptPct===null?"":attemptPct>=75?"green":attemptPct>=40?"yellow":"red"}"
-                    style="width:${attemptPct ?? Math.min(100, uTotal > 0 ? 100 : 0)}%"></div>
+                    style="width:${attemptPct ?? (uTotal > 0 ? 100 : 0)}%"></div>
                 </div>
                 ${remaining !== null && remaining > 0 ? `<div style="font-size:10px;color:#475569;margin-top:2px;">${remaining} Qs remaining</div>` : ""}
               </div>
 
-              ${/* ── Accuracy row ── */ ""}
               <div style="margin-top:8px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
                   <span style="font-size:11px;color:#94a3b8;font-weight:600;">ACCURACY</span>
@@ -576,24 +630,12 @@ function renderQbank() {
             </div>
 
             <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0;">
-              <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;"
-                onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})" title="Mark unit qbank done">✓</span>
-              <button onclick="editUnitQuestionCount('${esc(subjectName)}',${ui})"
-                style="padding:4px 8px;font-size:11px;margin:0;background:#4c1d95;border-radius:6px;white-space:nowrap;"
-                title="Set total Qs in this unit">${unit.questionCount > 0 ? unit.questionCount + "Q" : "Set Qs"}</button>
+              ${completeBtn}
+              ${setQsBtn}
+              ${lockBtn}
             </div>
           </div>
-
-          <div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap;">
-            <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Total Qs done" min="0"
-              style="width:110px;font-size:12px;padding:6px 8px;">
-            <input id="qb-correct-${subjectName}-${ui}" type="number" placeholder="Correct" min="0"
-              style="width:90px;font-size:12px;padding:6px 8px;">
-            <button onclick="logUnitQbank('${esc(subjectName)}',${ui})"
-              style="padding:8px 10px;font-size:11px;margin:0;background:#1d4ed8;">Log</button>
-            ${uTotal > 0 ? `<button onclick="clearUnitQbank('${esc(subjectName)}',${ui})"
-              style="padding:8px 10px;font-size:11px;margin:0;background:#334155;">Clear</button>` : ""}
-          </div>
+          ${logSection}
         `;
         subjectEl.appendChild(unitEl);
       }); // end units forEach
@@ -618,6 +660,96 @@ function toggleQbankCollapse(event, subjectName) {
   saveData(); renderQbank();
 }
 
+// ── Mark unit complete via popup (asks for correct count) ──────
+function markUnitQbankComplete(subjectName, ui) {
+  let unit = studyData.subjects[subjectName].units[ui];
+
+  // If already done → toggle off
+  if (unit.qbankDone) {
+    unit.qbankDone = false;
+    saveData(); renderQbank();
+    return;
+  }
+
+  let totalQs = unit.questionCount || unit.qbankStats.total || 0;
+
+  // Build popup
+  document.getElementById("qcountOverlay")?.remove();
+  let overlay = document.createElement("div");
+  overlay.id = "qcountOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;";
+
+  overlay.innerHTML = `
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px;width:100%;max-width:340px;">
+      <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px;">✅ Mark Qbank Complete</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:16px;">${unit.name}</div>
+      ${totalQs > 0 ? `<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">Total questions: <strong style="color:#f1f5f9;">${totalQs}</strong></div>` : ""}
+      <label style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px;">How many did you get correct?</label>
+      <input id="qCompleteCorrect" type="number" min="0" max="${totalQs || 99999}" placeholder="e.g. 72"
+        style="width:100%;font-size:20px;padding:10px 14px;border-radius:10px;border:2px solid #16a34a;background:#0f172a;color:#f1f5f9;margin-bottom:6px;text-align:center;">
+      ${totalQs > 0 ? `<div style="font-size:11px;color:#475569;margin-bottom:14px;text-align:center;">out of ${totalQs}</div>` : `<div style="font-size:11px;color:#475569;margin-bottom:14px;text-align:center;">Enter your score</div>`}
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('qcountOverlay').remove()"
+          style="flex:1;background:#334155;margin:0;padding:10px;">Cancel</button>
+        <button onclick="_confirmUnitComplete('${subjectName.replace(/'/g,"\\'")}',${ui},${totalQs})"
+          style="flex:1;background:#16a34a;margin:0;padding:10px;font-weight:700;">✓ Mark Done</button>
+      </div>
+    </div>`;
+
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(() => {
+    let inp = document.getElementById("qCompleteCorrect");
+    if (inp) {
+      inp.focus();
+      inp.addEventListener("keydown", e => {
+        if (e.key === "Enter")  _confirmUnitComplete(subjectName, ui, totalQs);
+        if (e.key === "Escape") document.getElementById("qcountOverlay")?.remove();
+      });
+    }
+  }, 50);
+}
+
+function _confirmUnitComplete(subjectName, ui, totalQs) {
+  let correct = parseInt(document.getElementById("qCompleteCorrect")?.value) || 0;
+  let unit = studyData.subjects[subjectName].units[ui];
+
+  // Use questionCount as total if set, else use what was entered
+  let total = totalQs > 0 ? totalQs : correct;
+  if (correct > total) { alert("Correct cannot exceed total."); return; }
+
+  // Set stats — replace (not add) since this is a direct complete
+  unit.qbankStats.total   = total;
+  unit.qbankStats.correct = correct;
+  unit.questionCount      = unit.questionCount > 0 ? unit.questionCount : total;
+  unit.qbankDone          = true;
+  unit.qbankLocked        = true; // auto-lock on complete
+
+  // Adjust difficulty
+  let q = Math.round((correct / total) * 5);
+  unit.chapters.forEach(ch => {
+    let ef = ch.difficultyFactor || 2.5;
+    ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+    ch.difficultyFactor = clamp(ef, 1.3, 3.0);
+  });
+
+  document.getElementById("qcountOverlay")?.remove();
+  saveData(); renderQbank();
+}
+
+// ── Lock / Unlock ──────────────────────────────────────────────
+function lockUnitQbank(subjectName, ui) {
+  let unit = studyData.subjects[subjectName].units[ui];
+  unit.qbankLocked = true;
+  saveData(); renderQbank();
+}
+
+function unlockUnitQbank(subjectName, ui) {
+  let unit = studyData.subjects[subjectName].units[ui];
+  unit.qbankLocked = false;
+  saveData(); renderQbank();
+}
+
 function toggleUnitQbankDone(subjectName, ui, checked) {
   studyData.subjects[subjectName].units[ui].qbankDone = checked;
   saveData(); renderQbank();
@@ -625,7 +757,6 @@ function toggleUnitQbankDone(subjectName, ui, checked) {
 
 function setQbankRevision(subjectName, ui, level) {
   let unit = studyData.subjects[subjectName].units[ui];
-  // Toggle off if same level clicked
   if (unit.qbankRevision === level) {
     unit.qbankRevision = 0;
     unit.qbankDone = false;
@@ -639,14 +770,26 @@ function setQbankRevision(subjectName, ui, level) {
 function logUnitQbank(subjectName, ui) {
   let total   = parseInt(document.getElementById(`qb-total-${subjectName}-${ui}`)?.value) || 0;
   let correct = parseInt(document.getElementById(`qb-correct-${subjectName}-${ui}`)?.value) || 0;
-  if (total <= 0) { alert("Enter total questions."); return; }
-  if (correct > total) { alert("Correct cannot exceed total."); return; }
+  if (total <= 0) { alert("Enter attempted questions."); return; }
+  if (correct > total) { alert("Correct cannot exceed attempted."); return; }
 
   let unit = studyData.subjects[subjectName].units[ui];
+
+  // Auto-expand questionCount if logging exceeds it
+  let newTotal = unit.qbankStats.total + total;
+  if (unit.questionCount > 0 && newTotal > unit.questionCount) {
+    unit.questionCount = newTotal;
+  }
+
   unit.qbankStats.total   += total;
   unit.qbankStats.correct += correct;
 
-  // Adjust difficulty factor for all chapters in this unit
+  // Auto-complete if fully attempted
+  if (unit.questionCount > 0 && unit.qbankStats.total >= unit.questionCount) {
+    unit.qbankDone = true;
+  }
+
+  // Adjust difficulty
   let q = Math.round((correct / total) * 5);
   unit.chapters.forEach(ch => {
     let ef = ch.difficultyFactor || 2.5;
@@ -658,10 +801,11 @@ function logUnitQbank(subjectName, ui) {
 }
 
 function clearUnitQbank(subjectName, ui) {
-  if (!confirm("Clear qbank stats for this unit?")) return;
+  if (!confirm("Clear all qbank data for this unit? This resets attempts, accuracy, lock and completion.")) return;
   let unit = studyData.subjects[subjectName].units[ui];
-  unit.qbankStats = { total: 0, correct: 0 };
-  unit.qbankDone = false;
+  unit.qbankStats   = { total: 0, correct: 0 };
+  unit.qbankDone    = false;
+  unit.qbankLocked  = false;
   saveData(); renderQbank();
 }
 
