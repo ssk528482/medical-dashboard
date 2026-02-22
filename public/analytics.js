@@ -430,9 +430,16 @@ function renderAnalytics() {
       <input type="date" id="examDateInput" value="${studyData.examDate || "2026-12-01"}" style="width:100%;margin:6px 0;">
       <button onclick="updateExamDate()" style="width:100%;">Save ✓</button>
     </div>
+
+    <!-- Time Tracking -->
+    <div class="card">
+      <div class="section-title">⏱ Time Tracking (Last 14 Days)</div>
+      <div id="timeTrackingChart"></div>
+    </div>
   `;
 
   renderIntelligenceAlerts("analyticsAlerts");
+  renderTimeTrackingChart();
 }
 
 function _phaseRow(label, phaseData, color) {
@@ -571,4 +578,98 @@ function renderPhaseRow(label, phaseData, color) { return _phaseRow(label, phase
 function updateExamDate() {
   let val = document.getElementById("examDateInput").value;
   if (val) { studyData.examDate = val; saveData(); alert("Saved ✓"); renderAnalytics(); }
+}
+
+// ── Time Tracking Chart ───────────────────────────────────────
+function renderTimeTrackingChart() {
+  let el = document.getElementById("timeTrackingChart");
+  if (!el) return;
+
+  // Collect last 14 days of time tracking data
+  let days = [];
+  for (let i = 13; i >= 0; i--) {
+    let d   = addDays(today(), -i);
+    let hist = studyData.dailyHistory?.[d];
+    let tt   = hist?.timeTracking;
+    days.push({
+      date:  d,
+      label: new Date(d + "T00:00:00").toLocaleDateString([], {month:"short",day:"numeric"}),
+      study:    tt?.study?.actualMins    || 0,
+      qbank:    tt?.qbank?.actualMins    || 0,
+      revision: tt?.revision?.actualMins || 0,
+      studyTarget:    tt?.study?.targetMins    || 0,
+      qbankTarget:    tt?.qbank?.targetMins    || 0,
+      revisionTarget: tt?.revision?.targetMins || 0,
+    });
+  }
+
+  let hasAny = days.some(d => d.study > 0 || d.qbank > 0 || d.revision > 0);
+  if (!hasAny) {
+    el.innerHTML = `<div style="color:#475569;font-size:13px;text-align:center;padding:16px;">No time data yet — start a stopwatch after generating your plan.</div>`;
+    return;
+  }
+
+  let maxMins = Math.max(...days.map(d => d.study + d.qbank + d.revision), 1);
+
+  // Summary stats
+  let trackedDays  = days.filter(d => d.study + d.qbank + d.revision > 0).length;
+  let avgTotal     = trackedDays > 0 ? Math.round(days.reduce((s,d)=>s+d.study+d.qbank+d.revision,0)/trackedDays) : 0;
+  let avgStudy     = trackedDays > 0 ? Math.round(days.reduce((s,d)=>s+d.study,0)/trackedDays) : 0;
+  let totalStudyH  = (days.reduce((s,d)=>s+d.study,0)/60).toFixed(1);
+  let totalQbankH  = (days.reduce((s,d)=>s+d.qbank,0)/60).toFixed(1);
+  let onTargetDays = days.filter(d => {
+    if (!d.studyTarget) return false;
+    let actual = d.study + d.qbank + d.revision;
+    let target = d.studyTarget + d.qbankTarget + d.revisionTarget;
+    return target > 0 && Math.abs(actual - target) <= 20;
+  }).length;
+
+  // Stacked bar chart
+  let bars = days.map(d => {
+    let total  = d.study + d.qbank + d.revision;
+    let target = d.studyTarget + d.qbankTarget + d.revisionTarget;
+    let studyH  = (d.study/60).toFixed(1);
+    let qbankH  = (d.qbank/60).toFixed(1);
+    let revH    = (d.revision/60).toFixed(1);
+    let overFlag = target > 0 && total > target + 15 ? `<div style="font-size:8px;color:#f87171;text-align:center;">+${total-target}m</div>` : "";
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;gap:2px;">
+        <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:80px;gap:1px;" title="Study:${studyH}h Qbank:${qbankH}h Rev:${revH}h">
+          ${d.study    > 0 ? `<div style="background:#3b82f6;height:${Math.round(d.study/maxMins*76)}px;border-radius:2px 2px 0 0;" title="Study ${studyH}h"></div>` : ""}
+          ${d.qbank    > 0 ? `<div style="background:#8b5cf6;height:${Math.round(d.qbank/maxMins*76)}px;" title="Qbank ${qbankH}h"></div>` : ""}
+          ${d.revision > 0 ? `<div style="background:#10b981;height:${Math.round(d.revision/maxMins*76)}px;border-radius:0;" title="Rev ${revH}h"></div>` : ""}
+        </div>
+        ${overFlag}
+        <div style="font-size:9px;color:#475569;text-align:center;overflow:hidden;white-space:nowrap;max-width:100%;">${d.label.split(" ")[1]}</div>
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:70px;background:#0f172a;border-radius:8px;padding:9px;text-align:center;border:1px solid #1e293b;">
+        <div style="font-size:17px;font-weight:700;color:#3b82f6;">${totalStudyH}h</div>
+        <div style="font-size:10px;color:#475569;margin-top:2px;">📖 Study</div>
+      </div>
+      <div style="flex:1;min-width:70px;background:#0f172a;border-radius:8px;padding:9px;text-align:center;border:1px solid #1e293b;">
+        <div style="font-size:17px;font-weight:700;color:#8b5cf6;">${totalQbankH}h</div>
+        <div style="font-size:10px;color:#475569;margin-top:2px;">🧪 Qbank</div>
+      </div>
+      <div style="flex:1;min-width:70px;background:#0f172a;border-radius:8px;padding:9px;text-align:center;border:1px solid #1e293b;">
+        <div style="font-size:17px;font-weight:700;color:#10b981;">${onTargetDays}</div>
+        <div style="font-size:10px;color:#475569;margin-top:2px;">✓ On-target days</div>
+      </div>
+      <div style="flex:1;min-width:70px;background:#0f172a;border-radius:8px;padding:9px;text-align:center;border:1px solid #1e293b;">
+        <div style="font-size:17px;font-weight:700;color:#f1f5f9;">${avgTotal}m</div>
+        <div style="font-size:10px;color:#475569;margin-top:2px;">Avg/day</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:3px;align-items:flex-end;padding:0 2px;">${bars}</div>
+
+    <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;flex-wrap:wrap;">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#3b82f6;border-radius:2px;margin-right:4px;"></span>Study</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#8b5cf6;border-radius:2px;margin-right:4px;"></span>Qbank</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:2px;margin-right:4px;"></span>Revision</span>
+    </div>
+  `;
 }
