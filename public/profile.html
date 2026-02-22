@@ -136,7 +136,28 @@ function renderProfile() {
       <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Exam Date</label>
       <input type="date" id="settingExamDate" value="${studyData.examDate || "2026-12-01"}" style="width:100%;margin-bottom:12px;">
       <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Default Daily Hours</label>
-      <input type="number" id="settingHours" value="${studyData.defaultHours || 8}" min="1" max="18" style="width:100%;margin-bottom:16px;">
+      <input type="number" id="settingHours" value="${studyData.defaultHours || 8}" min="1" max="18" style="width:100%;margin-bottom:12px;">
+
+      <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:16px;border:1px solid #1e293b;">
+        <div style="font-size:12px;font-weight:700;color:#8b5cf6;margin-bottom:10px;">📊 Study Speed Settings</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.5;">
+          Used by Generate Plan to calculate how many chapters/questions to allocate per session.
+        </div>
+        <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">
+          📖 Reading Speed <span style="color:#64748b;font-weight:400;text-transform:none;">(pages / hour)</span>
+        </label>
+        <input type="number" id="settingReadSpeed" value="${studyData.readingSpeed || 25}" min="5" max="100"
+          style="width:100%;margin-bottom:4px;">
+        <div style="font-size:11px;color:#475569;margin-bottom:12px;">Medical students avg 20–30 p/h. Adjust to your pace.</div>
+
+        <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">
+          🧪 Qbank Speed <span style="color:#64748b;font-weight:400;text-transform:none;">(questions / hour)</span>
+        </label>
+        <input type="number" id="settingQbankSpeed" value="${studyData.qbankSpeed || 30}" min="5" max="120"
+          style="width:100%;margin-bottom:4px;">
+        <div style="font-size:11px;color:#475569;">Typical range: 25–45 Q/h depending on difficulty.</div>
+      </div>
+
       <button onclick="saveSettings()" style="width:100%;background:#16a34a;">Save Settings ✓</button>
     </div>
 
@@ -166,9 +187,11 @@ function renderProfile() {
 }
 
 function saveSettings() {
-  studyData.userName    = document.getElementById("settingName").value.trim();
-  studyData.examDate    = document.getElementById("settingExamDate").value;
+  studyData.userName     = document.getElementById("settingName").value.trim();
+  studyData.examDate     = document.getElementById("settingExamDate").value;
   studyData.defaultHours = parseFloat(document.getElementById("settingHours").value) || 8;
+  studyData.readingSpeed = parseInt(document.getElementById("settingReadSpeed").value) || 25;
+  studyData.qbankSpeed   = parseInt(document.getElementById("settingQbankSpeed").value) || 30;
   saveData();
   alert("Settings saved ✓");
   renderProfile();
@@ -203,7 +226,7 @@ async function confirmReset() {
 
   // Wipe everything — keep only name and start fresh
   studyData = {
-    version: 4,
+    version: 5,
     setupComplete: false,
     userName: name,
     subjects: {},
@@ -213,6 +236,8 @@ async function confirmReset() {
     startDate: today(),
     examDate: null,
     defaultHours: 8,
+    readingSpeed: 25,
+    qbankSpeed: 30,
     updatedAt: new Date().toISOString()
   };
 

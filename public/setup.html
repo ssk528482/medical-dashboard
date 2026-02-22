@@ -84,11 +84,14 @@
 
     <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:12px;">
       <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">📋 Units &amp; Topics</div>
-      <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">
-        Format per line: <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit Name | Topic1, Topic2, Topic3</code><br>
-        Or just a unit with no topics yet: <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit Name</code>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.7;">
+        Format per line:<br>
+        <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit [Qs] | Chapter(start-end), Chapter(start-end)</code><br>
+        <span style="color:#8b5cf6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">[180]</code> = total Qs in unit (optional)</span><br>
+        <span style="color:#3b82f6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">(1-42)</code> = page range (optional)</span><br>
+        <span style="color:#64748b;">• Plain name with no pages/Qs also works</span>
       </div>
-      <textarea id="topicsInput" rows="7" placeholder="Upper Limb | Bones, Muscles, Nerves&#10;Lower Limb | Hip, Knee, Ankle&#10;Head &amp; Neck&#10;Thorax | Heart, Lungs&#10;Abdomen" style="font-family:monospace;font-size:12px;margin-bottom:0;"></textarea>
+      <textarea id="topicsInput" rows="7" placeholder="Upper Limb [180] | Bones(1-42), Muscles(43-67), Nerves(68-95)&#10;Lower Limb [160] | Hip Joint(1-30), Knee(31-55)&#10;Head &amp; Neck&#10;Thorax | Heart, Lungs&#10;Abdomen" style="font-family:monospace;font-size:12px;margin-bottom:0;"></textarea>
     </div>
 
     <button onclick="addSubjectFromSetup()" style="width:100%;background:#8b5cf6;">+ Add Subject</button>
@@ -165,15 +168,9 @@ function addSubjectFromSetup() {
   if (!name)     { alert("Enter subject name."); return; }
   if (!rawUnits) { alert("Enter at least one unit."); return; }
 
-  // Parse "Unit Name | Topic1, Topic2, Topic3" format (matching bulk import)
-  let units = rawUnits.split("\n").filter(t => t.trim()).map(line => {
-    let [unitPart, topicsPart] = line.split("|").map(s => s.trim());
-    let unit = makeUnitObj(unitPart || line.trim());
-    if (topicsPart) {
-      unit.chapters = topicsPart.split(",").map(t => t.trim()).filter(Boolean).map(t => makeChapterObj(t));
-    }
-    return unit;
-  });
+  // Use smart parser: supports "Unit [Qs] | Chapter(start-end), ..."
+  let units = parseUnitsText(rawUnits);
+  if (!units.length) { alert("Could not parse any units."); return; }
 
   _setupSubjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   document.getElementById("subjectName").value = "";
@@ -192,9 +189,14 @@ function renderSetupPreview() {
   list.innerHTML = keys.map(name => {
     let s = _setupSubjects[name];
     let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
+    let totalPages  = s.units.reduce((acc, u) => acc + u.chapters.reduce((a, ch) => a + (ch.pageCount||0), 0), 0);
+    let totalQs     = s.units.reduce((acc, u) => acc + (u.questionCount||0), 0);
+    let meta = `${s.units.length} units${totalTopics ? ", " + totalTopics + " chapters" : ""}`;
+    if (totalPages > 0) meta += `, ${totalPages}p`;
+    if (totalQs > 0)    meta += `, ${totalQs}Q`;
     return `
       <div class="preview-item">
-        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.units.length} units${totalTopics ? ", " + totalTopics + " topics" : ""})</span></span>
+        <span>${name} <span style="color:#64748b;font-size:11px;">(${meta})</span></span>
         <div style="display:flex;gap:6px;align-items:center;">
           <span class="badge" style="background:${sizeColors[s.size]}">${s.size}</span>
           <span onclick="removeSetupSubject('${name}')" style="cursor:pointer;color:#ef4444;font-size:18px;line-height:1;">×</span>

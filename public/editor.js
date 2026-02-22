@@ -44,7 +44,8 @@ function renderEditor() {
       addUnitRow.className = "add-topic-row";
       addUnitRow.style.marginTop = "12px";
       addUnitRow.innerHTML = `
-        <input id="addUnit-${esc(subjectName)}" placeholder="New Unit Name">
+        <input id="addUnit-${esc(subjectName)}" placeholder="New Unit Name" style="flex:2;">
+        <input id="addUnitQ-${esc(subjectName)}" type="number" placeholder="Total Qs" min="0" style="width:80px;flex:none;" title="Total questions in this unit (for plan estimation)">
         <button onclick="addUnit('${esc(subjectName)}')">+ Unit</button>
       `;
       subjectEl.appendChild(addUnitRow);
@@ -78,12 +79,14 @@ function renderEditor() {
               <button class="collapse-btn" onclick="toggleUnitCollapse(event,'${esc(subjectName)}',${ui})" style="font-size:12px;padding:2px 5px;">${isUnitCollapsed ? "▶" : "▼"}</button>
               <span class="unit-title">${unit.name}</span>
               <span style="font-size:10px;color:#475569;flex-shrink:0;">${unitPct}% (${unitDone}/${unit.chapters.length})</span>
+              ${unit.questionCount > 0 ? `<span style="font-size:10px;color:#8b5cf6;flex-shrink:0;">· ${unit.questionCount}Q</span>` : ""}
             </div>
             <div style="display:flex;align-items:center;gap:4px;">
               <span class="pill completed ${unitAllDone ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="toggleUnitCompleted('${esc(subjectName)}',${ui})" title="Mark all chapters complete">✓</span>
               <span class="pill rev ${unitAllR1 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},1)" title="Mark all chapters R1">R1</span>
               <span class="pill rev ${unitAllR2 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},2)" title="Mark all chapters R2">R2</span>
               <span class="pill rev ${unitAllR3 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},3)" title="Mark all chapters R3">R3</span>
+              <button onclick="editUnitQuestionCount('${esc(subjectName)}',${ui})" style="background:transparent;color:#8b5cf6;padding:3px 7px;font-size:11px;margin:0;border:1px solid #4c1d95;border-radius:6px;" title="Set total questions">Qs</button>
               <button onclick="deleteUnit('${esc(subjectName)}',${ui})" style="background:transparent;color:#ef4444;padding:3px 7px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:6px;">✕</button>
             </div>
           </div>
@@ -95,9 +98,11 @@ function renderEditor() {
         if (!isUnitCollapsed) {
           // Add chapter row
           let addChRow = document.createElement("div");
-          addChRow.style.cssText = "display:flex;gap:6px;margin:6px 0 4px;";
+          addChRow.style.cssText = "display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap;";
           addChRow.innerHTML = `
-            <input id="addCh-${esc(subjectName)}-${ui}" placeholder="New Chapter" style="flex:1;font-size:12px;padding:6px 8px;">
+            <input id="addCh-${esc(subjectName)}-${ui}" placeholder="Chapter Name" style="flex:2;min-width:100px;font-size:12px;padding:6px 8px;">
+            <input id="addChS-${esc(subjectName)}-${ui}" type="number" placeholder="Pg start" min="1" style="width:68px;flex:none;font-size:12px;padding:6px 8px;" title="Start page">
+            <input id="addChE-${esc(subjectName)}-${ui}" type="number" placeholder="Pg end" min="1" style="width:68px;flex:none;font-size:12px;padding:6px 8px;" title="End page">
             <button onclick="addChapter('${esc(subjectName)}',${ui})" style="font-size:12px;padding:6px 10px;margin:0;white-space:nowrap;">+ Ch</button>
           `;
           unitEl.appendChild(addChRow);
@@ -119,9 +124,17 @@ function renderEditor() {
             let r3Active   = ch.revisionIndex >= 3;
             let diff = ch.difficulty || "medium";
             let diffColors = { easy: "#10b981", medium: "#eab308", hard: "#ef4444" };
+            let pageInfo = ch.pageCount > 0
+              ? `<span style="font-size:10px;color:#475569;margin-left:4px;">pg ${ch.startPage}–${ch.endPage} (${ch.pageCount}p)</span>`
+              : "";
+            let phaseTag = "";
+            if (r3Active)      phaseTag = `<span style="font-size:9px;background:#7c3aed;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">R3</span>`;
+            else if (r2Active) phaseTag = `<span style="font-size:9px;background:#d97706;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">R2</span>`;
+            else if (r1Active) phaseTag = `<span style="font-size:9px;background:#1d4ed8;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">R1</span>`;
+            else if (compActive) phaseTag = `<span style="font-size:9px;background:#15803d;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">Done</span>`;
             chRow.innerHTML = `
               <div class="topic-left" style="flex:1;min-width:0;">
-                <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>
+                <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>${pageInfo}${phaseTag}
               </div>
               <div class="topic-actions" style="gap:3px;">
                 <select onchange="setChapterDifficulty('${esc(subjectName)}',${ui},${ci},this.value)"
@@ -194,10 +207,14 @@ function deleteSubject(name) {
 
 function addUnit(subjectName) {
   let input = document.getElementById(`addUnit-${subjectName}`);
+  let qInput = document.getElementById(`addUnitQ-${subjectName}`);
   let name = input?.value.trim();
   if (!name) return;
-  studyData.subjects[subjectName].units.push(makeUnitObj(name));
+  let qCount = parseInt(qInput?.value) || 0;
+  let unit = makeUnitObj(name, qCount);
+  studyData.subjects[subjectName].units.push(unit);
   input.value = "";
+  if (qInput) qInput.value = "";
   saveData(); renderEditor();
 }
 
@@ -205,6 +222,15 @@ function deleteUnit(subjectName, ui) {
   if (!confirm("Delete this unit and all its chapters?")) return;
   studyData.subjects[subjectName].units.splice(ui, 1);
   fixPointer(subjectName);
+  saveData(); renderEditor();
+}
+
+function editUnitQuestionCount(subjectName, ui) {
+  let unit = studyData.subjects[subjectName].units[ui];
+  let current = unit.questionCount || 0;
+  let val = prompt(`Total questions in "${unit.name}":`, current);
+  if (val === null) return;
+  unit.questionCount = parseInt(val) || 0;
   saveData(); renderEditor();
 }
 
@@ -305,11 +331,17 @@ function markUnitRevised(subjectName, ui, level) {
 // ─── Chapter Actions ──────────────────────────────────────────
 
 function addChapter(subjectName, ui) {
-  let input = document.getElementById(`addCh-${subjectName}-${ui}`);
+  let input  = document.getElementById(`addCh-${subjectName}-${ui}`);
+  let sInput = document.getElementById(`addChS-${subjectName}-${ui}`);
+  let eInput = document.getElementById(`addChE-${subjectName}-${ui}`);
   let name = input?.value.trim();
   if (!name) return;
-  studyData.subjects[subjectName].units[ui].chapters.push(makeChapterObj(name));
+  let startPage = parseInt(sInput?.value) || 0;
+  let endPage   = parseInt(eInput?.value) || 0;
+  studyData.subjects[subjectName].units[ui].chapters.push(makeChapterObj(name, startPage, endPage));
   input.value = "";
+  if (sInput) sInput.value = "";
+  if (eInput) eInput.value = "";
   saveData(); renderEditor();
 }
 
@@ -457,14 +489,29 @@ function renderQbank() {
                 ${uAcc !== null ? `<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;color:white;
                   background:${uAcc>=75?"#16a34a":uAcc>=50?"#eab308":"#ef4444"};">${uAcc}%</span>` : ""}
               </div>
-              <div style="font-size:11px;color:#64748b;margin-top:4px;">${uTotal} questions • ${uCorrect} correct</div>
+              <div style="font-size:11px;color:#64748b;margin-top:4px;">${uTotal} questions • ${uCorrect} correct
+                ${unit.questionCount > 0 ? ` • <span style="color:#8b5cf6;">📚 ${unit.questionCount} total in syllabus</span>` : ""}
+              </div>
+              ${unit.questionCount > 0 ? (() => {
+                let remaining = Math.max(0, unit.questionCount - uTotal);
+                let pct = Math.min(100, Math.round(uTotal / unit.questionCount * 100));
+                return `<div style="font-size:11px;color:#64748b;margin-top:2px;">
+                  ${pct}% done · ${remaining} Qs remaining to attempt
+                  <div class="stat-bar" style="margin-top:4px;height:4px;"><div class="stat-fill ${pct>=75?"green":pct>=40?"yellow":"red"}" style="width:${pct}%"></div></div>
+                </div>`;
+              })() : ""}
             </div>
-            <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;"
-              onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <span class="pill completed ${unit.qbankDone ? "active" : ""}" style="cursor:pointer;flex-shrink:0;"
+                onclick="toggleUnitQbankDone('${esc(subjectName)}',${ui},${!unit.qbankDone})">✓</span>
+              <button onclick="editUnitQuestionCount('${esc(subjectName)}',${ui})"
+                style="padding:4px 8px;font-size:11px;margin:0;background:#4c1d95;border-radius:6px;"
+                title="Set total Qs in this unit">${unit.questionCount > 0 ? unit.questionCount + "Q" : "Set Qs"}</button>
+            </div>
           </div>
           <div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap;">
-            <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Total Qs" min="0"
-              style="width:90px;font-size:12px;padding:6px 8px;">
+            <input id="qb-total-${subjectName}-${ui}" type="number" placeholder="Total Qs done" min="0"
+              style="width:110px;font-size:12px;padding:6px 8px;">
             <input id="qb-correct-${subjectName}-${ui}" type="number" placeholder="Correct" min="0"
               style="width:90px;font-size:12px;padding:6px 8px;">
             <button onclick="logUnitQbank('${esc(subjectName)}',${ui})"
@@ -583,15 +630,9 @@ function bulkAddSubject() {
   if (!name) { alert("Enter subject name."); return; }
   if (!rawUnits) { alert("Enter at least one unit."); return; }
 
-  // Parse "Unit Name | Topic1, Topic2" format
-  let units = rawUnits.split("\n").filter(t => t.trim()).map(line => {
-    let [unitPart, topicsPart] = line.split("|").map(s => s.trim());
-    let unit = makeUnitObj(unitPart || line.trim());
-    if (topicsPart) {
-      unit.chapters = topicsPart.split(",").map(t => t.trim()).filter(Boolean).map(t => makeChapterObj(t));
-    }
-    return unit;
-  });
+  // Use smart parser: supports "Unit [Qs] | Chapter(start-end), ..."
+  let units = parseUnitsText(rawUnits);
+  if (!units.length) { alert("Could not parse any units."); return; }
 
   _bulkSubjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   document.getElementById("bulkSubjectName").value = "";
@@ -613,9 +654,14 @@ function _renderBulkPreview() {
   list.innerHTML = keys.map(name => {
     let s = _bulkSubjects[name];
     let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
+    let totalPages  = s.units.reduce((acc, u) => acc + u.chapters.reduce((a, ch) => a + (ch.pageCount||0), 0), 0);
+    let totalQs     = s.units.reduce((acc, u) => acc + (u.questionCount||0), 0);
+    let meta = `${s.units.length} units, ${totalTopics} chapters`;
+    if (totalPages > 0) meta += `, ${totalPages} pages`;
+    if (totalQs > 0)    meta += `, ${totalQs} Qs`;
     return `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;font-size:13px;">
-        <span>${name} <span style="color:#64748b;font-size:11px;">(${s.units.length} units, ${totalTopics} topics)</span></span>
+        <span>${name} <span style="color:#64748b;font-size:11px;">(${meta})</span></span>
         <div style="display:flex;gap:6px;align-items:center;">
           <span style="background:${sizeColors[s.size]};color:white;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;">${s.size}</span>
           <span onclick="bulkRemoveSubject('${esc(name)}')" style="color:#ef4444;cursor:pointer;font-size:18px;line-height:1;">×</span>

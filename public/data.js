@@ -1,19 +1,22 @@
-const DATA_VERSION = 4;
+const DATA_VERSION = 5;
 
 let studyData = JSON.parse(localStorage.getItem("studyData")) || {};
 
 // ─── Object Factories ─────────────────────────────────────────
-function makeUnitObj(name) {
+function makeUnitObj(name, questionCount) {
   return {
     name,
     collapsed: false,
     qbankStats: { total: 0, correct: 0 },
     qbankDone: false,
+    questionCount: questionCount || 0,  // total Qs in this unit (for plan estimation)
     chapters: []
   };
 }
 
-function makeChapterObj(name) {
+function makeChapterObj(name, startPage, endPage) {
+  let sp = parseInt(startPage) || 0;
+  let ep = parseInt(endPage)   || 0;
   return {
     name,
     status: "not-started",
@@ -24,12 +27,53 @@ function makeChapterObj(name) {
     difficultyFactor: 2.5,
     difficulty: "medium",
     missedRevisions: 0,
-    lastReviewedOn: null
+    lastReviewedOn: null,
+    startPage: sp,
+    endPage:   ep,
+    pageCount: (sp > 0 && ep >= sp) ? (ep - sp + 1) : 0
   };
 }
 
-// Alias so setup.html / bulk import still work
-function makeTopicObj(name) { return makeUnitObj(name); }
+// ─── Smart Line Parser ────────────────────────────────────────
+// Parses: "Upper Limb [180] | Bones(1-42), Muscles(43-67), Nerves(68-95)"
+// Also:   "Lower Limb | Hip Joint(1-30), Knee(31-55)"   (no question count)
+// Also:   "Head & Neck"                                   (no topics, no Qs)
+function parseUnitLine(line) {
+  line = line.trim();
+  if (!line) return null;
+
+  let [unitRaw, topicsPart] = line.split("|").map(s => s ? s.trim() : "");
+
+  // Extract optional [questionCount] from unit name
+  let questionCount = 0;
+  let unitName = unitRaw.replace(/\[(\d+)\]/, (_, n) => { questionCount = parseInt(n); return ""; }).trim();
+
+  let unit = makeUnitObj(unitName, questionCount);
+
+  if (topicsPart) {
+    unit.chapters = topicsPart.split(",").map(raw => {
+      raw = raw.trim();
+      if (!raw) return null;
+      // Match "Chapter Name(startPage-endPage)" or "Chapter Name(page)"
+      let pageMatch = raw.match(/^(.+?)\((\d+)(?:-(\d+))?\)\s*$/);
+      if (pageMatch) {
+        let name  = pageMatch[1].trim();
+        let start = parseInt(pageMatch[2]);
+        let end   = pageMatch[3] ? parseInt(pageMatch[3]) : start;
+        return makeChapterObj(name, start, end);
+      }
+      // No page range — plain chapter name
+      return makeChapterObj(raw);
+    }).filter(Boolean);
+  }
+
+  return unit;
+}
+
+// Convenience: parse many lines → array of unit objects
+function parseUnitsText(text) {
+  return text.split("\n").map(l => parseUnitLine(l)).filter(Boolean);
+}
 
 // ─── Migrations ───────────────────────────────────────────────
 function migrateData(data) {
@@ -95,6 +139,23 @@ function migrateData(data) {
     data.version = 4;
   }
 
+  // v4 → v5: add pageCount/startPage/endPage to chapters, questionCount to units
+  if (!data.version || data.version < 5) {
+    Object.values(data.subjects || {}).forEach(subject => {
+      (subject.units || []).forEach(unit => {
+        if (unit.questionCount === undefined) unit.questionCount = 0;
+        (unit.chapters || []).forEach(ch => {
+          if (ch.startPage  === undefined) ch.startPage  = 0;
+          if (ch.endPage    === undefined) ch.endPage    = 0;
+          if (ch.pageCount  === undefined) ch.pageCount  = 0;
+        });
+      });
+    });
+    if (!data.readingSpeed) data.readingSpeed = 25;
+    if (!data.qbankSpeed)   data.qbankSpeed   = 30;
+    data.version = 5;
+  }
+
   return data;
 }
 
@@ -110,6 +171,8 @@ if (!studyData.uiState.unitCollapsed)   studyData.uiState.unitCollapsed = {};
 if (!studyData.examDate)        studyData.examDate = "2026-12-01";
 if (!studyData.startDate)       studyData.startDate = today();
 if (!studyData.version)         studyData.version = DATA_VERSION;
+if (!studyData.readingSpeed)    studyData.readingSpeed = 25;  // pages per hour
+if (!studyData.qbankSpeed)      studyData.qbankSpeed   = 30;  // questions per hour
 
 // ─── Save ─────────────────────────────────────────────────────
 async function saveData() {

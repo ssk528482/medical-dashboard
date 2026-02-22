@@ -81,11 +81,14 @@
 
       <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:10px;">
         <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">📋 Units & Topics</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.5;">
-          Format per line: <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit Name | Topic1, Topic2, Topic3</code><br>
-          Or just unit name with no topics: <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit Name</code>
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.7;">
+          Format per line:<br>
+          <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit [Qs] | Chapter(start-end), Chapter(start-end)</code><br>
+          <span style="color:#8b5cf6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">[180]</code> = total questions in unit (optional)</span><br>
+          <span style="color:#3b82f6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">(1-42)</code> = page range (optional)</span><br>
+          <span style="color:#64748b;">• Plain name with no pages/Qs also works</span>
         </div>
-        <textarea id="bulkTopicsInput" rows="8" placeholder="Unit 1 | Topic A, Topic B, Topic C&#10;Unit 2 | Topic D, Topic E&#10;Unit 3" style="width:100%;margin-bottom:0;font-family:monospace;font-size:12px;"></textarea>
+        <textarea id="bulkTopicsInput" rows="8" placeholder="Upper Limb [180] | Bones(1-42), Muscles(43-67), Nerves(68-95)&#10;Lower Limb [160] | Hip Joint(1-30), Knee(31-55), Ankle(56-80)&#10;Head &amp; Neck [220] | Scalp(1-18), Face(19-40)&#10;Thorax | Heart, Lungs&#10;Abdomen" style="width:100%;margin-bottom:0;font-family:monospace;font-size:12px;"></textarea>
       </div>
 
       <button onclick="bulkAddSubject()" style="width:100%;background:#8b5cf6;">+ Add Subject</button>
