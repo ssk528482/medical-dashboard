@@ -563,7 +563,14 @@ function renderSavedPlan() {
   let examAlert = daysLeft <= 30
     ? `<div style="color:#f59e0b;font-size:12px;margin-top:4px;">🔔 ${daysLeft} days to exam — revision priority elevated</div>` : "";
 
-  // Exam countdown mode
+  // ── If we saved the full rendered HTML, just replay it exactly ──
+  if (plan.renderedHTML) {
+    planEl.innerHTML = plan.renderedHTML;
+    document.getElementById("generateButton").disabled = true;
+    return;
+  }
+
+  // ── Exam countdown mode (legacy fallback) ──
   if (plan.examCountdownMode) {
     planEl.innerHTML = `
       <div style="background:#450a0a;border:1px solid #ef4444;border-radius:10px;padding:10px;margin-bottom:10px;">
@@ -579,11 +586,10 @@ function renderSavedPlan() {
     return;
   }
 
-  // Normal mode — use saved values (studyTime/qbankTime/revisionTime/nextText)
-  let subjectObj = studyData.subjects[plan.study.subject];
+  // ── Legacy fallback for old plans without renderedHTML ──
+  let subjectObj = studyData.subjects[plan.study?.subject];
   if (!subjectObj) { planEl.innerHTML = "<strong>Plan subject was deleted.</strong>"; return; }
 
-  // Use saved nextText if available, otherwise recalculate from current pointer
   let nextText = plan.nextText;
   if (!nextText) {
     let ptr = subjectObj.pointer || { unit: 0, chapter: 0 };
