@@ -144,6 +144,7 @@ function migrateData(data) {
     Object.values(data.subjects || {}).forEach(subject => {
       (subject.units || []).forEach(unit => {
         if (unit.questionCount === undefined) unit.questionCount = 0;
+        if (unit.qbankLocked   === undefined) unit.qbankLocked   = false;
         (unit.chapters || []).forEach(ch => {
           if (ch.startPage  === undefined) ch.startPage  = 0;
           if (ch.endPage    === undefined) ch.endPage    = 0;
