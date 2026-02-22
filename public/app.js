@@ -614,16 +614,11 @@ function renderSavedPlan() {
   let examAlert = daysLeft <= 30
     ? `<div style="color:#f59e0b;font-size:12px;margin-top:4px;">🔔 ${daysLeft} days to exam — revision priority elevated</div>` : "";
 
-  // ── Replay saved HTML (with stopwatch slots) ──
+  // ── Replay saved HTML ──
   if (plan.renderedHTML) {
     planEl.innerHTML = plan.renderedHTML;
     document.getElementById("generateButton").disabled = true;
-    // Re-inject stopwatches into restored slots
-    if (typeof swInject === "function") {
-      swInject("study",    parseFloat(plan.studyTime    || 0));
-      swInject("qbank",    parseFloat(plan.qbankTime    || 0));
-      swInject("revision", parseFloat(plan.revisionTime || 0));
-    }
+    _swAttach(plan);
     return;
   }
 
@@ -659,6 +654,54 @@ function renderSavedPlan() {
       ${burnoutWarn}${examAlert}
     </div>`;
   document.getElementById("generateButton").disabled = true;
+  _swAttach(plan);
+}
+
+// Attach stopwatches after any plan HTML is rendered.
+// If sw-slot-* divs exist (new HTML) → inject there.
+// If not (old saved HTML) → append stopwatch blocks directly to planOutput.
+function _swAttach(plan) {
+  if (typeof swInject !== "function") return;
+
+  let types = [
+    { key: "study",    hrs: parseFloat(plan.studyTime    || 0) },
+    { key: "qbank",    hrs: parseFloat(plan.qbankTime    || 0) },
+    { key: "revision", hrs: parseFloat(plan.revisionTime || 0) }
+  ];
+
+  // Ensure stopwatches object exists with correct targets
+  if (!plan.stopwatches) {
+    plan.stopwatches = {};
+    types.forEach(t => {
+      plan.stopwatches[t.key] = {
+        accumulated: 0, startedAt: null, running: false,
+        targetSecs: Math.round(t.hrs * 3600)
+      };
+    });
+    saveData();
+  }
+
+  let planEl = document.getElementById("planOutput");
+
+  types.forEach(({ key, hrs }) => {
+    // Try slot first (new HTML)
+    let slot = document.getElementById(`sw-slot-${key}`);
+    if (slot) {
+      swInject(key, hrs);
+      return;
+    }
+    // No slot — append a labelled block directly
+    let labels = { study:"📖 Study", qbank:"🧪 Qbank", revision:"🔁 Revision" };
+    let wrapper = document.createElement("div");
+    wrapper.style.cssText = "margin-top:8px;";
+    wrapper.innerHTML = `
+      <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:8px 12px;border:1px solid #1e293b;border-bottom:none;">
+        <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">${labels[key]}</span>
+      </div>
+      <div id="sw-slot-${key}"></div>`;
+    planEl.appendChild(wrapper);
+    swInject(key, hrs);
+  });
 }
 
 function renderHeatmap() {
