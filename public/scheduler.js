@@ -291,28 +291,9 @@ function generatePlan() {
   let qbankHtml    = qbankLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
   let revisionHtml = revLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
 
-  document.getElementById("planOutput").innerHTML = `
-    <div style="font-size:13px;line-height:1.6;">
-      <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #1e293b;">
-        <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
-          📖 STUDY — ${studyTime} hrs total${pagesBudget > 0 ? " · ~" + pagesBudget + " pages" : ""}
-        </div>
-        ${studyHtml}
-      </div>
-      <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #1e293b;">
-        <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
-          🧪 QBANK — ${qbankTime} hrs · ~${qTotal} questions
-        </div>
-        ${qbankHtml}
-      </div>
-      <div style="background:#0f172a;border-radius:10px;padding:10px;border:1px solid #1e293b;">
-        <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
-          🔁 REVISION — ${revisionTime} hrs · ${revisionDue.length} due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}
-        </div>
-        ${revisionHtml}
-      </div>
-      ${burnoutWarn}${examAlert}
-    </div>`;
+  let _planHTML = `<div style="font-size:13px;line-height:1.6;"><div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #1e293b;"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">📖 STUDY — ${studyTime} hrs total${pagesBudget > 0 ? " · ~" + pagesBudget + " pages" : ""}</div>${studyHtml}</div><div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid #1e293b;"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">🧪 QBANK — ${qbankTime} hrs · ~${qTotal} questions</div>${qbankHtml}</div><div style="background:#0f172a;border-radius:10px;padding:10px;border:1px solid #1e293b;"><div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">🔁 REVISION — ${revisionTime} hrs · ${revisionDue.length} due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}</div>${revisionHtml}</div>${burnoutWarn}${examAlert}</div>`;
+
+  document.getElementById("planOutput").innerHTML = _planHTML;
 
   studyData.dailyPlan = {
     date: today(),
@@ -322,7 +303,8 @@ function generatePlan() {
     hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
     studyTime, qbankTime, revisionTime,
     burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
-    completed: false
+    completed: false,
+    renderedHTML: _planHTML
   };
 
   saveData();
