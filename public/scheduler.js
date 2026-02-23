@@ -391,7 +391,7 @@ async function _appendFlashcardsPlanBlock() {
               letter-spacing:.06em;margin-bottom:4px;">🃏 FLASHCARDS</div>
             <div style="font-size:13px;color:#10b981;font-weight:600;">✓ No cards due today</div>
           </div>
-          <a href="flashcards.html?tab=browse" style="background:#1e293b;color:#64748b;
+          <a href="browse.html" style="background:#1e293b;color:#64748b;
             padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;
             text-decoration:none;white-space:nowrap;flex-shrink:0;">Browse →</a>
         </div>`;
@@ -419,7 +419,7 @@ async function _appendFlashcardsPlanBlock() {
         </div>
         <div style="padding:8px;background:#0f172a;border-radius:0 0 10px 10px;
           border:1px solid #1e293b;border-top:none;">
-          <a href="flashcards.html?tab=review" style="display:block;text-align:center;
+          <a href="review.html" style="display:block;text-align:center;
             background:linear-gradient(135deg,#1e3a5f,#1e3060);color:#93c5fd;
             padding:10px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
             Start Review Session →
@@ -483,7 +483,7 @@ async function _enrichRevisionBlock() {
         let label = cardData.due > 0 ? `${cardData.due} cards due` : `${cardData.total} cards`;
         let sub   = encodeURIComponent(key.split("||")[0]);
         let tab   = cardData.due > 0 ? "review" : "browse";
-        parts.push(`<a href="flashcards.html?tab=${tab}&subject=${sub}" style="font-size:10px;color:${color};text-decoration:none;margin-left:4px;" title="Open flashcards">🃏 ${label}</a>`);
+        parts.push(`<a href="${tab === 'review' ? 'review' : 'browse'}.html?subject=${sub}" style="font-size:10px;color:${color};text-decoration:none;margin-left:4px;" title="Open flashcards">🃏 ${label}</a>`);
       }
 
       span.innerHTML = parts.join("");

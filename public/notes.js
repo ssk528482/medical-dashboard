@@ -919,7 +919,7 @@ function goToCardsWithNote() {
   } catch(e) {}
 
   closeN2CModal();
-  window.location.href = "flashcards.html?tab=create&n2c=1&subject=" +
+  window.location.href = "create.html?n2c=1&subject=" +
     encodeURIComponent(subject) + "&unit=" + encodeURIComponent(unit) +
     "&chapter=" + encodeURIComponent(chapter);
 }

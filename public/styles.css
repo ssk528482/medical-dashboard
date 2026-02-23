@@ -102,8 +102,9 @@ body > *:not(.side-nav) {
   overflow: hidden;
   white-space: nowrap;
   flex-shrink: 0;
+  min-height: 50px;
 }
-.side-nav-brand-icon { font-size: 20px; flex-shrink: 0; }
+.side-nav-brand-icon { font-size: 20px; flex-shrink: 0; width: 24px; display: flex; align-items: center; justify-content: center; }
 .side-nav-brand-text {
   font-size: 13px; font-weight: 800;
   color: #f0f6ff; letter-spacing: -0.01em;
@@ -210,9 +211,15 @@ body > *:not(.side-nav) {
   border-radius: 10px;
   padding: 1px 5px;
   min-width: 16px;
+  max-width: 34px;
   text-align: center;
   margin-left: auto;
   flex-shrink: 0;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-self: center;
 }
 .side-nav.collapsed .side-nav-review-badge { display: none; }
 

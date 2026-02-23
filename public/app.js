@@ -186,26 +186,59 @@ function renderRevisionSection() {
   let container = document.getElementById("subjectsContainer");
   if (!container) return;
 
+  const SHOW_LIMIT = 5;
+  let overdueCount = due.filter(r => r.isOverdue).length;
+
   let revDiv = document.createElement("div");
   revDiv.className = "card";
-  revDiv.style.borderColor = "#ef4444";
-  revDiv.innerHTML = `<div class="section-title">🔁 Revisions Due (${due.length})</div>`;
+  revDiv.style.borderColor = overdueCount > 0 ? "#ef4444" : "#f59e0b";
+  revDiv.id = "revisionSectionCard";
 
-  due.forEach(item => {
+  // Header row with count + collapse toggle
+  revDiv.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="section-title" style="margin-bottom:0;">
+        🔁 Revisions Due
+        <span style="font-size:12px;font-weight:700;background:${overdueCount > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'};color:${overdueCount > 0 ? '#ef4444' : '#f59e0b'};padding:2px 8px;border-radius:10px;margin-left:6px;">${due.length}</span>
+        ${overdueCount > 0 ? `<span style="font-size:11px;color:#ef4444;margin-left:6px;">(${overdueCount} overdue)</span>` : ''}
+      </div>
+      <a href="planner.html" style="font-size:11px;color:#3b82f6;text-decoration:none;flex-shrink:0;">View in Planner →</a>
+    </div>`;
+
+  // Scrollable list container — shows SHOW_LIMIT items, rest hidden
+  let listWrap = document.createElement("div");
+  listWrap.id = "revListWrap";
+  listWrap.style.cssText = "max-height:270px;overflow-y:auto;border-radius:8px;border:1px solid #1e3350;";
+
+  due.forEach((item, i) => {
     let row = document.createElement("div");
-    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid #334155;gap:8px;";
+    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:8px;border-top:${i===0?'none':'1px solid #1e3350'};${item.isOverdue ? 'background:rgba(239,68,68,0.04);' : ''}`;
+    let overdueTag = item.isOverdue
+      ? `<span style="color:#ef4444;font-size:10px;font-weight:700;background:rgba(239,68,68,0.12);padding:1px 5px;border-radius:4px;">${item.overdueDays}d overdue</span>`
+      : "";
     row.innerHTML = `
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:600;">${item.subjectName}</div>
-        <div style="font-size:11px;color:#94a3b8;">${item.unitName} → ${item.topicName}
-          ${item.isOverdue ? `<span style="color:#ef4444;">(${item.overdueDays}d overdue)</span>` : ""}
+        <div style="font-size:12px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.subjectName}</div>
+        <div style="font-size:11px;color:#7a90b0;display:flex;align-items:center;gap:6px;margin-top:1px;">
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.unitName} → ${item.topicName}</span>
+          ${overdueTag}
         </div>
       </div>
-      <button style="font-size:12px;padding:5px 12px;margin:0;flex-shrink:0;"
+      <button style="font-size:11px;padding:4px 10px;margin:0;flex-shrink:0;background:#1e3a5f;color:#93c5fd;border:1px solid #2a4f80;border-radius:6px;min-height:unset;"
         onclick="markRevisionDone('${item.subjectName}',${item.unitIndex},${item.chapterIndex}); renderSubjects();">Done</button>
     `;
-    revDiv.appendChild(row);
+    listWrap.appendChild(row);
   });
+
+  revDiv.appendChild(listWrap);
+
+  // Footer: count + link to planner if many
+  if (due.length > SHOW_LIMIT) {
+    let footer = document.createElement("div");
+    footer.style.cssText = "text-align:center;padding:8px 0 0;font-size:11px;color:#64748b;";
+    footer.innerHTML = `Scroll to see all ${due.length} chapters · <a href="planner.html" style="color:#3b82f6;text-decoration:none;">Open Planner →</a>`;
+    revDiv.appendChild(footer);
+  }
 
   container.appendChild(revDiv);
 }
@@ -788,7 +821,7 @@ function renderCardsDueWidget(container) {
             ${count === 1 ? "card due" : "cards due"} today
           </div>
         </div>
-        <a href="flashcards.html" style="background:#3b82f6;color:white;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">
+        <a href="browse.html" style="background:#3b82f6;color:white;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">
           ${count > 0 ? "Review →" : "Browse →"}
         </a>
       </div>`;
