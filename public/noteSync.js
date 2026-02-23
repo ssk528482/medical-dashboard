@@ -1,0 +1,285 @@
+// noteSync.js — Supabase CRUD for the notes table
+// Medical Study OS
+// Depends on: supabase.js (exposes supabaseClient), utils.js (today())
+// All functions return { data, error } shaped results.
+// -----------------------------------------------------------------
+
+// ── Internal helper ───────────────────────────────────────────────
+function _noteUserId() {
+  const sd = JSON.parse(localStorage.getItem('studyData') || '{}');
+  return sd.userId || localStorage.getItem('userId') || null;
+}
+
+// ── READ ──────────────────────────────────────────────────────────
+
+/**
+ * Fetch a single note for a specific chapter.
+ * Returns the most recently updated note if multiple exist (shouldn't happen
+ * under the one-note-per-chapter model, but defensive).
+ *
+ * @param {string} subject
+ * @param {string} unit
+ * @param {string} chapter
+ * @returns {Promise<{ data: Object|null, error: any }>}
+ */
+async function fetchNote(subject, unit, chapter) {
+  const userId = _noteUserId();
+  if (!userId) return { data: null, error: 'No user id' };
+
+  const { data, error } = await supabaseClient
+    .from('notes')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('subject', subject)
+    .eq('unit',    unit)
+    .eq('chapter', chapter)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();          // returns null (not error) when no row found
+
+  return { data, error };
+}
+
+/**
+ * Fetch all notes for a unit (all chapters in that unit).
+ * Ordered by chapter name alphabetically.
+ *
+ * @param {string} subject
+ * @param {string} unit
+ * @returns {Promise<{ data: Array, error: any }>}
+ */
+async function fetchUnitNotes(subject, unit) {
+  const userId = _noteUserId();
+  if (!userId) return { data: [], error: 'No user id' };
+
+  const { data, error } = await supabaseClient
+    .from('notes')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('subject', subject)
+    .eq('unit',    unit)
+    .order('chapter', { ascending: true });
+
+  return { data: data ?? [], error };
+}
+
+/**
+ * Fetch all notes for a subject (all units + chapters).
+ * Ordered by unit then chapter.
+ *
+ * @param {string} subject
+ * @returns {Promise<{ data: Array, error: any }>}
+ */
+async function fetchSubjectNotes(subject) {
+  const userId = _noteUserId();
+  if (!userId) return { data: [], error: 'No user id' };
+
+  const { data, error } = await supabaseClient
+    .from('notes')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('subject', subject)
+    .order('unit',    { ascending: true })
+    .order('chapter', { ascending: true });
+
+  return { data: data ?? [], error };
+}
+
+/**
+ * Fetch all notes for the current user (used for sidebar tree + coverage stats).
+ * Returns lightweight records (no content) for fast loading.
+ *
+ * @returns {Promise<{ data: Array, error: any }>}
+ */
+async function fetchAllNotesMeta() {
+  const userId = _noteUserId();
+  if (!userId) return { data: [], error: 'No user id' };
+
+  const { data, error } = await supabaseClient
+    .from('notes')
+    .select('id, subject, unit, chapter, title, color, tags, updated_at')
+    .eq('user_id', userId)
+    .order('subject', { ascending: true })
+    .order('unit',    { ascending: true })
+    .order('chapter', { ascending: true });
+
+  return { data: data ?? [], error };
+}
+
+/**
+ * Full-text search across all notes (title + content).
+ * Uses Postgres tsvector index (defined in SQL schema).
+ *
+ * @param {string} query
+ * @returns {Promise<{ data: Array, error: any }>}
+ */
+async function searchNotes(query) {
+  const userId = _noteUserId();
+  if (!userId) return { data: [], error: 'No user id' };
+
+  const q = query.trim();
+  if (!q) return fetchAllNotesMeta();
+
+  // Supabase textSearch uses the GIN index we created on tsvector
+  const { data, error } = await supabaseClient
+    .from('notes')
+    .select('id, subject, unit, chapter, title, color, tags, updated_at, content')
+    .eq('user_id', userId)
+    .textSearch('content', q, { type: 'websearch', config: 'english' });
+
+  // Also do a simple ilike on title for partial matches
+  const { data: titleData } = await supabaseClient
+    .from('notes')
+    .select('id, subject, unit, chapter, title, color, tags, updated_at, content')
+    .eq('user_id', userId)
+    .ilike('title', `%${q}%`);
+
+  // Merge and deduplicate by id
+  const merged = [...(data ?? []), ...(titleData ?? [])];
+  const seen   = new Set();
+  const unique = merged.filter(n => {
+    if (seen.has(n.id)) return false;
+    seen.add(n.id);
+    return true;
+  });
+
+  return { data: unique, error };
+}
+
+/**
+ * Get a coverage map: { "Subject||Unit||Chapter": true } for notes that exist.
+ * Used by editor.js to show filled/outline note icons.
+ *
+ * @returns {Promise<{ data: Object, error: any }>}
+ */
+async function getNotesCoverageMap() {
+  const userId = _noteUserId();
+  if (!userId) return { data: {}, error: 'No user id' };
+
+  const { data, error } = await supabaseClient
+    .from('notes')
+    .select('subject, unit, chapter')
+    .eq('user_id', userId);
+
+  if (error || !data) return { data: {}, error };
+
+  const map = {};
+  data.forEach(n => {
+    map[`${n.subject}||${n.unit}||${n.chapter}`] = true;
+  });
+
+  return { data: map, error: null };
+}
+
+/**
+ * Get notes coverage % per subject (for analytics page).
+ * Returns: { "Pathology": { total: 12, withNote: 8, pct: 67 }, ... }
+ * Cross-references against studyData subjects from localStorage.
+ *
+ * @returns {Promise<{ data: Object, error: any }>}
+ */
+async function getNotesCoverageStats() {
+  const { data: coverageMap, error } = await getNotesCoverageMap();
+  if (error) return { data: {}, error };
+
+  const sd       = JSON.parse(localStorage.getItem('studyData') || '{}');
+  const subjects = sd.subjects || {};
+  const stats    = {};
+
+  Object.entries(subjects).forEach(([subjectName, subjectData]) => {
+    let total    = 0;
+    let withNote = 0;
+
+    (subjectData.units || []).forEach(unit => {
+      (unit.chapters || []).forEach(chapter => {
+        total++;
+        const key = `${subjectName}||${unit.name}||${chapter.name}`;
+        if (coverageMap[key]) withNote++;
+      });
+    });
+
+    stats[subjectName] = {
+      total,
+      withNote,
+      pct: total > 0 ? Math.round((withNote / total) * 100) : 0,
+    };
+  });
+
+  return { data: stats, error: null };
+}
+
+// ── WRITE ─────────────────────────────────────────────────────────
+
+/**
+ * Insert a new note or update an existing one.
+ * Pass `id` in noteObj to update; omit for insert.
+ *
+ * @param {Object} noteObj
+ * @returns {Promise<{ data: Object|null, error: any }>}
+ */
+async function saveNote(noteObj) {
+  const userId = _noteUserId();
+  if (!userId) return { data: null, error: 'No user id' };
+
+  const payload = {
+    user_id: userId,
+    subject: noteObj.subject || '',
+    unit:    noteObj.unit    || '',
+    chapter: noteObj.chapter || '',
+    title:   noteObj.title   || null,
+    content: noteObj.content || null,
+    images:  noteObj.images  || [],
+    color:   noteObj.color   || 'default',
+    tags:    noteObj.tags    || [],
+  };
+
+  if (noteObj.id) {
+    // Update existing
+    const { data, error } = await supabaseClient
+      .from('notes')
+      .update(payload)
+      .eq('id', noteObj.id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+    return { data, error };
+  } else {
+    // Insert new
+    const { data, error } = await supabaseClient
+      .from('notes')
+      .insert(payload)
+      .select()
+      .single();
+    return { data, error };
+  }
+}
+
+/**
+ * Delete a note by id.
+ * @param {string} noteId
+ * @returns {Promise<{ error: any }>}
+ */
+async function deleteNote(noteId) {
+  const userId = _noteUserId();
+  if (!userId) return { error: 'No user id' };
+
+  const { error } = await supabaseClient
+    .from('notes')
+    .delete()
+    .eq('id', noteId)
+    .eq('user_id', userId);
+
+  return { error };
+}
+
+// ── Exports (globals, matching existing codebase pattern) ─────────
+// Available everywhere after this script loads:
+//   fetchNote(subject, unit, chapter)
+//   fetchUnitNotes(subject, unit)
+//   fetchSubjectNotes(subject)
+//   fetchAllNotesMeta()
+//   searchNotes(query)
+//   getNotesCoverageMap()
+//   getNotesCoverageStats()
+//   saveNote(noteObj)
+//   deleteNote(noteId)

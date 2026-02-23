@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notes — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<h1>
+  <!-- Mobile: hamburger to open sidebar -->
+  <button id="btn-toggle-sidebar" onclick="toggleSidebar()"
+    style="background:transparent;border:none;color:var(--text-muted);font-size:20px;padding:0;margin:0;min-height:unset;display:none;">☰</button>
+  📝 Notes
+  <span id="notes-breadcrumb" style="font-size:12px;font-weight:500;color:var(--text-muted);margin-left:8px;"></span>
+  <span style="flex:1"></span>
+  <button id="btn-preview-toggle" onclick="togglePreview()"
+    style="font-size:12px;padding:5px 12px;margin:0;min-height:unset;background:var(--card);color:var(--text-muted);border:1px solid var(--border);">
+    Preview
+  </button>
+  <button id="btn-save-note" onclick="saveCurrentNote()"
+    style="font-size:12px;padding:5px 14px;margin:0 0 0 6px;min-height:unset;">
+    Save
+  </button>
+</h1>
+
+<div class="notes-layout" id="notes-layout">
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════════ -->
+  <div class="notes-sidebar" id="notes-sidebar">
+
+    <div class="notes-sidebar-search">
+      <input type="text" id="notes-search-input" placeholder="🔍 Search notes…"
+             oninput="handleNotesSearch(this.value)" />
+    </div>
+
+    <div class="notes-tree" id="notes-tree">
+      <!-- Populated by notes.js renderSidebar() -->
+      <div style="padding:20px 12px;font-size:12px;color:var(--text-dim);text-align:center;">
+        Loading…
+      </div>
+    </div>
+
+  </div><!-- /notes-sidebar -->
+
+  <!-- ══ EDITOR PANE ═══════════════════════════════════════════ -->
+  <div class="notes-editor-pane" id="notes-editor-pane">
+
+    <!-- Empty state (shown when nothing selected) -->
+    <div class="notes-empty" id="notes-empty-state">
+      <div class="notes-empty-icon">📝</div>
+      <div class="notes-empty-text">Select a chapter to open its note</div>
+      <div class="notes-empty-sub">Or click any chapter in the sidebar</div>
+    </div>
+
+    <!-- Editor (hidden until chapter selected) -->
+    <div id="notes-editor-wrap" style="display:none;flex-direction:column;flex:1;overflow:hidden;display:none;">
+
+      <!-- Toolbar: title + color + AI -->
+      <div class="notes-editor-toolbar">
+        <input type="text" id="note-title-input" placeholder="Note title…"
+               oninput="markDirty()" />
+        <div class="note-color-picker" title="Color label">
+          <div class="note-color-swatch sw-default active" data-color="default" onclick="setNoteColor('default', this)" title="Default"></div>
+          <div class="note-color-swatch sw-red"    data-color="red"    onclick="setNoteColor('red',    this)" title="🔴 High yield"></div>
+          <div class="note-color-swatch sw-yellow" data-color="yellow" onclick="setNoteColor('yellow', this)" title="🟡 Needs review"></div>
+          <div class="note-color-swatch sw-green"  data-color="green"  onclick="setNoteColor('green',  this)" title="🟢 Confident"></div>
+          <div class="note-color-swatch sw-blue"   data-color="blue"   onclick="setNoteColor('blue',   this)" title="🔵 Extra"></div>
+        </div>
+        <button onclick="triggerImageUpload()"
+          style="font-size:12px;padding:5px 10px;margin:0;min-height:unset;background:var(--card);color:var(--text-muted);border:1px solid var(--border);">
+          📷 Image
+        </button>
+        <button onclick="openAiNoteModal()"
+          style="font-size:12px;padding:5px 10px;margin:0;min-height:unset;background:var(--card);color:var(--blue);border:1px solid rgba(59,130,246,0.3);">
+          ✨ AI Note
+        </button>
+        <input type="file" id="note-img-file" accept="image/*" style="display:none"
+               onchange="handleNoteImageUpload(this)" />
+      </div>
+
+      <!-- Markdown editor / preview -->
+      <div class="notes-editor-area">
+        <textarea class="notes-md-editor" id="note-content-editor"
+          placeholder="Write your notes in Markdown…&#10;&#10;**Bold**, *italic*, ## Heading, - bullet, `code`&#10;&#10;Paste images with Ctrl+V"
+          oninput="markDirty()"></textarea>
+        <div class="notes-preview" id="notes-preview-pane"></div>
+      </div>
+
+      <!-- Footer: tags + save status -->
+      <div class="notes-editor-footer">
+        <div class="notes-tag-wrap" id="notes-tag-wrap"
+             onclick="document.getElementById('notes-tag-input').focus()">
+          <!-- chips injected by JS -->
+          <input type="text" id="notes-tag-input" class="notes-tag-input"
+                 placeholder="Add tag…" onkeydown="handleNoteTagInput(event)" />
+        </div>
+        <span id="notes-save-status"
+              style="font-size:11px;color:var(--text-dim);white-space:nowrap;"></span>
+      </div>
+
+    </div><!-- /notes-editor-wrap -->
+
+    <!-- Unit view (stacked cards — shown via View All Unit Notes) -->
+    <div class="notes-unit-view" id="notes-unit-view" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:14px;font-weight:700;" id="unit-view-title"></div>
+        <button onclick="exportUnitPdf()"
+          style="font-size:11px;padding:5px 10px;margin:0;min-height:unset;background:var(--card);color:var(--text-muted);border:1px solid var(--border);">
+          Export PDF
+        </button>
+      </div>
+      <div id="unit-cards-container"></div>
+    </div>
+
+  </div><!-- /notes-editor-pane -->
+
+</div><!-- /notes-layout -->
+
+
+<!-- ══ AI NOTE MODAL ════════════════════════════════════════════ -->
+<div class="fc-modal-backdrop" id="ai-note-modal" onclick="closeAiNoteModalOnBackdrop(event)">
+  <div class="fc-modal-sheet">
+    <div class="fc-modal-title">✨ AI Note Generator</div>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">
+      Paste textbook or lecture text — Claude will create a structured revision note.
+    </p>
+    <textarea id="ai-note-source" style="min-height:130px;font-size:13px;"
+      placeholder="Paste chapter text here…"></textarea>
+    <button id="btn-run-ai-note" onclick="runAiNote()"
+      style="width:100%;margin-top:8px;">Generate Note</button>
+    <div id="ai-note-status" style="font-size:12px;color:var(--blue);margin-top:6px;min-height:14px;"></div>
+    <div id="ai-note-preview"
+      style="display:none;margin-top:10px;background:var(--card);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--text);max-height:260px;overflow-y:auto;"></div>
+    <div id="ai-note-actions" style="display:none;margin-top:10px;display:none;gap:8px;flex-direction:row;">
+      <button onclick="closeAiNoteModal()"
+        style="background:var(--card);color:var(--text);border:1px solid var(--border);flex:1;margin:0;">Cancel</button>
+      <button onclick="applyAiNote()" style="flex:1;margin:0;">Use This Note</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ Bottom Nav ═══════════════════════════════════════════════ -->
+<div class="bottom-nav">
+  <a href="index.html">🏠<br>Home</a>
+  <a href="planner.html">📋<br>Planner</a>
+  <a href="editor.html">📚<br>Syllabus</a>
+  <a href="analytics.html">📊<br>Stats</a>
+  <a href="profile.html">👤<br>Profile</a>
+  <a href="flashcards.html" style="position:relative;">🃏<br>Cards<span id="nav-cards-badge" class="nav-badge" style="display:none"></span></a>
+</div>
+
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="supabase.js"></script>
+<script src="cloudinary.js"></script>
+<script src="cardSync.js"></script>
+<script src="noteSync.js"></script>
+<script src="notes.js"></script>
+
+<script>
+// ── Page boot ─────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", async function () {
+  // Mobile: show hamburger
+  if (window.innerWidth <= 600) {
+    document.getElementById("btn-toggle-sidebar").style.display = "inline-flex";
+  }
+
+  // Boot notes.js
+  if (typeof initNotes === "function") await initNotes();
+
+  // Cards badge
+  if (typeof getDueCardCount === "function") {
+    let count = await getDueCardCount();
+    let badge = document.getElementById("nav-cards-badge");
+    if (badge && count > 0) {
+      badge.textContent = count > 99 ? "99+" : count;
+      badge.style.display = "inline-block";
+    }
+  }
+
+  // If URL has ?subject=&unit=&chapter= params, open that note directly
+  let params  = new URLSearchParams(window.location.search);
+  let subject = params.get("subject");
+  let unit    = params.get("unit");
+  let chapter = params.get("chapter");
+  if (subject && unit && chapter && typeof openNote === "function") {
+    openNote(subject, unit, chapter);
+  }
+  // If ?subject=&unit= only → open unit view
+  if (subject && unit && !chapter && typeof openUnitView === "function") {
+    openUnitView(subject, unit);
+  }
+});
+</script>
+
+</body>
+</html>

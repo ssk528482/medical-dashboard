@@ -275,10 +275,12 @@ function generatePlan() {
       let nextR = `R${(ch.revisionIndex || 0) + 1}`;
       let overdueTag = r.isOverdue ? ` <span style="color:#ef4444;font-size:11px;">overdue</span>` : "";
       let pageTag = ch.pageCount > 0 ? ` <span style="color:#64748b;font-size:11px;">(${ch.pageCount}p)</span>` : "";
+      // Card + note metadata shown inline (populated later via _enrichRevisionBlock)
       revLines.push(
         `🔁 <strong>${r.subjectName}</strong> → ${studyData.subjects[r.subjectName].units[r.unitIndex]?.name} → <em>${ch.name}</em>` +
         ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${nextR}</span>` +
-        pageTag + overdueTag
+        pageTag + overdueTag +
+        ` <span class="rev-meta" data-key="${r.subjectName}||${studyData.subjects[r.subjectName].units[r.unitIndex]?.name}||${ch.name}"></span>`
       );
     });
     if (revisionDue.length > 6) {
@@ -336,7 +338,8 @@ function generatePlan() {
     stopwatches: {
       study:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(studyTime)*3600) },
       qbank:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(qbankTime)*3600) },
-      revision: { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revisionTime)*3600) }
+      revision: { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revisionTime)*3600) },
+      cards:    { accumulated:0, startedAt:null, running:false, targetSecs: 0 }
     }
   };
 
@@ -350,6 +353,144 @@ function generatePlan() {
   }
 
   document.getElementById("generateButton").disabled = true;
+
+  // Append live flashcards-due block (async, non-blocking)
+  _appendFlashcardsPlanBlock();
+
+  // Enrich revision rows with live card count + note badges (async, non-blocking)
+  _enrichRevisionBlock();
+}
+
+// ─── Flashcards Due block — appended async to plan output ─────────────────
+// Called after generatePlan() renders HTML and after renderSavedPlan()
+// replays saved HTML. Fetches live due count, never stored in savedHTML.
+async function _appendFlashcardsPlanBlock() {
+  let planEl = document.getElementById("planOutput");
+  if (!planEl) return;
+  if (typeof getDueCardCount !== "function") return;
+
+  // Remove stale block if re-appending
+  let old = document.getElementById("fc-plan-block");
+  if (old) old.remove();
+
+  try {
+    let dueCount = await getDueCardCount();
+    let estMins  = Math.max(5, Math.round(dueCount * 1.5)); // ~1.5 min/card
+    let estHrs   = (estMins / 60).toFixed(1);
+
+    let block = document.createElement("div");
+    block.id = "fc-plan-block";
+    block.style.marginTop = "8px";
+
+    if (dueCount === 0) {
+      block.innerHTML = `
+        <div style="background:#0f172a;border-radius:10px;padding:10px;border:1px solid #1e293b;
+          display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;
+              letter-spacing:.06em;margin-bottom:4px;">🃏 FLASHCARDS</div>
+            <div style="font-size:13px;color:#10b981;font-weight:600;">✓ No cards due today</div>
+          </div>
+          <a href="flashcards.html?tab=browse" style="background:#1e293b;color:#64748b;
+            padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;
+            text-decoration:none;white-space:nowrap;flex-shrink:0;">Browse →</a>
+        </div>`;
+    } else {
+      let urgencyColor  = dueCount >= 50 ? "#ef4444" : dueCount >= 20 ? "#f59e0b" : "#3b82f6";
+      let urgencyLabel  = dueCount >= 50 ? "High priority" : dueCount >= 20 ? "Moderate" : "On track";
+      block.innerHTML = `
+        <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;
+          border:1px solid #1e293b;border-bottom:none;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;
+            letter-spacing:.06em;margin-bottom:6px;">
+            🃏 FLASHCARDS — ~${estHrs} hrs · ${dueCount} due
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="flex:1;">
+              <span style="font-size:22px;font-weight:900;color:${urgencyColor};">${dueCount}</span>
+              <span style="font-size:13px;color:#94a3b8;margin-left:6px;">cards due today</span>
+            </div>
+            <span style="background:${urgencyColor}22;color:${urgencyColor};
+              padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;">${urgencyLabel}</span>
+          </div>
+          <div style="font-size:12px;color:#475569;margin-top:6px;">
+            Estimated ${estMins} min · ${dueCount >= 50 ? "Do this before new study" : "Fits alongside your plan"}
+          </div>
+        </div>
+        <div style="padding:8px;background:#0f172a;border-radius:0 0 10px 10px;
+          border:1px solid #1e293b;border-top:none;">
+          <a href="flashcards.html?tab=review" style="display:block;text-align:center;
+            background:linear-gradient(135deg,#1e3a5f,#1e3060);color:#93c5fd;
+            padding:10px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
+            Start Review Session →
+          </a>
+        </div>
+        <div id="sw-slot-cards"></div>`;
+
+    }
+
+    planEl.appendChild(block);
+
+    // Inject cards stopwatch into the slot (only when cards are due)
+    if (dueCount > 0 && typeof swInject === "function") {
+      // Ensure cards stopwatch state exists in dailyPlan
+      if (studyData.dailyPlan && studyData.dailyPlan.stopwatches) {
+        if (!studyData.dailyPlan.stopwatches.cards) {
+          studyData.dailyPlan.stopwatches.cards = {
+            accumulated: 0, startedAt: null, running: false,
+            targetSecs: Math.round(parseFloat(estHrs) * 3600)
+          };
+          saveData();
+        }
+      }
+      swInject("cards", parseFloat(estHrs));
+    }
+  } catch (e) {
+    console.warn("_appendFlashcardsPlanBlock:", e);
+  }
+}
+
+// ─── Revision block enrichment — async card/note metadata ────────────────
+// Finds all .rev-meta spans in planOutput and fills them with card + note info
+async function _enrichRevisionBlock() {
+  let spans = document.querySelectorAll(".rev-meta[data-key]");
+  if (!spans.length) return;
+
+  try {
+    let [cardResult, noteResult] = await Promise.all([
+      typeof getCardCounts        === "function" ? getCardCounts()        : Promise.resolve({ data: {} }),
+      typeof getNotesCoverageMap  === "function" ? getNotesCoverageMap()  : Promise.resolve({ data: {} })
+    ]);
+
+    let cardMap = cardResult?.data  || {};
+    let noteMap = noteResult?.data  || {};
+
+    spans.forEach(span => {
+      let key      = span.dataset.key;
+      let cardData = cardMap[key];
+      let hasNote  = noteMap[key];
+      let parts    = [];
+
+      if (hasNote) {
+        let sub  = encodeURIComponent(key.split("||")[0]);
+        let unit = encodeURIComponent(key.split("||")[1]);
+        let ch   = encodeURIComponent(key.split("||")[2]);
+        parts.push(`<a href="notes.html?subject=${sub}&unit=${unit}&chapter=${ch}" style="font-size:10px;text-decoration:none;margin-left:4px;" title="Open note">📝</a>`);
+      }
+
+      if (cardData && cardData.total > 0) {
+        let color = cardData.due > 0 ? "#f87171" : "#60a5fa";
+        let label = cardData.due > 0 ? `${cardData.due} cards due` : `${cardData.total} cards`;
+        let sub   = encodeURIComponent(key.split("||")[0]);
+        let tab   = cardData.due > 0 ? "review" : "browse";
+        parts.push(`<a href="flashcards.html?tab=${tab}&subject=${sub}" style="font-size:10px;color:${color};text-decoration:none;margin-left:4px;" title="Open flashcards">🃏 ${label}</a>`);
+      }
+
+      span.innerHTML = parts.join("");
+    });
+  } catch (e) {
+    console.warn("_enrichRevisionBlock:", e);
+  }
 }
 
 // Helper: get phase label for a chapter

@@ -82,13 +82,48 @@ function getRevisionsDueToday() {
             unitName: unit.name,
             topicName: ch.name,
             overdueDays,
-            isOverdue: overdueDays > 0
+            isOverdue: overdueDays > 0,
+            // Card + note metadata — populated async by enrichRevisionsDue()
+            cardCount: null,
+            cardsDue: null,
+            hasNote: null
           });
         }
       });
     });
   });
   return due.sort((a, b) => b.overdueDays - a.overdueDays);
+}
+
+// Async version: enriches revision items with live card counts + note flags
+// Callers that can await should use this for richer planner display
+async function getRevisionsDueTodayEnriched() {
+  let due = getRevisionsDueToday();
+  if (!due.length) return due;
+
+  try {
+    // Fetch card counts map and notes coverage map in parallel
+    let [cardResult, noteResult] = await Promise.all([
+      typeof getCardCounts === "function" ? getCardCounts() : Promise.resolve({ data: {} }),
+      typeof getNotesCoverageMap === "function" ? getNotesCoverageMap() : Promise.resolve({ data: {} })
+    ]);
+
+    let cardMap = cardResult?.data || {};
+    let noteMap = noteResult?.data || {};
+
+    due.forEach(item => {
+      let key = `${item.subjectName}||${studyData.subjects[item.subjectName]?.units[item.unitIndex]?.name}||${item.topicName}`;
+      let cardData = cardMap[key];
+      item.cardCount = cardData?.total ?? 0;
+      item.cardsDue  = cardData?.due   ?? 0;
+      item.hasNote   = noteMap[key]    ?? false;
+    });
+  } catch (e) {
+    // Non-fatal: enrichment failed, plain revision data still returned
+    console.warn("getRevisionsDueTodayEnriched:", e);
+  }
+
+  return due;
 }
 
 function getOverdueCount(subjectName) {

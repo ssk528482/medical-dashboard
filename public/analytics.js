@@ -673,3 +673,181 @@ function renderTimeTrackingChart() {
     </div>
   `;
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLASHCARD & NOTES ANALYTICS (async — loaded after main render)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function renderFlashcardAnalytics() {
+  let container = document.getElementById("analyticsContainer");
+  if (!container) return;
+
+  // Fetch data from cardSync.js
+  let dueCount = 0, totalCards = 0, retentionRate = 0;
+  let reviewsByDay = {};
+  let subjectCardMap = {};
+
+  if (typeof getDueCardCount === "function") dueCount = await getDueCardCount();
+
+  if (typeof fetchCards === "function") {
+    let { data: allCards } = await fetchCards({ suspended: "all" });
+    totalCards = allCards?.length || 0;
+
+    // Build per-subject card counts
+    (allCards || []).forEach(c => {
+      let key = c.subject || "Unknown";
+      subjectCardMap[key] = (subjectCardMap[key] || 0) + 1;
+    });
+
+    // Retention: % of cards with rating >= 3 in last 30 days
+    if (typeof fetchReviews === "function") {
+      let { data: reviews } = await fetchReviews({ days: 30 });
+      if (reviews?.length) {
+        let good = reviews.filter(r => r.rating >= 3).length;
+        retentionRate = Math.round((good / reviews.length) * 100);
+
+        // Reviews per day (last 14 days)
+        reviews.forEach(r => {
+          let day = (r.reviewed_at || "").substring(0, 10);
+          if (day) reviewsByDay[day] = (reviewsByDay[day] || 0) + 1;
+        });
+      }
+    }
+  }
+
+  // Build last-14-days review bar data
+  let reviewBars = [];
+  for (let i = 13; i >= 0; i--) {
+    let d     = addDays(today(), -i);
+    let count = reviewsByDay[d] || 0;
+    let label = new Date(d + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric" });
+    reviewBars.push({ label: label.split(" ")[1], count });
+  }
+  let maxReviews = Math.max(...reviewBars.map(b => b.count), 1);
+
+  let barsHtml = reviewBars.map(b => {
+    let h = b.count > 0 ? Math.max(4, Math.round(b.count / maxReviews * 70)) : 0;
+    return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:2px;">
+      <div style="background:#8b5cf6;height:${h}px;width:100%;border-radius:3px 3px 0 0;min-height:${b.count>0?4:0}px;" title="${b.count} reviews"></div>
+      <div style="font-size:9px;color:#475569;">${b.label}</div>
+    </div>`;
+  }).join("");
+
+  // Per-subject breakdown
+  let subjRows = Object.entries(subjectCardMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([subj, cnt]) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #0f172a;">
+        <span style="font-size:12px;color:#cbd5e1;">${subj}</span>
+        <span style="background:#2e1a5e;color:#a78bfa;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;">${cnt} cards</span>
+      </div>`).join("") || '<div style="color:#475569;font-size:12px;">No cards yet.</div>';
+
+  let cardSection = document.createElement("div");
+  cardSection.className = "card";
+  cardSection.innerHTML = `
+    <div class="section-title">🃏 Flashcard Analytics</div>
+    <div class="analytics-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px;">
+      <div class="stat-box">
+        <div class="stat-big" style="color:#ef4444;">${dueCount}</div>
+        <div class="stat-label">Due Now</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-big" style="color:#8b5cf6;">${totalCards}</div>
+        <div class="stat-label">Total Cards</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-big" style="color:#10b981;">${retentionRate}%</div>
+        <div class="stat-label">30d Retention</div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Reviews — Last 14 Days</div>
+    <div style="display:flex;gap:3px;align-items:flex-end;height:80px;padding:0 2px;margin-bottom:14px;">
+      ${barsHtml}
+    </div>
+
+    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Cards by Subject</div>
+    ${subjRows}
+
+    <a href="flashcards.html" style="display:block;text-align:center;margin-top:12px;padding:10px;background:#1e293b;border-radius:10px;color:#a78bfa;font-size:13px;font-weight:600;text-decoration:none;">
+      Go to Flashcards →
+    </a>
+  `;
+
+  container.appendChild(cardSection);
+}
+
+
+async function renderNotesAnalytics() {
+  let container = document.getElementById("analyticsContainer");
+  if (!container) return;
+
+  if (typeof getNotesCoverageStats === "function" === false) return;
+
+  let { data: stats } = await getNotesCoverageStats();
+  if (!stats || !Object.keys(stats).length) return;
+
+  let totalChapters = 0, withNote = 0;
+  Object.values(stats).forEach(s => { totalChapters += s.total; withNote += s.withNote; });
+  let overallPct = totalChapters > 0 ? Math.round((withNote / totalChapters) * 100) : 0;
+
+  let subjectRows = Object.entries(stats)
+    .sort((a, b) => a[1].pct - b[1].pct)
+    .map(([subj, s]) => {
+      let color = s.pct >= 75 ? "#10b981" : s.pct >= 40 ? "#eab308" : "#ef4444";
+      return `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-size:12px;color:#cbd5e1;">${subj}</span>
+            <span style="font-size:12px;font-weight:700;color:${color};">${s.pct}%
+              <span style="color:#475569;font-weight:400;">(${s.withNote}/${s.total})</span>
+            </span>
+          </div>
+          <div class="stat-bar" style="height:6px;">
+            <div class="stat-fill" style="width:${s.pct}%;background:${color};"></div>
+          </div>
+        </div>`;
+    }).join("");
+
+  let notesSection = document.createElement("div");
+  notesSection.className = "card";
+  notesSection.innerHTML = `
+    <div class="section-title">📝 Notes Coverage</div>
+    <div style="text-align:center;padding:10px 0 16px;">
+      <div style="font-size:42px;font-weight:900;color:${overallPct>=75?"#10b981":overallPct>=40?"#eab308":"#ef4444"};">${overallPct}%</div>
+      <div style="font-size:12px;color:#64748b;">${withNote} of ${totalChapters} chapters have notes</div>
+    </div>
+    <div class="stat-bar" style="height:10px;margin-bottom:16px;">
+      <div class="stat-fill ${overallPct>=75?"green":overallPct>=40?"yellow":"red"}" style="width:${overallPct}%;"></div>
+    </div>
+
+    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Coverage by Subject</div>
+    ${subjectRows}
+
+    <a href="notes.html" style="display:block;text-align:center;margin-top:12px;padding:10px;background:#1e293b;border-radius:10px;color:#34d399;font-size:13px;font-weight:600;text-decoration:none;">
+      Go to Notes →
+    </a>
+  `;
+
+  container.appendChild(notesSection);
+}
+
+
+// ─── Boot: run main renderAnalytics then async card/notes sections ────────
+document.addEventListener("DOMContentLoaded", function () {
+  renderAnalytics();
+
+  // After main render, inject async flashcard + notes sections
+  Promise.all([
+    renderFlashcardAnalytics(),
+    renderNotesAnalytics(),
+  ]).then(() => {
+    // Also run the time tracking chart (needs DOM to exist first)
+    renderTimeTrackingChart();
+    // Alerts
+    if (typeof renderIntelligenceAlerts === "function") {
+      renderIntelligenceAlerts(document.getElementById("analyticsAlerts"));
+    }
+  }).catch(e => console.warn("analytics async sections:", e));
+});

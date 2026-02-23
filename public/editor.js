@@ -1,3 +1,18 @@
+
+// ─── Flashcard + Note Badge Cache ─────────────────────────────────────────
+// Loaded async on DOMContentLoaded; renderEditor() reads from these maps.
+let _cardCountMap  = {};  // "Subject||Unit||Chapter" → { total, due }
+let _noteCoverMap  = {};  // "Subject||Unit||Chapter" → true
+let _badgesLoaded  = false;
+
+async function _loadBadges() {
+  try {
+    if (typeof getCardCounts   === "function") { let r = await getCardCounts();   _cardCountMap = r.data || {}; }
+    if (typeof getNotesCoverageMap === "function") { let r = await getNotesCoverageMap(); _noteCoverMap = r.data || {}; }
+    _badgesLoaded = true;
+  } catch(e) { console.warn("_loadBadges:", e); }
+}
+
 // ─── Editor Tab ───────────────────────────────────────────────
 
 function renderEditor() {
@@ -134,7 +149,7 @@ function renderEditor() {
             else if (compActive) phaseTag = `<span style="font-size:9px;background:#15803d;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">Done</span>`;
             chRow.innerHTML = `
               <div class="topic-left" style="flex:1;min-width:0;">
-                <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>${pageInfo}${phaseTag}
+                <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>${pageInfo}${phaseTag}${_getBadgeHtml(subjectName, unit.name, ch.name)}
               </div>
               <div class="topic-actions" style="gap:3px;">
                 <select onchange="setChapterDifficulty('${esc(subjectName)}',${ui},${ci},this.value)"
@@ -163,6 +178,55 @@ function renderEditor() {
 }
 
 // ─── Editor Actions ───────────────────────────────────────────
+
+
+// ─── Badge Helpers ───────────────────────────────────────────────────────
+
+function _getBadgeHtml(subject, unit, chapter) {
+  let key    = subject + "||" + unit + "||" + chapter;
+  let cards  = _cardCountMap[key];
+  let hasNote = _noteCoverMap[key];
+  let html   = "";
+
+  // Note icon — links to notes.html with deep-link params
+  let noteHref = "notes.html?subject=" + encodeURIComponent(subject)
+               + "&unit="    + encodeURIComponent(unit)
+               + "&chapter=" + encodeURIComponent(chapter);
+  if (hasNote) {
+    html += '<a href="' + noteHref + '" onclick="event.stopPropagation()" '
+          + 'style="font-size:10px;margin-left:5px;text-decoration:none;" title="Open note">📝</a>';
+  } else {
+    html += '<a href="' + noteHref + '" onclick="event.stopPropagation()" '
+          + 'style="font-size:10px;margin-left:5px;text-decoration:none;opacity:0.35;" title="Create note">📄</a>';
+  }
+
+  // Card badge — links to flashcards.html create tab
+  if (cards) {
+    let cardHref = "flashcards.html?tab=" + (cards.due > 0 ? "review" : "browse")
+                 + "&subject=" + encodeURIComponent(subject)
+                 + "&unit="    + encodeURIComponent(unit)
+                 + "&chapter=" + encodeURIComponent(chapter);
+    let badgeStyle = cards.due > 0
+      ? "background:#ef4444;color:#fff;"
+      : "background:#1e3a5f;color:#93c5fd;";
+    html += '<a href="' + cardHref + '" onclick="event.stopPropagation()" '
+          + 'style="font-size:9px;margin-left:3px;padding:1px 5px;border-radius:8px;'
+          + badgeStyle + 'text-decoration:none;font-weight:700;" title="'
+          + (cards.due > 0 ? cards.due + " due" : cards.total + " cards") + '">'
+          + (cards.due > 0 ? cards.due + "🃏" : cards.total + "🃏") + '</a>';
+  } else {
+    // No cards yet — quick-add link
+    let createHref = "flashcards.html?tab=create"
+                   + "&subject=" + encodeURIComponent(subject)
+                   + "&unit="    + encodeURIComponent(unit)
+                   + "&chapter=" + encodeURIComponent(chapter);
+    html += '<a href="' + createHref + '" onclick="event.stopPropagation()" '
+          + 'style="font-size:9px;margin-left:3px;padding:1px 5px;border-radius:8px;'
+          + 'background:#0f172a;color:#334155;text-decoration:none;" title="Add flashcards">+🃏</a>';
+  }
+
+  return html;
+}
 
 function esc(s) { return s.replace(/'/g, "\\'"); }
 
@@ -954,3 +1018,13 @@ function toggleaddSubjectCollapse(buttonElement, contentId) {
     buttonElement.innerHTML = "▶";
   }
 }
+
+
+// ─── Flashcard + Note Badge Boot ──────────────────────────────────────────
+// Load badge data and re-render once available. Runs on every page load.
+document.addEventListener("DOMContentLoaded", async function() {
+  await _loadBadges();
+  // Re-render the active tab so badges appear
+  let tab = new URLSearchParams(window.location.search).get("tab") || "editor";
+  if (tab === "editor") renderEditor();
+});

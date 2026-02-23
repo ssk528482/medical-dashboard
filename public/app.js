@@ -619,6 +619,10 @@ function renderSavedPlan() {
     planEl.innerHTML = plan.renderedHTML;
     document.getElementById("generateButton").disabled = true;
     _swAttach(plan);
+    // Append live flashcard block (async, fresh due count)
+    if (typeof _appendFlashcardsPlanBlock === "function") _appendFlashcardsPlanBlock();
+    // Enrich revision rows with card + note badges (async)
+    if (typeof _enrichRevisionBlock === "function") _enrichRevisionBlock();
     return;
   }
 
@@ -635,6 +639,8 @@ function renderSavedPlan() {
         ${burnoutWarn}${examAlert}
       </div>`;
     document.getElementById("generateButton").disabled = true;
+    if (typeof _appendFlashcardsPlanBlock === "function") _appendFlashcardsPlanBlock();
+    if (typeof _enrichRevisionBlock === "function") _enrichRevisionBlock();
     return;
   }
 
@@ -739,3 +745,66 @@ function renderHeatmap() {
   ].map(([c,l]) => `<span><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;margin-right:3px;"></span>${l}</span>`).join("");
   container.appendChild(legend);
 }
+
+// ═══════════════════════════════════════════════════════════
+// CARDS DUE — nav badge + home page widget
+// ═══════════════════════════════════════════════════════════
+
+async function updateCardsBadge() {
+  if (typeof getDueCardCount !== "function") return;
+  try {
+    let count = await getDueCardCount();
+    let badge = document.getElementById("nav-cards-badge");
+    if (badge) {
+      if (count > 0) {
+        badge.textContent = count > 99 ? "99+" : count;
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+    }
+    // Also update home page card-due widget if present
+    let homeCount = document.getElementById("home-cards-due-count");
+    if (homeCount) homeCount.textContent = count;
+  } catch (e) {
+    console.warn("updateCardsBadge:", e);
+  }
+}
+
+// Render a "Cards Due Today" quick-action card on the home page
+// Called from renderSubjects() after the phase banner
+function renderCardsDueWidget(container) {
+  if (typeof getDueCardCount !== "function") return;
+  getDueCardCount().then(count => {
+    let el = document.createElement("div");
+    el.className = "card";
+    el.style.cssText = "background:linear-gradient(135deg,#0f2040,#1a2f52);border-color:#3b4f7a;";
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-weight:700;font-size:15px;color:#93c5fd;margin-bottom:3px;">🃏 Flashcards</div>
+          <div style="font-size:13px;color:#e2e8f0;">
+            <span id="home-cards-due-count" style="font-weight:800;color:${count>0?"#f87171":"#10b981"};">${count}</span>
+            ${count === 1 ? "card due" : "cards due"} today
+          </div>
+        </div>
+        <a href="flashcards.html" style="background:#3b82f6;color:white;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">
+          ${count > 0 ? "Review →" : "Browse →"}
+        </a>
+      </div>`;
+    container.appendChild(el);
+  });
+}
+
+// Hook into renderSubjects — append widget after phase banner renders
+let _origRenderSubjects = renderSubjects;
+renderSubjects = function() {
+  _origRenderSubjects.apply(this, arguments);
+  let container = document.getElementById("subjectsContainer");
+  if (container) renderCardsDueWidget(container);
+};
+
+// Run badge update on every page load
+document.addEventListener("DOMContentLoaded", function() {
+  updateCardsBadge();
+});

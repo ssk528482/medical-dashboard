@@ -3,7 +3,7 @@
 // State persisted inside studyData.dailyPlan.stopwatches
 // → survives tab close, refresh, background
 
-const SW_KEYS = ["study", "qbank", "revision"];
+const SW_KEYS = ["study", "qbank", "revision", "cards"];
 let _swIntervals = {};
 
 function _swEnsure() {
@@ -162,6 +162,7 @@ function swAutoSaveYesterday() {
   if (tt.study?.actualMins    > 5) hist.study    = hist.study    || true;
   if (tt.qbank?.actualMins    > 5) hist.qbank    = hist.qbank    || true;
   if (tt.revision?.actualMins > 5) hist.revision = hist.revision || true;
+  if (tt.cards?.actualMins    > 5) hist.cards    = hist.cards    || true;
   saveData();
 }
 
