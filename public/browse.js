@@ -156,8 +156,7 @@ function _render() {
       let chapHtml = Object.entries(chapters).map(([chap, cCards]) => {
         let chapCardIds = cCards.map(c => c.id);
         let qaId        = 'qa-' + _slug(subj + '-' + unit + '-' + chap);
-        let cMenuId     = 'cmenu-' + _slug(subj + '-' + unit + '-' + chap);
-        let cLearnKey   = _regIds(chapCardIds);
+        let cMenuId     = 'cmenu-' + _slug(subj + '-' + unit + '-' + chap);        let cLearnKey   = _regIds(chapCardIds);
         let cSelKey     = _regIds(chapCardIds);
         let cDelKey     = _regIds(chapCardIds);
         let allDone     = cCards.every(c => c.interval_days > 0);
@@ -181,31 +180,14 @@ function _render() {
             '</div></div>';
         }).join('');
 
-        let qaForm =
-          '<div class="fc-quick-add-form" id="form-' + qaId + '">' +
-            '<div class="fc-quick-add-row">' +
-              '<div style="flex:1;display:flex;flex-direction:column;gap:6px;">' +
-                '<textarea class="fc-quick-add-textarea" id="qa-front-' + qaId + '" placeholder="Front…" rows="2"></textarea>' +
-                '<textarea class="fc-quick-add-textarea" id="qa-back-'  + qaId + '" placeholder="Back…"  rows="2"></textarea>' +
-              '</div>' +
-              '<div class="fc-quick-add-actions">' +
-                '<select class="fc-quick-add-textarea" id="qa-type-' + qaId + '" style="padding:5px 8px;">' +
-                  '<option value="basic">Basic</option><option value="cloze">Cloze</option>' +
-                '</select>' +
-                '<button class="fc-qa-save" onclick="quickSave(\'' + _esc(subj) + '\',\'' + _esc(unit) + '\',\'' + _esc(chap) + '\',\'' + qaId + '\')">+ Add</button>' +
-                '<button class="fc-qa-cancel" onclick="quickClose(\'' + qaId + '\')">Cancel</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-
         return '<div class="fc-acc-chapter" id="ch-' + qaId + '">' +
           '<div class="fc-acc-chapter-head" onclick="event.stopPropagation();toggleChapter(this.closest(\'.fc-acc-chapter\'))">' +
-            '<button class="fc-acc-collapse-btn" onclick="event.stopPropagation();toggleChapter(this.closest(\'.fc-acc-chapter\'))" style="font-size:10px;">▸</button>' +
-            (allDone ? '<span title="All reviewed" style="font-size:11px;flex-shrink:0;">✅</span>' : '') +
+            '<button class="fc-acc-collapse-btn" onclick="event.stopPropagation();toggleChapter(this.closest(\'.fc-acc-chapter\'))">▸</button>' +
+            (allDone ? '<span title="All reviewed" style="font-size:10px;flex-shrink:0;">✅</span>' : '') +
             '<span class="fc-acc-chapter-name">' + _esc(chap) + '</span>' +
             '<span class="fc-acc-chapter-count">' + cCards.length + '</span>' +
             '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + cLearnKey + '\')">' + btnLabel + ' ' + cCards.length + '</button>' +
-            '<button class="fc-quick-add-btn" onclick="event.stopPropagation();quickOpen(\'' + qaId + '\')">+</button>' +
+            '<button class="fc-quick-add-btn" onclick="event.stopPropagation();openQuickAddModal(\'' + _esc(subj) + '\',\'' + _esc(unit) + '\',\'' + _esc(chap) + '\')">+</button>' +
             '<div class="fc-section-menu">' +
               '<button class="fc-menu-btn" onclick="event.stopPropagation();toggleMenu(\'' + cMenuId + '\')">⋮</button>' +
               '<div class="fc-menu-dropdown" id="' + cMenuId + '">' +
@@ -215,7 +197,6 @@ function _render() {
             '</div>' +
           '</div>' +
           '<div class="fc-acc-chapter-cards">' +
-            qaForm +
             '<div id="rows-' + qaId + '">' + cardRows + '</div>' +
           '</div>' +
         '</div>';
@@ -396,26 +377,41 @@ async function bulkDeleteByKey(registryKey, label) {
   );
 }
 
-// ── Quick Add ─────────────────────────────────────────────────────
-function quickOpen(qaId)  { document.getElementById('form-' + qaId)?.classList.add('open'); }
-function quickClose(qaId) {
-  let f = document.getElementById('form-' + qaId);
-  if (f) f.classList.remove('open');
-  let ff = document.getElementById('qa-front-' + qaId);
-  let bf = document.getElementById('qa-back-'  + qaId);
-  if (ff) ff.value = ''; if (bf) bf.value = '';
+// ── Quick Add Modal ───────────────────────────────────────────────
+let _qaSubject = '', _qaUnit = '', _qaChapter = '';
+
+function openQuickAddModal(subject, unit, chapter) {
+  _qaSubject = subject; _qaUnit = unit; _qaChapter = chapter;
+  let label = document.getElementById('fc-qa-chapter-label');
+  if (label) label.textContent = '📖 ' + subject + (unit ? ' → ' + unit : '') + (chapter ? ' → ' + chapter : '');
+  let front = document.getElementById('fc-qa-front');
+  let back  = document.getElementById('fc-qa-back');
+  let type  = document.getElementById('fc-qa-type');
+  if (front) front.value = '';
+  if (back)  back.value  = '';
+  if (type)  type.value  = 'basic';
+  document.getElementById('fc-qa-modal').classList.add('open');
+  setTimeout(() => { if (front) front.focus(); }, 120);
 }
 
-async function quickSave(subject, unit, chapter, qaId) {
-  let front = (document.getElementById('qa-front-' + qaId)?.value || '').trim();
-  let back  = (document.getElementById('qa-back-'  + qaId)?.value || '').trim();
-  let type  = document.getElementById('qa-type-' + qaId)?.value || 'basic';
-  if (!front) return;
-  let btn = document.querySelector('#form-' + qaId + ' .fc-qa-save');
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
-  await saveCard({ subject, unit, chapter, card_type: type, front_text: front, back_text: back || null, tags: [] });
-  if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
-  quickClose(qaId);
+function closeQuickAddModal() {
+  document.getElementById('fc-qa-modal').classList.remove('open');
+}
+
+async function submitQuickAddModal() {
+  let front = (document.getElementById('fc-qa-front')?.value || '').trim();
+  let back  = (document.getElementById('fc-qa-back')?.value  || '').trim();
+  let type  = document.getElementById('fc-qa-type')?.value || 'basic';
+  if (!front) {
+    let f = document.getElementById('fc-qa-front');
+    if (f) { f.focus(); f.style.borderColor = 'var(--red)'; setTimeout(() => { f.style.borderColor = ''; }, 1500); }
+    return;
+  }
+  let btn = document.getElementById('fc-qa-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  await saveCard({ subject: _qaSubject, unit: _qaUnit, chapter: _qaChapter, card_type: type, front_text: front, back_text: back || null, tags: [] });
+  if (btn) { btn.disabled = false; btn.textContent = '+ Add Card'; }
+  closeQuickAddModal();
   await _loadPreserving();
 }
 
