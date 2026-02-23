@@ -551,7 +551,10 @@ function csvParse() {
 
   let rows = lines.map(l => _csvSplit(l, delim));
   let firstRow  = rows[0];
-  let hasHeader = rows.length > 1 && firstRow.every(c => c.trim() !== '' && isNaN(Number(c)));
+  // Only treat first row as header if it contains recognizable header keywords
+  // (front, back, question, answer, term, definition, q, a - case insensitive)
+  let headerKeywords = /^(front|back|question|answer|term|definition|q|a|word|meaning|hint|note|side\s*1|side\s*2)$/i;
+  let hasHeader = rows.length > 1 && firstRow.every(c => headerKeywords.test(c.trim()));
   let dataRows  = hasHeader ? rows.slice(1) : rows;
 
   _csvParsed = dataRows
