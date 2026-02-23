@@ -282,23 +282,36 @@ function _renderCardText(text) {
 // For cloze back face, reveal the hidden tokens
 function _renderCardBack(card) {
   if (card.card_type === "cloze") {
-    // Back shows full text with tokens highlighted
-    return (card.front_text || "").replace(/\{\{(.+?)\}\}/g,
+    // Escape HTML first (same as _renderCardText), then highlight revealed tokens
+    let escaped = (card.front_text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return escaped.replace(/\{\{(.+?)\}\}/g,
       `<span style="background:rgba(16,185,129,0.25);color:#6ee7b7;border-radius:3px;padding:0 4px;font-weight:700;">$1</span>`
     );
   }
   return card.back_text || "";
 }
 
-// Flip card — called by clicking card wrapper
+// Flip card — clicking front flips to back, clicking back flips to front
 function flipCard() {
-  if (!_sessionActive || _reviewFlipped) return;
-  _reviewFlipped = true;
+  if (!_sessionActive) return;
 
   let cardEl  = document.getElementById("review-card");
   let ratBtns = document.getElementById("review-rating-buttons");
-  if (cardEl)  cardEl.classList.add("flipped");
-  if (ratBtns) ratBtns.classList.add("visible");
+
+  if (!_reviewFlipped) {
+    // Flip to back — show answer + rating buttons
+    _reviewFlipped = true;
+    if (cardEl)  cardEl.classList.add("flipped");
+    if (ratBtns) ratBtns.classList.add("visible");
+  } else {
+    // Flip back to front — hide rating buttons
+    _reviewFlipped = false;
+    if (cardEl)  cardEl.classList.remove("flipped");
+    if (ratBtns) ratBtns.classList.remove("visible");
+  }
 }
 
 // Rate card — called by rating buttons
