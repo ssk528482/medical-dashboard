@@ -2560,10 +2560,10 @@ body.nav-collapsed .browse-bulk-bar { left: var(--nav-w-col); }
 .fc-acc-chapter-head { display: flex; align-items: center; gap: 8px; flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════
-   SCREEN ROTATION — nav button styles only
-   (All rotation logic handled by rotateScreen.js)
+   SCREEN ROTATION — Programmatic landscape/portrait toggle
    ═══════════════════════════════════════════════════════════ */
 
+/* The rotate button lives at the bottom of the side nav */
 .nav-rotate-btn-wrap {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
@@ -2588,39 +2588,30 @@ body.nav-collapsed .browse-bulk-bar { left: var(--nav-w-col); }
   white-space: nowrap;
   overflow: hidden;
 }
-.rotate-screen-btn:hover {
-  background: rgba(255,255,255,0.05);
-  color: var(--text);
-  opacity: 1;
-  box-shadow: none;
-}
-.rotate-screen-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-  width: 24px;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.rotate-screen-label {
-  opacity: 1;
-  transition: opacity 0.2s;
+.rotate-screen-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); opacity: 1; box-shadow: none; }
+.rotate-screen-icon { font-size: 16px; flex-shrink: 0; width: 24px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.rotate-screen-label { opacity: 1; transition: opacity 0.2s; overflow: hidden; white-space: nowrap; }
+.side-nav.collapsed .rotate-screen-label { opacity: 0; width: 0; min-width: 0; pointer-events: none; }
+.side-nav.collapsed .rotate-screen-btn { justify-content: center; padding: 8px 0; border-color: transparent; background: transparent; }
+
+/* ── Rotated state: rotate the entire <html> element 90deg ── */
+html.screen-rotated {
+  transform-origin: top left;
+  transform: rotate(90deg) translateX(0) translateY(-100%);
+  width: 100vh;
+  height: 100vw;
   overflow: hidden;
-  white-space: nowrap;
+  position: fixed;
+  top: 0; left: 0;
 }
-.side-nav.collapsed .rotate-screen-label {
-  opacity: 0;
-  width: 0;
-  min-width: 0;
-  pointer-events: none;
+/* Ensure body fills rotated frame */
+html.screen-rotated body {
+  min-height: 100vw;
+  width: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
-.side-nav.collapsed .rotate-screen-btn {
-  justify-content: center;
-  padding: 8px 0;
-  border-color: transparent;
-  background: transparent;
-}
-.side-nav.collapsed .nav-rotate-btn-wrap {
-  padding: 8px 2px;
+/* Keep fixed elements (modals, bulk bars etc.) sane in rotated mode */
+html.screen-rotated .fc-menu-dropdown {
+  /* position is managed by JS getBoundingClientRect which still works */
 }
