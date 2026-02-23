@@ -6,11 +6,15 @@
 // -----------------------------------------------------------------
 
 // ── Internal helper ───────────────────────────────────────────────
-function _userId() {
-  // Matches however your existing supabase.js / data.js stores the user id.
-  // Adjust if your project uses a different key.
-  const sd = JSON.parse(localStorage.getItem('studyData') || '{}');
-  return sd.userId || localStorage.getItem('userId') || null;
+// Returns the current user's id from the live Supabase session.
+// Same auth pattern used by supabase.js throughout the app.
+async function _userId() {
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    return user?.id || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── SM-2 algorithm (card-level) ───────────────────────────────────
@@ -54,7 +58,7 @@ function cardSM2(card, rating) {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchDueCards(date = today()) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: [], error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -77,7 +81,7 @@ async function fetchDueCards(date = today()) {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchCards(filters = {}) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: [], error: 'No user id' };
 
   let query = supabaseClient
@@ -114,7 +118,7 @@ async function fetchCards(filters = {}) {
  * @returns {Promise<{ data: Object, error: any }>}
  */
 async function getCardCounts() {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: {}, error: 'No user id' };
 
   // Fetch minimal fields for counting
@@ -144,7 +148,7 @@ async function getCardCounts() {
  * @returns {Promise<number>}
  */
 async function getDueCardCount() {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return 0;
 
   const { count, error } = await supabaseClient
@@ -163,7 +167,7 @@ async function getDueCardCount() {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchReviews(opts = {}) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: [], error: 'No user id' };
 
   let query = supabaseClient
@@ -190,7 +194,7 @@ async function fetchReviews(opts = {}) {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchLeechCards() {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: [], error: 'No user id' };
 
   // Get all "Again" reviews grouped by card_id
@@ -230,7 +234,7 @@ async function fetchLeechCards() {
  * @returns {Promise<{ data: Object|null, error: any }>}
  */
 async function saveCard(cardObj) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: null, error: 'No user id' };
 
   const payload = {
@@ -277,7 +281,7 @@ async function saveCard(cardObj) {
  * @returns {Promise<{ data: Array|null, error: any }>}
  */
 async function saveBatchCards(cards) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: null, error: 'No user id' };
 
   const payload = cards.map(c => ({
@@ -314,7 +318,7 @@ async function saveBatchCards(cards) {
  * @returns {Promise<{ data: Object|null, error: any }>}
  */
 async function saveReview(cardId, rating, currentCard) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: null, error: 'No user id' };
 
   const next = cardSM2(currentCard, rating);
@@ -356,7 +360,7 @@ async function saveReview(cardId, rating, currentCard) {
  * @returns {Promise<{ data: Object|null, error: any }>}
  */
 async function setSuspended(cardId, suspend) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { data: null, error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -376,7 +380,7 @@ async function setSuspended(cardId, suspend) {
  * @returns {Promise<{ error: any }>}
  */
 async function deleteCard(cardId) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { error: 'No user id' };
 
   const { error } = await supabaseClient
@@ -394,7 +398,7 @@ async function deleteCard(cardId) {
  * @returns {Promise<{ error: any }>}
  */
 async function resetLeechCard(cardId) {
-  const userId = _userId();
+  const userId = await _userId();
   if (!userId) return { error: 'No user id' };
 
   // Delete reviews (RLS ensures only own reviews)

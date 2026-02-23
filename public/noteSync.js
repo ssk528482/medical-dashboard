@@ -5,9 +5,13 @@
 // -----------------------------------------------------------------
 
 // ── Internal helper ───────────────────────────────────────────────
-function _noteUserId() {
-  const sd = JSON.parse(localStorage.getItem('studyData') || '{}');
-  return sd.userId || localStorage.getItem('userId') || null;
+async function _noteUserId() {
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    return user?.id || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── READ ──────────────────────────────────────────────────────────
@@ -23,7 +27,7 @@ function _noteUserId() {
  * @returns {Promise<{ data: Object|null, error: any }>}
  */
 async function fetchNote(subject, unit, chapter) {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: null, error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -49,7 +53,7 @@ async function fetchNote(subject, unit, chapter) {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchUnitNotes(subject, unit) {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: [], error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -71,7 +75,7 @@ async function fetchUnitNotes(subject, unit) {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchSubjectNotes(subject) {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: [], error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -92,7 +96,7 @@ async function fetchSubjectNotes(subject) {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function fetchAllNotesMeta() {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: [], error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -114,7 +118,7 @@ async function fetchAllNotesMeta() {
  * @returns {Promise<{ data: Array, error: any }>}
  */
 async function searchNotes(query) {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: [], error: 'No user id' };
 
   const q = query.trim();
@@ -153,7 +157,7 @@ async function searchNotes(query) {
  * @returns {Promise<{ data: Object, error: any }>}
  */
 async function getNotesCoverageMap() {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: {}, error: 'No user id' };
 
   const { data, error } = await supabaseClient
@@ -218,7 +222,7 @@ async function getNotesCoverageStats() {
  * @returns {Promise<{ data: Object|null, error: any }>}
  */
 async function saveNote(noteObj) {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { data: null, error: 'No user id' };
 
   const payload = {
@@ -260,7 +264,7 @@ async function saveNote(noteObj) {
  * @returns {Promise<{ error: any }>}
  */
 async function deleteNote(noteId) {
-  const userId = _noteUserId();
+  const userId = await _noteUserId();
   if (!userId) return { error: 'No user id' };
 
   const { error } = await supabaseClient
