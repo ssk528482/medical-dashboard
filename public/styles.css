@@ -165,7 +165,6 @@ body > *:not(.side-nav) {
 .side-nav.collapsed .side-nav-badge { display: none; }
 
 /* Collapsed: center icons + tooltip on hover */
-.side-nav.collapsed .side-nav-item { padding: 11px 0; justify-content: center; }
 .side-nav.collapsed .side-nav-brand { justify-content: center; padding: 10px 0 12px; }
 .side-nav.collapsed .side-nav-item:hover::after {
   content: attr(data-label);
