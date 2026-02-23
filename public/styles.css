@@ -280,7 +280,7 @@ button:active { transform: scale(0.97); opacity: 1; }
 button:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
 
 /* ─── Inputs ──────────────────────────────────────────────── */
-input, select, textarea {
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea {
   width: 100%;
   background: var(--bg);
   color: var(--text);
@@ -295,6 +295,17 @@ input, select, textarea {
   -webkit-appearance: none;
   appearance: none;
 }
+input[type="checkbox"], input[type="radio"] {
+  width: auto;
+  min-height: unset;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  -webkit-appearance: auto;
+  appearance: auto;
+  cursor: pointer;
+}
 select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a90b0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -302,7 +313,7 @@ select {
   padding-right: 36px;
   cursor: pointer;
 }
-input:focus, select:focus, textarea:focus {
+input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(59,130,246,0.14);
@@ -2029,7 +2040,7 @@ body.nav-collapsed .browse-bulk-bar { left: var(--nav-w-col); }
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.15s;
 }
 .fc-card-row:hover .fc-card-row-actions { opacity: 1; }
@@ -2544,4 +2555,3 @@ body.nav-collapsed .browse-bulk-bar { left: var(--nav-w-col); }
 
 /* Chapter Add button in browse accordion (header level) */
 .fc-acc-chapter-head { display: flex; align-items: center; gap: 8px; flex: 1; }
-
