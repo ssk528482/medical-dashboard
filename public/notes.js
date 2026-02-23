@@ -248,6 +248,10 @@ function _enterReadMode() {
   document.getElementById("btn-toggle-edit").style.display   = "";
   document.getElementById("btn-toggle-edit").classList.remove("active");
 
+  // Show Note→Cards button only if note has content
+  let n2cBtn = document.getElementById("btn-note-to-cards");
+  if (n2cBtn) n2cBtn.style.display = (note && note.content && note.content.trim()) ? "" : "none";
+
   if (note && note.content) {
     let readEl = document.getElementById("notes-read-body");
     if (typeof marked !== "undefined") {
@@ -313,9 +317,31 @@ async function saveCurrentNote() {
 
   let title   = document.getElementById("note-title-input").value.trim();
   let content = document.getElementById("note-content-editor").value;
+  let contentTrimmed = content.trim();
 
   setSaveStatus("Saving…");
   document.getElementById("btn-save-note").disabled = true;
+
+  // If both title and content are empty AND we have an existing note, delete it
+  if (!contentTrimmed && !title && _currentNote?.id) {
+    let { error } = await deleteNote(_currentNote.id);
+    document.getElementById("btn-save-note").disabled = false;
+    if (error) { setSaveStatus("Delete failed ✗"); return; }
+    _currentNote = null;
+    _isDirty     = false;
+    setSaveStatus("Note cleared ✓");
+    await _loadNotesMeta();
+    _enterReadMode();
+    return;
+  }
+
+  // If content is empty and there's no existing note — nothing to save
+  if (!contentTrimmed && !title && !_currentNote?.id) {
+    document.getElementById("btn-save-note").disabled = false;
+    setSaveStatus("");
+    _enterReadMode();
+    return;
+  }
 
   let payload = {
     id:      _currentNote?.id || undefined,
@@ -343,10 +369,7 @@ async function saveCurrentNote() {
   _isDirty     = false;
   setSaveStatus("Saved ✓");
 
-  // Refresh meta cache
   await _loadNotesMeta();
-
-  // Exit edit mode → show read view with updated content
   _enterReadMode();
 }
 
@@ -841,3 +864,47 @@ function _formatDate(isoStr) {
 //   toggleSidebar()
 //   toggleSubjectInSidebar(el, subject)
 //   toggleUnitInSidebar(el, subject, unit)
+
+// ─────────────────────────────────────────────────────────────────
+// NOTE → CARDS BRIDGE
+// ─────────────────────────────────────────────────────────────────
+
+function openNoteToCardsModal() {
+  let note    = _currentNote;
+  let content = note?.content || document.getElementById("note-content-editor")?.value || "";
+  if (!content.trim()) {
+    alert("No note content to generate cards from. Write some notes first.");
+    return;
+  }
+  let preview = document.getElementById("n2c-preview");
+  if (preview) preview.textContent = content.slice(0, 300) + (content.length > 300 ? "…" : "");
+  document.getElementById("n2c-modal").classList.add("open");
+}
+
+function closeN2CModal() {
+  document.getElementById("n2c-modal").classList.remove("open");
+}
+function closeN2CModalOnBackdrop(e) {
+  if (e.target === document.getElementById("n2c-modal")) closeN2CModal();
+}
+
+function goToCardsWithNote() {
+  let note    = _currentNote;
+  let content = note?.content || document.getElementById("note-content-editor")?.value || "";
+  let subject = _currentSubject || "";
+  let unit    = _currentUnit    || "";
+  let chapter = _currentChapter || "";
+
+  // Store in sessionStorage for the flashcards page to pick up
+  try {
+    sessionStorage.setItem("n2c_content", content);
+    sessionStorage.setItem("n2c_subject", subject);
+    sessionStorage.setItem("n2c_unit",    unit);
+    sessionStorage.setItem("n2c_chapter", chapter);
+  } catch(e) {}
+
+  closeN2CModal();
+  window.location.href = "flashcards.html?tab=create&n2c=1&subject=" +
+    encodeURIComponent(subject) + "&unit=" + encodeURIComponent(unit) +
+    "&chapter=" + encodeURIComponent(chapter);
+}

@@ -263,8 +263,15 @@ async function submitCard() {
     _setStatus("Front text is required.", true);
     return;
   }
-  if (_ccType !== "image_occlusion" && !back && !_ccFrontUrl && !_ccBackUrl) {
+  // Cloze cards: back text is optional (front_text contains the {{blanks}})
+  // Basic cards: need back text OR an image
+  if (_ccType === "basic" && !back && !_ccFrontUrl && !_ccBackUrl) {
     _setStatus("Add back text or an image.", true);
+    return;
+  }
+  // Cloze cards must have at least one {{blank}}
+  if (_ccType === "cloze" && !(front.match(/\{\{.+?\}\}/))) {
+    _setStatus("Cloze cards need at least one {{blank}}. Wrap the answer word with double braces.", true);
     return;
   }
   if (!subject) {

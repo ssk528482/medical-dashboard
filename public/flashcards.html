@@ -511,13 +511,14 @@
     <span class="side-nav-brand-icon">🩺</span>
     <span class="side-nav-brand-text">Medical OS</span>
   </div>
-  <div class="side-nav-items">
+    <div class="side-nav-items">
     <a href="index.html"      class="side-nav-item "     data-label="Home">     <span class="side-nav-icon">🏠</span><span class="side-nav-label">Home</span></a>
     <a href="planner.html"    class="side-nav-item "  data-label="Planner">  <span class="side-nav-icon">📅</span><span class="side-nav-label">Planner</span></a>
-    <a href="editor.html"     class="side-nav-item " data-label="Syllabus"> <span class="side-nav-icon">📚</span><span class="side-nav-label">Syllabus</span></a>
-    <a href="analytics.html"  class="side-nav-item "    data-label="Stats">    <span class="side-nav-icon">📊</span><span class="side-nav-label">Stats</span></a>
+    <a href="editor.html"     class="side-nav-item "   data-label="Syllabus"> <span class="side-nav-icon">📚</span><span class="side-nav-label">Syllabus</span></a>
+    <a href="analytics.html"  class="side-nav-item " data-label="Stats">   <span class="side-nav-icon">📊</span><span class="side-nav-label">Stats</span></a>
     <a href="profile.html"    class="side-nav-item "  data-label="Profile">  <span class="side-nav-icon">👤</span><span class="side-nav-label">Profile</span></a>
-    <a href="flashcards.html" class="side-nav-item active"    data-label="Cards">    <span class="side-nav-icon">🃏</span><span class="side-nav-label">Cards</span><span class="side-nav-badge" id="nav-cards-badge" style="display:none"></span></a>
+    <a href="flashcards.html?tab=review" class="side-nav-item " data-label="Review"><span class="side-nav-icon">🔁</span><span class="side-nav-label">Review</span><span class="side-nav-review-badge" id="nav-review-badge" style="display:none"></span></a>
+    <a href="flashcards.html" class="side-nav-item active"    data-label="Cards">    <span class="side-nav-icon">🃏</span><span class="side-nav-label">Cards</span></a>
     <a href="notes.html"      class="side-nav-item "    data-label="Notes">    <span class="side-nav-icon">📝</span><span class="side-nav-label">Notes</span></a>
   </div>
 </nav>
@@ -541,27 +542,29 @@
 
   <!-- ── Page header ── -->
   <header class="page-header">
-    <h1 class="page-title">🃏 Flashcards</h1>
+    <h1 class="page-title" id="fc-page-title">🃏 Flashcards</h1>
   </header>
 
-  <!-- ── Tab bar ── -->
-  <div class="fc-tabs">
-    <div class="fc-tab active" data-tab="review">Review</div>
-    <div class="fc-tab"        data-tab="browse">Browse</div>
+  <!-- ── Tab bar (Browse + Create only; hidden when in Review mode) ── -->
+  <div class="fc-tabs" id="fc-tabs-bar">
+    <div class="fc-tab active" data-tab="browse">Browse</div>
     <div class="fc-tab"        data-tab="create">Create</div>
   </div>
 
   <!-- ════════════════════════════════════════════
-       TAB 1 — REVIEW
+       REVIEW PANEL (shown when ?tab=review or from side nav)
   ════════════════════════════════════════════ -->
-  <div class="fc-panel active" id="panel-review">
+  <div class="fc-panel" id="panel-review" style="display:none">
 
     <!-- Start screen (shown before session begins) -->
     <div id="review-start-screen">
       <div class="review-big-icon">🃏</div>
       <div class="review-count-label" id="due-count-label">Loading…</div>
       <div class="review-sub-label"   id="due-sub-label"></div>
-      <button class="btn-primary" id="btn-start-review">Start Review</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px;">
+        <button class="btn-primary" id="btn-start-review">Start Review</button>
+        <button style="background:var(--card);color:var(--text-muted);border:1px solid var(--border);border-radius:12px;padding:14px 24px;font-size:14px;font-weight:600;cursor:pointer;margin-top:0;" onclick="showPanel('browse')">Browse Cards</button>
+      </div>
     </div>
 
     <!-- Empty state (no cards due) -->
@@ -569,13 +572,14 @@
       <div class="review-big-icon">✅</div>
       <div class="review-count-label">All caught up!</div>
       <div class="review-sub-label">No cards due today. Come back tomorrow.</div>
-      <button class="btn-primary" onclick="switchTab('create')">Create Cards</button>
+      <button class="btn-primary" onclick="showPanel('create')">Create Cards</button>
     </div>
 
     <!-- Active session (hidden until started) -->
     <div id="review-session" style="display:none">
       <div id="review-header">
         <span id="review-card-counter">Card 1 of 47</span>
+        <span id="review-streak-badge" class="hidden">🔥 0</span>
         <span id="review-timer">00:00</span>
       </div>
 
@@ -604,6 +608,17 @@
         <button class="rating-btn" data-rating="3" onclick="rateCard(3)">3<br>Good</button>
         <button class="rating-btn" data-rating="4" onclick="rateCard(4)">4<br>Easy</button>
       </div>
+
+      <!-- Edit/Delete actions (shown after flip) -->
+      <div id="review-card-actions">
+        <button class="review-card-action-btn edit" onclick="reviewEditCard()">✏️ Edit</button>
+        <button class="review-card-action-btn del"  onclick="reviewDeleteCard()">🗑️ Delete</button>
+      </div>
+
+      <!-- Keyboard shortcut hint -->
+      <div id="review-kb-hint">
+        <kbd>Space</kbd> flip &nbsp;·&nbsp; <kbd>1</kbd>–<kbd>4</kbd> rate &nbsp;·&nbsp; <kbd>E</kbd> edit
+      </div>
     </div>
 
     <!-- Session complete screen -->
@@ -631,21 +646,26 @@
       <div class="review-sub-label" id="summary-retention"></div>
       <div class="review-sub-label" id="summary-time"></div>
       <div class="review-sub-label" id="summary-tomorrow"></div>
-      <button class="btn-primary" onclick="location.reload()">Done</button>
+      <button class="btn-primary" onclick="showPanel('browse')">Done</button>
     </div>
 
   </div><!-- /panel-review -->
 
 
   <!-- ════════════════════════════════════════════
-       TAB 2 — BROWSE (New / Revise accordion)
+       TAB 1 — BROWSE (New / Revise accordion)
   ════════════════════════════════════════════ -->
-  <div class="fc-panel" id="panel-browse">
+  <div class="fc-panel active" id="panel-browse">
 
-    <!-- New / Revise sub-tabs -->
-    <div class="fc-browse-subtabs">
-      <button class="fc-browse-subtab active" id="browse-sub-new"    onclick="switchBrowseSubTab('new')">🆕 New</button>
-      <button class="fc-browse-subtab"        id="browse-sub-revise" onclick="switchBrowseSubTab('revise')">🔁 Revise</button>
+    <!-- Sub-tabs + actions row -->
+    <div style="display:flex;align-items:center;gap:8px;padding:0 0 8px;">
+      <div class="fc-browse-subtabs" style="flex:1;margin-bottom:0;">
+        <button class="fc-browse-subtab active" id="browse-sub-new"    onclick="switchBrowseSubTab('new')">🆕 New</button>
+        <button class="fc-browse-subtab"        id="browse-sub-revise" onclick="switchBrowseSubTab('revise')">🔁 Revise</button>
+        <button class="fc-browse-subtab"        id="browse-sub-all"    onclick="switchBrowseSubTab('all')">📋 All</button>
+      </div>
+      <button onclick="openCsvImportModal()" style="background:var(--card);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-weight:700;padding:6px 10px;margin:0;min-height:unset;white-space:nowrap;cursor:pointer;flex-shrink:0;">📥 Import</button>
+      <button onclick="toggleBrowseSelectMode()" id="browse-select-btn" style="background:var(--card);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-weight:700;padding:6px 10px;margin:0;min-height:unset;white-space:nowrap;cursor:pointer;flex-shrink:0;">☑ Select</button>
     </div>
 
     <!-- Search row -->
@@ -662,7 +682,7 @@
 
 
   <!-- ════════════════════════════════════════════
-       TAB 3 — CREATE
+       TAB 2 — CREATE
   ════════════════════════════════════════════ -->
   <div class="fc-panel" id="panel-create">
 
@@ -794,7 +814,119 @@
 
 
   <!-- ── Nav ── -->
-  
+
+  <!-- ════════════════════════════════════════════
+       BULK DELETE FLOATING BAR
+  ════════════════════════════════════════════ -->
+  <div class="browse-bulk-bar" id="browse-bulk-bar">
+    <span class="browse-bulk-count" id="browse-bulk-count">0 selected</span>
+    <button class="browse-bulk-cancel" onclick="toggleBrowseSelectMode()">Cancel</button>
+    <button class="browse-bulk-delete" onclick="bulkDeleteSelected()">🗑️ Delete Selected</button>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       GENERIC CONFIRM MODAL
+  ════════════════════════════════════════════ -->
+  <div class="gen-modal-backdrop" id="confirm-modal" onclick="closeConfirmModalOnBackdrop(event)">
+    <div class="gen-modal-box">
+      <div class="gen-modal-title" id="confirm-modal-title">Confirm Delete</div>
+      <div class="gen-modal-body"  id="confirm-modal-body">This cannot be undone.</div>
+      <div class="gen-modal-btns">
+        <button class="gen-modal-cancel"  onclick="closeConfirmModal()">Cancel</button>
+        <button class="gen-modal-confirm" id="confirm-modal-ok" onclick="runConfirmAction()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       EDIT CARD MODAL (in-review)
+  ════════════════════════════════════════════ -->
+  <div class="edit-card-modal-backdrop" id="edit-card-modal" onclick="closeEditCardModalOnBackdrop(event)">
+    <div class="edit-card-modal-sheet">
+      <div class="edit-card-modal-title">
+        ✏️ Edit Card
+        <button class="edit-card-modal-close" onclick="closeEditCardModal()">✕</button>
+      </div>
+      <span class="ecm-label">Front</span>
+      <textarea class="ecm-textarea" id="ecm-front" rows="3" placeholder="Front text…"></textarea>
+      <span class="ecm-label">Back</span>
+      <textarea class="ecm-textarea" id="ecm-back" rows="3" placeholder="Back text (leave blank for cloze)…"></textarea>
+      <button class="ecm-save" onclick="saveEditCardModal()">💾 Save Changes</button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       CSV IMPORT MODAL
+  ════════════════════════════════════════════ -->
+  <div class="csv-modal-backdrop" id="csv-import-modal" onclick="closeCsvModalOnBackdrop(event)">
+    <div class="csv-modal-sheet">
+      <div class="csv-modal-title">
+        📥 Import Cards from CSV
+        <button style="background:transparent;border:1px solid var(--border);color:var(--text-dim);font-size:13px;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;margin:0;min-height:unset;" onclick="closeCsvImportModal()">✕</button>
+      </div>
+      <div class="csv-modal-sub">Paste CSV/TSV data or upload a file. Each row = one card.</div>
+
+      <div class="csv-settings-row">
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Delimiter</label>
+          <select id="csv-delimiter" onchange="csvParse()" style="min-height:34px;font-size:12px;margin:0;">
+            <option value="comma">Comma  ,</option>
+            <option value="tab">Tab  ⇥</option>
+            <option value="pipe">Pipe  |</option>
+            <option value="semicolon">Semicolon  ;</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Subject</label>
+          <select id="csv-subject" onchange="csvPopulateUnits()" style="min-height:34px;font-size:12px;margin:0;"></select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Unit</label>
+          <select id="csv-unit" onchange="csvPopulateChapters()" style="min-height:34px;font-size:12px;margin:0;"></select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Chapter</label>
+          <select id="csv-chapter" style="min-height:34px;font-size:12px;margin:0;"></select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Card Type</label>
+          <select id="csv-cardtype" style="min-height:34px;font-size:12px;margin:0;">
+            <option value="basic">Basic</option>
+            <option value="cloze">Cloze</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="csv-column-map" id="csv-column-map" style="display:none">
+        <div>
+          <label>Front column</label>
+          <select id="csv-map-front"></select>
+        </div>
+        <div>
+          <label>Back column</label>
+          <select id="csv-map-back"></select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <button onclick="document.getElementById('csv-file-input').click()" style="background:var(--card);color:var(--text-muted);border:1px solid var(--border);font-size:11px;padding:7px 12px;border-radius:var(--radius-sm);cursor:pointer;margin:0;min-height:unset;">📂 Upload file</button>
+        <span style="font-size:11px;color:var(--text-dim);">or paste below</span>
+        <input type="file" id="csv-file-input" accept=".csv,.tsv,.txt" style="display:none" onchange="csvLoadFile(this)" />
+      </div>
+
+      <textarea class="csv-textarea" id="csv-paste-area" placeholder="front text,back text&#10;What is ATP?,Adenosine triphosphate – the energy currency of the cell&#10;The {{mitochondria}} is the powerhouse of the cell," oninput="csvParse()"></textarea>
+
+      <button class="csv-parse-btn" onclick="csvParse()">🔍 Preview</button>
+
+      <div id="csv-preview-container" style="display:none;margin-top:10px;overflow-x:auto;">
+        <div id="csv-preview-count" style="font-size:11px;color:var(--text-muted);margin-bottom:4px;"></div>
+        <table class="csv-preview-table" id="csv-preview-table"></table>
+      </div>
+
+      <button class="csv-import-btn" id="csv-import-btn" style="display:none" onclick="csvImport()">📥 Import Cards</button>
+      <div class="csv-import-status" id="csv-import-status"></div>
+    </div>
+  </div>
 
 
   <!-- ── Scripts ── -->
