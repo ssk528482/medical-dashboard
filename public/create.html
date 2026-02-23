@@ -123,6 +123,33 @@
     .form-status { font-size: 13px; margin-top: 10px; min-height: 18px; color: var(--blue); }
     .form-status.error { color: var(--red); }
 
+    /* Image Occlusion */
+    .occlusion-section { display: none; }
+    .occlusion-section.active { display: block; }
+    .occlusion-upload-box {
+      border: 2px dashed var(--border); border-radius: var(--radius-sm);
+      padding: 20px; text-align: center; cursor: pointer;
+      color: var(--text-dim); font-size: 13px; margin-bottom: 8px;
+      transition: border-color 0.15s;
+    }
+    .occlusion-upload-box:hover { border-color: var(--blue); color: var(--blue); }
+    #occlusion-canvas {
+      display: none; border-radius: var(--radius-sm); cursor: crosshair;
+      max-width: 100%; margin-bottom: 8px;
+    }
+    .occlusion-hint {
+      display: none; font-size: 12px; color: var(--text-muted);
+      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2);
+      border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 8px;
+    }
+    .occlusion-box-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+    .occlusion-box-actions button {
+      font-size: 12px; padding: 5px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--text-muted); cursor: pointer; min-height: unset; margin: 0;
+    }
+    .occlusion-box-actions button:hover { color: var(--text); background: var(--surface); opacity: 1; box-shadow: none; }
+
     /* AI Generate Modal */
     .modal-backdrop {
       display: none; position: fixed; inset: 0; z-index: 500;
@@ -197,8 +224,9 @@
 
   <!-- Card Type -->
   <div class="type-toggle">
-    <button class="type-btn active" data-type="basic"   onclick="setType('basic')">Basic</button>
-    <button class="type-btn"        data-type="cloze"   onclick="setType('cloze')">Cloze</button>
+    <button class="type-btn active" data-type="basic"           onclick="setType('basic')">Basic</button>
+    <button class="type-btn"        data-type="cloze"           onclick="setType('cloze')">Cloze</button>
+    <button class="type-btn"        data-type="image_occlusion" onclick="setType('image_occlusion')">🖼 Occlusion</button>
   </div>
 
   <!-- Front -->
@@ -228,6 +256,25 @@
       <button class="img-remove" onclick="removeImg('back')">✕</button>
     </div>
     <div class="upload-status" id="back-upload-status"></div>
+  </div>
+
+  <!-- Image Occlusion Section -->
+  <div class="occlusion-section form-group" id="occlusion-section">
+    <label class="form-label">📷 Diagram Image</label>
+    <div class="occlusion-upload-box" id="occlusion-upload-box"
+         onclick="document.getElementById('occlusion-file').click()">
+      📷 Upload diagram for occlusion
+    </div>
+    <input type="file" id="occlusion-file" accept="image/*" style="display:none"
+           onchange="initOcclusionCanvas(this)"/>
+    <canvas id="occlusion-canvas"></canvas>
+    <div class="occlusion-hint" id="occlusion-hint">
+      💡 Drag to draw boxes over areas to hide. Click a box to rename it.
+    </div>
+    <div class="occlusion-box-actions" id="occlusion-box-actions" style="display:none">
+      <button onclick="deleteSelectedBox()">🗑 Delete selected box</button>
+      <button onclick="resetOcclusionCanvas()">↺ Reset all</button>
+    </div>
   </div>
 
   <!-- Link To -->
@@ -282,6 +329,7 @@
 <script src="supabase.js"></script>
 <script src="cloudinary.js"></script>
 <script src="cardSync.js"></script>
+<script src="imageOcclusion.js"></script>
 <script src="create.js"></script>
 </body>
 </html>

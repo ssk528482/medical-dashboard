@@ -92,10 +92,31 @@ function fillChapters() {
 function setType(type) {
   _type = type;
   document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
-  let backGroup  = document.getElementById('back-group');
-  let clozeHint  = document.getElementById('cloze-hint');
-  if (backGroup) backGroup.style.display  = type === 'cloze' ? 'none' : 'block';
-  if (clozeHint) clozeHint.style.display  = type === 'cloze' ? 'block' : 'none';
+  let backGroup       = document.getElementById('back-group');
+  let clozeHint       = document.getElementById('cloze-hint');
+  let occlusionSection = document.getElementById('occlusion-section');
+  let occlusionActions = document.getElementById('occlusion-box-actions');
+  let frontGroup      = document.querySelector('.form-group:has(#front)');
+
+  if (type === 'image_occlusion') {
+    if (backGroup)        backGroup.style.display        = 'none';
+    if (clozeHint)        clozeHint.style.display        = 'none';
+    if (occlusionSection) occlusionSection.classList.add('active');
+    if (occlusionActions) occlusionActions.style.display = 'flex';
+    // Hide front text group since occlusion has its own content
+    let frontUploadBox = document.getElementById('front-upload');
+    if (frontUploadBox) frontUploadBox.closest('.form-group').style.display = 'none';
+  } else {
+    if (backGroup)        backGroup.style.display        = type === 'cloze' ? 'none' : 'block';
+    if (clozeHint)        clozeHint.style.display        = type === 'cloze' ? 'block' : 'none';
+    if (occlusionSection) occlusionSection.classList.remove('active');
+    if (occlusionActions) occlusionActions.style.display = 'none';
+    // Show front group
+    let frontEl = document.getElementById('front');
+    if (frontEl) frontEl.closest('.form-group').style.display = 'block';
+    // Reset occlusion canvas if switching away
+    if (typeof resetOcclusionCanvas === 'function') resetOcclusionCanvas();
+  }
 }
 
 function onFrontInput() {
@@ -161,31 +182,48 @@ function removeImg(side) {
 
 // ── Submit ────────────────────────────────────────────────────────
 async function submit() {
-  let front   = (document.getElementById('front')?.value   || '').trim();
-  let back    = (document.getElementById('back')?.value    || '').trim();
   let subject = document.getElementById('sel-subject')?.value || '';
   let unit    = document.getElementById('sel-unit')?.value    || '';
   let chapter = document.getElementById('sel-chapter')?.value || '';
 
-  if (!front)   { _status('Front text is required.', true); return; }
-  if (_type === 'basic' && !back && !_frontUrl && !_backUrl) { _status('Add back text or an image.', true); return; }
-  if (_type === 'cloze' && !front.match(/\{\{.+?\}\}/)) { _status('Cloze cards need at least one {{blank}}.', true); return; }
   if (!subject) { _status('Please link to a subject.', true); return; }
+
+  let cardObj;
+
+  if (_type === 'image_occlusion') {
+    let occData = typeof getOcclusionBoxes === 'function' ? getOcclusionBoxes() : null;
+    if (!occData) { _status('Please upload a diagram and draw at least one occlusion box.', true); return; }
+    cardObj = {
+      id:         _editId || undefined,
+      subject, unit: unit || '', chapter: chapter || '',
+      card_type:  'image_occlusion',
+      front_text: JSON.stringify(occData),
+      back_text:  null,
+      front_image_url: null,
+      back_image_url:  null,
+      tags: _tags,
+    };
+  } else {
+    let front   = (document.getElementById('front')?.value   || '').trim();
+    let back    = (document.getElementById('back')?.value    || '').trim();
+    if (!front)   { _status('Front text is required.', true); return; }
+    if (_type === 'basic' && !back && !_frontUrl && !_backUrl) { _status('Add back text or an image.', true); return; }
+    if (_type === 'cloze' && !front.match(/\{\{.+?\}\}/)) { _status('Cloze cards need at least one {{blank}}.', true); return; }
+    cardObj = {
+      id:              _editId || undefined,
+      subject, unit: unit || '', chapter: chapter || '',
+      card_type:       _type,
+      front_text:      front,
+      back_text:       _type === 'cloze' ? null : (back || null),
+      front_image_url: _frontUrl,
+      back_image_url:  _backUrl,
+      tags:            _tags,
+    };
+  }
 
   let btn = document.querySelector('.btn-primary:last-of-type');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   _status('Saving…');
-
-  let cardObj = {
-    id:              _editId || undefined,
-    subject, unit: unit || '', chapter: chapter || '',
-    card_type:       _type,
-    front_text:      front,
-    back_text:       _type === 'cloze' ? null : (back || null),
-    front_image_url: _frontUrl,
-    back_image_url:  _backUrl,
-    tags:            _tags,
-  };
 
   let { error } = await saveCard(cardObj);
   if (btn) { btn.disabled = false; btn.textContent = _editId ? 'Save Changes' : 'Save Card'; }
@@ -206,6 +244,7 @@ function _reset() {
   let back = document.getElementById('back'); if (back) back.value = '';
   _tags = []; _frontUrl = null; _backUrl = null; _editId = null;
   removeImg('front'); removeImg('back'); _renderTags(); setType('basic'); _status('');
+  if (typeof resetOcclusionCanvas === 'function') resetOcclusionCanvas();
 }
 
 // ── Load for edit ─────────────────────────────────────────────────
@@ -217,8 +256,17 @@ function _loadForEdit(card) {
   _backUrl  = card.back_image_url  || null;
 
   setType(_type);
-  let f = document.getElementById('front'); if (f) f.value = card.front_text || '';
-  let b = document.getElementById('back');  if (b) b.value = card.back_text  || '';
+
+  if (_type === 'image_occlusion') {
+    // Load occlusion data from front_text JSON
+    try {
+      let occData = JSON.parse(card.front_text || '{}');
+      if (typeof loadOcclusionData === 'function') loadOcclusionData(occData);
+    } catch (_) {}
+  } else {
+    let f = document.getElementById('front'); if (f) f.value = card.front_text || '';
+    let b = document.getElementById('back');  if (b) b.value = card.back_text  || '';
+  }
 
   let sSel = document.getElementById('sel-subject');
   if (sSel) {

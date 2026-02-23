@@ -6,7 +6,7 @@
 
 // ── State ─────────────────────────────────────────────────────────
 let _all          = [];        // all fetched cards
-let _subTab       = 'all';     // new | revise | all
+let _subTab       = 'new';     // new | revise | all
 let _selectMode   = false;
 let _selected     = new Set(); // selected card ids
 let _confirmFn    = null;
@@ -290,9 +290,8 @@ function selectIds(ids) {
     let btn = document.getElementById('select-btn');
     if (btn) { btn.textContent = '✕ Done'; btn.classList.add('active'); }
   }
-  _updateBulkBar();
   if (!wasMode) {
-    _render(); // re-render to show checkboxes
+    _render(); // re-render to show checkboxes with correct checked state
   } else {
     // Just update checkboxes in-place
     ids.forEach(id => {
@@ -300,6 +299,7 @@ function selectIds(ids) {
         .forEach(cb => { cb.checked = true; });
     });
   }
+  _updateBulkBar(); // always update after render
 }
 
 function _updateBulkBar() {
@@ -318,7 +318,10 @@ async function bulkDelete() {
     'Delete ' + ids.length + ' card' + (ids.length !== 1 ? 's' : '') + '?',
     'This cannot be undone.',
     async () => {
-      for (let id of ids) await deleteCard(id);
+      for (let id of ids) {
+        let { error } = await deleteCard(id);
+        if (error) { alert('Delete failed: ' + (error.message || error)); break; }
+      }
       _selected.clear(); _hideBulkBar(); _selectMode = false;
       let btn = document.getElementById('select-btn');
       if (btn) { btn.textContent = '☑ Select'; btn.classList.remove('active'); }
@@ -333,7 +336,11 @@ async function deleteOneCard(id) {
   openConfirm(
     'Delete card?',
     '"' + _esc((card?.front_text || '').slice(0, 80)) + '"<br>This cannot be undone.',
-    async () => { await deleteCard(id); await _loadPreserving(); },
+    async () => {
+      let { error } = await deleteCard(id);
+      if (error) { alert('Delete failed: ' + (error.message || error)); return; }
+      await _loadPreserving();
+    },
     'Delete'
   );
 }
@@ -342,7 +349,13 @@ async function bulkDeleteIds(ids, label) {
   openConfirm(
     'Delete all in "' + label + '"?',
     ids.length + ' cards will be permanently deleted.',
-    async () => { for (let id of ids) await deleteCard(id); await _loadPreserving(); },
+    async () => {
+      for (let id of ids) {
+        let { error } = await deleteCard(id);
+        if (error) { alert('Delete failed for a card: ' + (error.message || error)); break; }
+      }
+      await _loadPreserving();
+    },
     'Delete ' + ids.length
   );
 }
