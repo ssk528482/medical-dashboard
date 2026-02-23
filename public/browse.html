@@ -223,13 +223,35 @@
     }
 
     /* ── Bulk bar ── */
-    .bulk-bar { position: fixed; bottom: 0; left: var(--nav-w); right: 0; height: 58px; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; padding: 0 16px; transform: translateY(100%); transition: transform 0.25s ease; z-index: 100; }
-    body.nav-collapsed .bulk-bar { left: var(--nav-w-col); }
+    .bulk-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 2px solid var(--blue);
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px 10px calc(var(--nav-w) + 16px);
+      transform: translateY(110%); transition: transform 0.25s ease;
+      z-index: 400; box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+    }
+    body.nav-collapsed .bulk-bar { padding-left: calc(var(--nav-w-col) + 16px); }
+    @media (max-width: 640px) {
+      .bulk-bar { padding-left: calc(var(--nav-w-col) + 12px); padding-right: 12px; }
+    }
     .bulk-bar.visible { transform: translateY(0); }
-    .bulk-count { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-muted); }
-    .bulk-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 7px 14px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; min-height: unset; margin: 0; }
-    .bulk-delete-btn { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: var(--red); padding: 7px 14px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; cursor: pointer; min-height: unset; margin: 0; }
-    .bulk-delete-btn:hover { background: rgba(239,68,68,0.25); opacity: 1; box-shadow: none; }
+    .bulk-count { flex: 1; font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; }
+    .bulk-cancel {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-muted); padding: 8px 14px;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
+      cursor: pointer; min-height: unset; margin: 0; white-space: nowrap;
+    }
+    .bulk-cancel:hover { background: rgba(255,255,255,0.05); color: var(--text); opacity: 1; box-shadow: none; }
+    .bulk-delete-btn {
+      background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35);
+      color: var(--red); padding: 8px 14px;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 700;
+      cursor: pointer; min-height: unset; margin: 0; white-space: nowrap;
+    }
+    .bulk-delete-btn:hover { background: rgba(239,68,68,0.28); opacity: 1; box-shadow: none; }
 
     /* ── Empty / loading ── */
     .browse-empty { text-align: center; padding: 48px 24px; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
@@ -374,8 +396,8 @@
 <!-- ═══ BULK BAR ═══ -->
 <div class="bulk-bar" id="bulk-bar">
   <span class="bulk-count" id="bulk-count">0 selected</span>
-  <button class="bulk-cancel" onclick="toggleSelectMode()">Cancel</button>
-  <button class="bulk-delete-btn" onclick="bulkDelete()">🗑️ Delete Selected</button>
+  <button class="bulk-cancel" onclick="toggleSelectMode()">✕ Cancel</button>
+  <button class="bulk-delete-btn" onclick="bulkDelete()">🗑 Delete</button>
 </div>
 
 <!-- ═══ EDIT MODAL ═══ -->
