@@ -526,22 +526,30 @@ function _renderAccordionPreservingState() {
 
 async function _loadBrowseCards() {
   let open = _getAccordionOpenStates();
+  let isFirstLoad = (Object.keys(open.subjects).length === 0 && Object.keys(open.units).length === 0);
+  // Use size for Set
+  let hasNoOpenState = open.subjects.size === 0 && open.units.size === 0;
   let { data } = await fetchCards({ suspended: false });
   _browseAll = data || [];
   renderBrowseAccordion();
-  // Restore open states after fresh render
-  open.subjects.forEach(id => {
-    let el = document.getElementById(id);
-    if (el) el.classList.add("open");
-  });
-  open.units.forEach(id => {
-    let el = document.getElementById(id);
-    if (el) {
-      el.classList.add("open");
-      let chevron = el.querySelector(".fc-acc-chevron");
-      if (chevron) chevron.textContent = "▾";
-    }
-  });
+  // On first load (nothing was open), auto-open all subjects for visibility
+  if (hasNoOpenState) {
+    document.querySelectorAll(".fc-acc-subject").forEach(el => el.classList.add("open"));
+  } else {
+    // Restore previously open states
+    open.subjects.forEach(id => {
+      let el = document.getElementById(id);
+      if (el) el.classList.add("open");
+    });
+    open.units.forEach(id => {
+      let el = document.getElementById(id);
+      if (el) {
+        el.classList.add("open");
+        let chevron = el.querySelector(".fc-acc-chevron");
+        if (chevron) chevron.textContent = "▾";
+      }
+    });
+  }
 }
 
 function switchBrowseSubTab(tab) {
@@ -657,8 +665,8 @@ function renderBrowseAccordion() {
             completeMark +
             '<span class="fc-acc-chapter-name">' + _fcEsc(chap) + '</span>' +
             '<span class="fc-acc-chapter-count">' + cCards.length + ' card' + (cCards.length !== 1 ? "s" : "") + '</span>' +
-            '<button class="fc-acc-learn-btn ' + btnClass + '" onclick="startFilteredSession(' + chapIds + ')">' + btnLabel + ' ' + cCards.length + '</button>' +
-            '<button class="fc-add-chapter-btn" onclick="quickAddOpen(\'' + qaId + '\')">+ Quick Add</button>' +
+            '<button class="fc-acc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startFilteredSession(' + chapIds + ')">' + btnLabel + ' ' + cCards.length + '</button>' +
+            '<button class="fc-add-chapter-btn" onclick="event.stopPropagation();quickAddOpen(\'' + qaId + '\')">+ Quick Add</button>' +
             '<div class="fc-acc-section-menu">' +
               '<button class="fc-acc-menu-btn" onclick="toggleAccMenu(\'' + cMenuId + '\',event)">⋮</button>' +
               '<div class="fc-acc-menu-dropdown" id="' + cMenuId + '">' +
