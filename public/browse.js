@@ -13,6 +13,17 @@ let _confirmFn    = null;
 let _editCardId   = null;
 let _csvParsed    = [];
 
+// ── ID registry: maps short keys to arrays of card IDs ────────────
+// Avoids embedding JSON arrays in onclick attributes (causes SyntaxErrors
+// when IDs contain special characters or the array is large).
+let _idRegistry = {};
+function _regIds(ids) {
+  let key = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  _idRegistry[key] = ids;
+  return key;
+}
+function _getIds(key) { return _idRegistry[key] || []; }
+
 // ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
   await _load();
@@ -30,11 +41,11 @@ document.addEventListener('DOMContentLoaded', async function () {
 async function _load() {
   let { data } = await fetchCards({ suspended: false });
   _all = data || [];
+  _idRegistry = {};
   _render();
 }
 
 async function _loadPreserving() {
-  // Save open state
   let openSubjects = new Set();
   let openUnits    = new Set();
   document.querySelectorAll('.fc-acc-subject.open').forEach(el => openSubjects.add(el.id));
@@ -42,16 +53,16 @@ async function _loadPreserving() {
 
   let { data } = await fetchCards({ suspended: false });
   _all = data || [];
+  _idRegistry = {};
   _render();
 
-  // Restore open state
   openSubjects.forEach(id => { let el = document.getElementById(id); if (el) el.classList.add('open'); });
   openUnits.forEach(id => {
     let el = document.getElementById(id);
     if (el) {
       el.classList.add('open');
-      let ch = el.querySelector('.fc-acc-unit-chevron');
-      if (ch) ch.textContent = '▾';
+      let btn = el.querySelector('.fc-acc-unit-head .fc-acc-collapse-btn');
+      if (btn) btn.textContent = '▾';
     }
   });
 }
@@ -125,29 +136,37 @@ function _render() {
   });
 
   acc.innerHTML = Object.entries(grouped).map(([subj, units]) => {
-    let subjIds   = cards.filter(c => (c.subject||'Uncategorised') === subj).map(c => c.id);
-    let subjCount = subjIds.length;
-    let sMenuId   = 'smenu-' + _slug(subj);
-    let subjIdAttr = 'fc-subj-' + _slug(subj);
+    let subjCardIds = cards.filter(c => (c.subject||'Uncategorised') === subj).map(c => c.id);
+    let subjCount   = subjCardIds.length;
+    let subjIdAttr  = 'fc-subj-' + _slug(subj);
+    let sMenuId     = 'smenu-' + _slug(subj);
+    let sLearnKey   = _regIds(subjCardIds);
+    let sSelKey     = _regIds(subjCardIds);
+    let sDelKey     = _regIds(subjCardIds);
 
     let unitsHtml = Object.entries(units).map(([unit, chapters]) => {
-      let unitIds   = Object.values(chapters).flat().map(c => c.id);
-      let unitCount = unitIds.length;
-      let uMenuId   = 'umenu-' + _slug(subj + '-' + unit);
-      let unitIdAttr = 'fc-unit-' + _slug(subj + '-' + unit);
+      let unitCardIds = Object.values(chapters).flat().map(c => c.id);
+      let unitCount   = unitCardIds.length;
+      let unitIdAttr  = 'fc-unit-' + _slug(subj + '-' + unit);
+      let uMenuId     = 'umenu-' + _slug(subj + '-' + unit);
+      let uLearnKey   = _regIds(unitCardIds);
+      let uSelKey     = _regIds(unitCardIds);
+      let uDelKey     = _regIds(unitCardIds);
 
       let chapHtml = Object.entries(chapters).map(([chap, cCards]) => {
-        let chapIds  = cCards.map(c => c.id);
-        let qaId     = 'qa-' + _slug(subj + '-' + unit + '-' + chap);
-        let cMenuId  = 'cmenu-' + _slug(subj + '-' + unit + '-' + chap);
-        let chapJSON = JSON.stringify(chapIds);
-        let allDone  = cCards.every(c => c.interval_days > 0);
+        let chapCardIds = cCards.map(c => c.id);
+        let qaId        = 'qa-' + _slug(subj + '-' + unit + '-' + chap);
+        let cMenuId     = 'cmenu-' + _slug(subj + '-' + unit + '-' + chap);
+        let cLearnKey   = _regIds(chapCardIds);
+        let cSelKey     = _regIds(chapCardIds);
+        let cDelKey     = _regIds(chapCardIds);
+        let allDone     = cCards.every(c => c.interval_days > 0);
 
         let cardRows = cCards.map(c => {
-          let snip    = (c.front_text || '').slice(0, 60);
-          let trunc   = (c.front_text || '').length > 60 ? '…' : '';
-          let nextD   = c.next_review_date ? c.next_review_date.slice(5) : 'new';
-          let cbHtml  = _selectMode
+          let snip  = (c.front_text || '').slice(0, 60);
+          let trunc = (c.front_text || '').length > 60 ? '…' : '';
+          let nextD = c.next_review_date ? c.next_review_date.slice(5) : 'new';
+          let cbHtml = _selectMode
             ? '<input type="checkbox" class="fc-card-checkbox" data-id="' + c.id + '" ' +
               (_selected.has(c.id) ? 'checked' : '') +
               ' onchange="toggleCard(\'' + c.id + '\',this.checked)">'
@@ -167,7 +186,7 @@ function _render() {
             '<div class="fc-quick-add-row">' +
               '<div style="flex:1;display:flex;flex-direction:column;gap:6px;">' +
                 '<textarea class="fc-quick-add-textarea" id="qa-front-' + qaId + '" placeholder="Front…" rows="2"></textarea>' +
-                '<textarea class="fc-quick-add-textarea" id="qa-back-' + qaId  + '" placeholder="Back…"  rows="2"></textarea>' +
+                '<textarea class="fc-quick-add-textarea" id="qa-back-'  + qaId + '" placeholder="Back…"  rows="2"></textarea>' +
               '</div>' +
               '<div class="fc-quick-add-actions">' +
                 '<select class="fc-quick-add-textarea" id="qa-type-' + qaId + '" style="padding:5px 8px;">' +
@@ -184,13 +203,13 @@ function _render() {
             (allDone ? '<span title="All reviewed" style="font-size:12px;">✅</span>' : '') +
             '<span class="fc-acc-chapter-name">' + _esc(chap) + '</span>' +
             '<span class="fc-acc-chapter-count">' + cCards.length + ' card' + (cCards.length !== 1 ? 's' : '') + '</span>' +
-            '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(' + chapJSON + ')">' + btnLabel + ' ' + cCards.length + '</button>' +
+            '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + cLearnKey + '\')">' + btnLabel + ' ' + cCards.length + '</button>' +
             '<button class="fc-quick-add-btn" onclick="event.stopPropagation();quickOpen(\'' + qaId + '\')">+ Quick Add</button>' +
             '<div class="fc-section-menu">' +
               '<button class="fc-menu-btn" onclick="event.stopPropagation();toggleMenu(\'' + cMenuId + '\')">⋮</button>' +
               '<div class="fc-menu-dropdown" id="' + cMenuId + '">' +
-                '<button class="fc-menu-item" onclick="toggleMenu(\'' + cMenuId + '\');selectIds(' + chapJSON + ')">☑ Select all</button>' +
-                '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + cMenuId + '\');bulkDeleteIds(' + chapJSON + ',\'' + _esc(chap) + '\')">🗑 Delete all (' + cCards.length + ')</button>' +
+                '<button class="fc-menu-item" onclick="toggleMenu(\'' + cMenuId + '\');selectByKey(\'' + cSelKey + '\')">☑ Select all</button>' +
+                '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + cMenuId + '\');bulkDeleteByKey(\'' + cDelKey + '\',\'' + _esc(chap) + '\')">🗑 Delete all (' + cCards.length + ')</button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -200,16 +219,16 @@ function _render() {
       }).join('');
 
       return '<div class="fc-acc-unit" id="' + unitIdAttr + '">' +
-        '<div class="fc-acc-unit-head" onclick="toggleUnit(this)">' +
-          '<span class="fc-acc-unit-chevron">▸</span>' +
+        '<div class="fc-acc-unit-head">' +
+          '<button class="fc-acc-collapse-btn" onclick="event.stopPropagation();toggleUnit(this.closest(\'.fc-acc-unit\'))" title="Collapse">▸</button>' +
           '<span class="fc-acc-unit-name">' + _esc(unit) + '</span>' +
           '<span class="fc-acc-unit-count">' + unitCount + '</span>' +
-          '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(' + JSON.stringify(unitIds) + ')">' + btnLabel + ' ' + unitCount + '</button>' +
+          '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + uLearnKey + '\')">' + btnLabel + ' ' + unitCount + '</button>' +
           '<div class="fc-section-menu" onclick="event.stopPropagation()">' +
             '<button class="fc-menu-btn" onclick="toggleMenu(\'' + uMenuId + '\')">⋮</button>' +
             '<div class="fc-menu-dropdown" id="' + uMenuId + '">' +
-              '<button class="fc-menu-item" onclick="toggleMenu(\'' + uMenuId + '\');selectIds(' + JSON.stringify(unitIds) + ')">☑ Select all in unit</button>' +
-              '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + uMenuId + '\');bulkDeleteIds(' + JSON.stringify(unitIds) + ',\'' + _esc(unit) + '\')">🗑 Delete all (' + unitCount + ')</button>' +
+              '<button class="fc-menu-item" onclick="toggleMenu(\'' + uMenuId + '\');selectByKey(\'' + uSelKey + '\')">☑ Select all in unit</button>' +
+              '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + uMenuId + '\');bulkDeleteByKey(\'' + uDelKey + '\',\'' + _esc(unit) + '\')">🗑 Delete all (' + unitCount + ')</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -218,16 +237,16 @@ function _render() {
     }).join('');
 
     return '<div class="fc-acc-subject open" id="' + subjIdAttr + '">' +
-      '<div class="fc-acc-subject-head" onclick="toggleSubject(this)">' +
+      '<div class="fc-acc-subject-head" onclick="toggleSubject(this.closest(\'.fc-acc-subject\'))">' +
+        '<button class="fc-acc-collapse-btn" onclick="event.stopPropagation();toggleSubject(this.closest(\'.fc-acc-subject\'))" title="Collapse">▾</button>' +
         '<span class="fc-acc-subject-name">' + _esc(subj) + '</span>' +
         '<span class="fc-acc-subject-count ' + (isRevise && subjCount ? 'has-due' : '') + '">' + subjCount + ' cards</span>' +
-        '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(' + JSON.stringify(subjIds) + ')">' + btnLabel + ' ' + subjCount + '</button>' +
-        '<span class="fc-acc-chevron">▾</span>' +
+        '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + sLearnKey + '\')">' + btnLabel + ' ' + subjCount + '</button>' +
         '<div class="fc-section-menu" onclick="event.stopPropagation()">' +
           '<button class="fc-menu-btn" onclick="toggleMenu(\'' + sMenuId + '\')">⋮</button>' +
           '<div class="fc-menu-dropdown" id="' + sMenuId + '">' +
-            '<button class="fc-menu-item" onclick="toggleMenu(\'' + sMenuId + '\');selectIds(' + JSON.stringify(subjIds) + ')">☑ Select all in subject</button>' +
-            '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + sMenuId + '\');bulkDeleteIds(' + JSON.stringify(subjIds) + ',\'' + _esc(subj) + '\')">🗑 Delete all (' + subjCount + ')</button>' +
+            '<button class="fc-menu-item" onclick="toggleMenu(\'' + sMenuId + '\');selectByKey(\'' + sSelKey + '\')">☑ Select all in subject</button>' +
+            '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + sMenuId + '\');bulkDeleteByKey(\'' + sDelKey + '\',\'' + _esc(subj) + '\')">🗑 Delete all (' + subjCount + ')</button>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -237,13 +256,20 @@ function _render() {
 }
 
 // ── Accordion toggles ─────────────────────────────────────────────
-function toggleSubject(headEl) { headEl.closest('.fc-acc-subject').classList.toggle('open'); }
-function toggleUnit(headEl) {
-  let unit = headEl.closest('.fc-acc-unit');
-  unit.classList.toggle('open');
-  let ch = headEl.querySelector('.fc-acc-unit-chevron');
-  if (ch) ch.textContent = unit.classList.contains('open') ? '▾' : '▸';
+function toggleSubject(subjectEl) {
+  if (!subjectEl) return;
+  let isOpen = subjectEl.classList.toggle('open');
+  let btn = subjectEl.querySelector(':scope > .fc-acc-subject-head .fc-acc-collapse-btn');
+  if (btn) btn.textContent = isOpen ? '▾' : '▸';
 }
+
+function toggleUnit(unitEl) {
+  if (!unitEl) return;
+  let isOpen = unitEl.classList.toggle('open');
+  let btn = unitEl.querySelector(':scope > .fc-acc-unit-head .fc-acc-collapse-btn');
+  if (btn) btn.textContent = isOpen ? '▾' : '▸';
+}
+
 function toggleMenu(menuId) {
   let m = document.getElementById(menuId);
   if (!m) return;
@@ -253,9 +279,9 @@ function toggleMenu(menuId) {
 }
 
 // ── Learn session ─────────────────────────────────────────────────
-function startLearn(cardIds) {
+function startLearn(registryKey) {
+  let cardIds = _getIds(registryKey);
   if (!cardIds || !cardIds.length) return;
-  // Store ids and redirect to review page
   sessionStorage.setItem('reviewCardIds', JSON.stringify(cardIds));
   window.location.href = 'review.html?mode=filtered';
 }
@@ -266,13 +292,8 @@ function toggleSelectMode() {
   if (!_selectMode) { _selected.clear(); _hideBulkBar(); }
   let btn = document.getElementById('select-btn');
   if (btn) {
-    if (_selectMode) {
-      btn.textContent = '✕ Done';
-      btn.classList.add('active');
-    } else {
-      btn.textContent = '☑ Select';
-      btn.classList.remove('active');
-    }
+    btn.textContent = _selectMode ? '✕ Done' : '☑ Select';
+    btn.classList.toggle('active', _selectMode);
   }
   _render();
 }
@@ -282,24 +303,23 @@ function toggleCard(id, checked) {
   _updateBulkBar();
 }
 
-function selectIds(ids) {
-  let wasMode = _selectMode;
+// selectByKey — uses registry key, no JSON embedded in onclick
+function selectByKey(registryKey) {
+  let ids = _getIds(registryKey);
+  if (!ids.length) return;
   ids.forEach(id => _selected.add(id));
   if (!_selectMode) {
     _selectMode = true;
     let btn = document.getElementById('select-btn');
     if (btn) { btn.textContent = '✕ Done'; btn.classList.add('active'); }
-  }
-  if (!wasMode) {
-    _render(); // re-render to show checkboxes with correct checked state
+    _render(); // re-render shows checkboxes, then update bar
   } else {
-    // Just update checkboxes in-place
     ids.forEach(id => {
       document.querySelectorAll('.fc-card-checkbox[data-id="' + id + '"]')
         .forEach(cb => { cb.checked = true; });
     });
   }
-  _updateBulkBar(); // always update after render
+  _updateBulkBar();
 }
 
 function _updateBulkBar() {
@@ -307,7 +327,7 @@ function _updateBulkBar() {
   let bar = document.getElementById('bulk-bar');
   let lbl = document.getElementById('bulk-count');
   if (lbl) lbl.textContent = n + ' card' + (n !== 1 ? 's' : '') + ' selected';
-  if (bar) { if (n > 0) bar.classList.add('visible'); else bar.classList.remove('visible'); }
+  if (bar) bar.classList.toggle('visible', n > 0);
 }
 function _hideBulkBar() { document.getElementById('bulk-bar')?.classList.remove('visible'); }
 
@@ -320,7 +340,7 @@ async function bulkDelete() {
     async () => {
       for (let id of ids) {
         let { error } = await deleteCard(id);
-        if (error) { alert('Delete failed: ' + (error.message || error)); break; }
+        if (error) console.error('Delete failed:', id, error);
       }
       _selected.clear(); _hideBulkBar(); _selectMode = false;
       let btn = document.getElementById('select-btn');
@@ -338,21 +358,27 @@ async function deleteOneCard(id) {
     '"' + _esc((card?.front_text || '').slice(0, 80)) + '"<br>This cannot be undone.',
     async () => {
       let { error } = await deleteCard(id);
-      if (error) { alert('Delete failed: ' + (error.message || error)); return; }
+      if (error) {
+        alert('Delete failed: ' + (error.message || JSON.stringify(error)));
+        return;
+      }
       await _loadPreserving();
     },
     'Delete'
   );
 }
 
-async function bulkDeleteIds(ids, label) {
+// bulkDeleteByKey — uses registry key, no JSON embedded in onclick
+async function bulkDeleteByKey(registryKey, label) {
+  let ids = _getIds(registryKey);
+  if (!ids.length) return;
   openConfirm(
     'Delete all in "' + label + '"?',
     ids.length + ' cards will be permanently deleted.',
     async () => {
       for (let id of ids) {
         let { error } = await deleteCard(id);
-        if (error) { alert('Delete failed for a card: ' + (error.message || error)); break; }
+        if (error) console.error('Delete failed:', id, error);
       }
       await _loadPreserving();
     },
@@ -366,13 +392,13 @@ function quickClose(qaId) {
   let f = document.getElementById('form-' + qaId);
   if (f) f.classList.remove('open');
   let ff = document.getElementById('qa-front-' + qaId);
-  let bf = document.getElementById('qa-back-' + qaId);
+  let bf = document.getElementById('qa-back-'  + qaId);
   if (ff) ff.value = ''; if (bf) bf.value = '';
 }
 
 async function quickSave(subject, unit, chapter, qaId) {
   let front = (document.getElementById('qa-front-' + qaId)?.value || '').trim();
-  let back  = (document.getElementById('qa-back-' + qaId)?.value  || '').trim();
+  let back  = (document.getElementById('qa-back-'  + qaId)?.value || '').trim();
   let type  = document.getElementById('qa-type-' + qaId)?.value || 'basic';
   if (!front) return;
   let btn = document.querySelector('#form-' + qaId + ' .fc-qa-save');
@@ -404,10 +430,14 @@ async function saveEdit() {
   if (!front) { alert('Front text is required.'); return; }
   let btn = document.querySelector('.edit-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  await saveCard({ id: _editCardId, front_text: front, back_text: back || null,
-    card_type: card?.card_type || 'basic', subject: card?.subject, unit: card?.unit,
-    chapter: card?.chapter, tags: card?.tags || [] });
+  let { error } = await saveCard({
+    id: _editCardId, front_text: front, back_text: back || null,
+    card_type: card?.card_type || 'basic',
+    subject: card?.subject, unit: card?.unit,
+    chapter: card?.chapter, tags: card?.tags || []
+  });
   if (btn) { btn.disabled = false; btn.textContent = '💾 Save Changes'; }
+  if (error) { alert('Save failed: ' + (error.message || error)); return; }
   closeEditModal();
   await _loadPreserving();
 }
@@ -420,8 +450,15 @@ function openConfirm(title, body, fn, okLabel) {
   document.getElementById('confirm-ok').textContent    = okLabel || 'Delete';
   document.getElementById('confirm-modal').classList.add('open');
 }
-function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); _confirmFn = null; }
-async function runConfirm() { closeConfirm(); if (_confirmFn) await _confirmFn(); }
+function closeConfirm() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  _confirmFn = null;
+}
+async function runConfirm() {
+  let fn = _confirmFn; // capture before closeConfirm clears it
+  closeConfirm();
+  if (fn) await fn();
+}
 
 // ── CSV Import ────────────────────────────────────────────────────
 function openCsvModal() {
@@ -481,20 +518,17 @@ function csvParse() {
   let text  = document.getElementById('csv-text')?.value || '';
   let delim = _csvDelim();
   let lines = text.split(/\r?\n/).filter(l => l.trim());
-  let prevWrap = document.getElementById('csv-preview-wrap');
+  let prevWrap  = document.getElementById('csv-preview-wrap');
   let importBtn = document.getElementById('csv-import-btn');
 
   if (!lines.length) {
-    if (prevWrap) prevWrap.style.display = 'none';
+    if (prevWrap)  prevWrap.style.display  = 'none';
     if (importBtn) importBtn.style.display = 'none';
     _csvParsed = []; return;
   }
 
   let rows = lines.map(l => _csvSplit(l, delim));
-  let maxCols = Math.max(...rows.map(r => r.length));
-
-  // Only treat first row as header if more rows follow AND all cells are text-only
-  let firstRow = rows[0];
+  let firstRow  = rows[0];
   let hasHeader = rows.length > 1 && firstRow.every(c => c.trim() !== '' && isNaN(Number(c)));
   let dataRows  = hasHeader ? rows.slice(1) : rows;
 
@@ -511,7 +545,6 @@ function csvParse() {
     '<tr><td>' + _esc(r.front) + '</td><td>' + _esc(r.back) + '</td></tr>'
   ).join('');
   if (table) table.innerHTML = '<thead><tr><th>Front</th><th>Back</th></tr></thead><tbody>' + preview + '</tbody>';
-
   if (importBtn) importBtn.style.display = _csvParsed.length ? 'inline-block' : 'none';
 }
 
@@ -529,11 +562,11 @@ function _csvSplit(line, delim) {
 
 async function csvImport() {
   if (!_csvParsed.length) return;
-  let subject  = document.getElementById('csv-subject')?.value  || '';
-  let unit     = document.getElementById('csv-unit')?.value     || '';
-  let chapter  = document.getElementById('csv-chapter')?.value  || '';
-  let cardType = document.getElementById('csv-type')?.value     || 'basic';
-  let statusEl = document.getElementById('csv-status');
+  let subject   = document.getElementById('csv-subject')?.value  || '';
+  let unit      = document.getElementById('csv-unit')?.value     || '';
+  let chapter   = document.getElementById('csv-chapter')?.value  || '';
+  let cardType  = document.getElementById('csv-type')?.value     || 'basic';
+  let statusEl  = document.getElementById('csv-status');
   let importBtn = document.getElementById('csv-import-btn');
 
   if (!subject) { statusEl.textContent = 'Please select a subject.'; statusEl.style.color = 'var(--red)'; return; }
@@ -565,7 +598,10 @@ async function csvImport() {
 // ── Helpers ───────────────────────────────────────────────────────
 function _esc(str) {
   if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-function _slug(str) { return str.replace(/[^a-z0-9]/gi, '_'); }
+function _slug(str) {
+  return String(str).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+}
