@@ -161,9 +161,14 @@
     .fc-section-menu { position: relative; display: inline-flex; flex-shrink: 0; }
     .fc-menu-btn { background: transparent; border: none; color: var(--text-dim); font-size: 16px; padding: 2px 5px; cursor: pointer; margin: 0; min-height: unset; border-radius: 4px; line-height: 1; }
     .fc-menu-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); opacity: 1; box-shadow: none; }
-    .fc-menu-dropdown { display: none; position: absolute; right: 0; top: 100%; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 190px; box-shadow: var(--shadow); overflow: hidden; }
+    .fc-menu-dropdown {
+      display: none; position: fixed; z-index: 9999;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); min-width: 200px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6); overflow: hidden;
+    }
     .fc-menu-dropdown.open { display: block; }
-    .fc-menu-item { display: block; width: 100%; text-align: left; padding: 9px 14px; font-size: 12px; color: var(--text-muted); background: transparent; border: none; cursor: pointer; margin: 0; min-height: unset; border-radius: 0; white-space: nowrap; }
+    .fc-menu-item { display: block; width: 100%; text-align: left; padding: 11px 16px; font-size: 13px; color: var(--text-muted); background: transparent; border: none; cursor: pointer; margin: 0; min-height: unset; border-radius: 0; white-space: nowrap; }
     .fc-menu-item:hover { background: rgba(255,255,255,0.05); color: var(--text); opacity: 1; box-shadow: none; }
     .fc-menu-item.danger { color: var(--red); }
     .fc-menu-item.danger:hover { background: rgba(239,68,68,0.08); }

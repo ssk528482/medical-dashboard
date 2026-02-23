@@ -189,7 +189,7 @@ function _render() {
             '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + cLearnKey + '\')">' + btnLabel + ' ' + cCards.length + '</button>' +
             '<button class="fc-quick-add-btn" onclick="event.stopPropagation();openQuickAddModal(\'' + _esc(subj) + '\',\'' + _esc(unit) + '\',\'' + _esc(chap) + '\')">+</button>' +
             '<div class="fc-section-menu">' +
-              '<button class="fc-menu-btn" onclick="event.stopPropagation();toggleMenu(\'' + cMenuId + '\')">⋮</button>' +
+              '<button class="fc-menu-btn" onclick="event.stopPropagation();toggleMenu(\'' + cMenuId + '\',this)">⋮</button>' +
               '<div class="fc-menu-dropdown" id="' + cMenuId + '">' +
                 '<button class="fc-menu-item" onclick="toggleMenu(\'' + cMenuId + '\');selectByKey(\'' + cSelKey + '\')">☑ Select all</button>' +
                 '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + cMenuId + '\');bulkDeleteByKey(\'' + cDelKey + '\',\'' + _esc(chap) + '\')">🗑 Delete all (' + cCards.length + ')</button>' +
@@ -209,7 +209,7 @@ function _render() {
           '<span class="fc-acc-unit-count">' + unitCount + '</span>' +
           '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + uLearnKey + '\')">' + btnLabel + ' ' + unitCount + '</button>' +
           '<div class="fc-section-menu" onclick="event.stopPropagation()">' +
-            '<button class="fc-menu-btn" onclick="toggleMenu(\'' + uMenuId + '\')">⋮</button>' +
+            '<button class="fc-menu-btn" onclick="toggleMenu(\'' + uMenuId + '\',this)">⋮</button>' +
             '<div class="fc-menu-dropdown" id="' + uMenuId + '">' +
               '<button class="fc-menu-item" onclick="toggleMenu(\'' + uMenuId + '\');selectByKey(\'' + uSelKey + '\')">☑ Select all in unit</button>' +
               '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + uMenuId + '\');bulkDeleteByKey(\'' + uDelKey + '\',\'' + _esc(unit) + '\')">🗑 Delete all (' + unitCount + ')</button>' +
@@ -227,7 +227,7 @@ function _render() {
         '<span class="fc-acc-subject-count ' + (isRevise && subjCount ? 'has-due' : '') + '">' + subjCount + ' cards</span>' +
         '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + sLearnKey + '\')">' + btnLabel + ' ' + subjCount + '</button>' +
         '<div class="fc-section-menu" onclick="event.stopPropagation()">' +
-          '<button class="fc-menu-btn" onclick="toggleMenu(\'' + sMenuId + '\')">⋮</button>' +
+          '<button class="fc-menu-btn" onclick="toggleMenu(\'' + sMenuId + '\',this)">⋮</button>' +
           '<div class="fc-menu-dropdown" id="' + sMenuId + '">' +
             '<button class="fc-menu-item" onclick="toggleMenu(\'' + sMenuId + '\');selectByKey(\'' + sSelKey + '\')">☑ Select all in subject</button>' +
             '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + sMenuId + '\');bulkDeleteByKey(\'' + sDelKey + '\',\'' + _esc(subj) + '\')">🗑 Delete all (' + subjCount + ')</button>' +
@@ -261,12 +261,28 @@ function toggleChapter(chapEl) {
   if (btn) btn.textContent = isOpen ? '▾' : '▸';
 }
 
-function toggleMenu(menuId) {
+function toggleMenu(menuId, triggerBtn) {
   let m = document.getElementById(menuId);
   if (!m) return;
   let wasOpen = m.classList.contains('open');
   document.querySelectorAll('.fc-menu-dropdown.open').forEach(d => d.classList.remove('open'));
-  if (!wasOpen) m.classList.add('open');
+  if (!wasOpen) {
+    m.classList.add('open');
+    // Position using fixed coords so it escapes overflow:hidden parents
+    let btn = triggerBtn || document.querySelector('[onclick*="' + menuId + '"]');
+    if (btn) {
+      let r = btn.getBoundingClientRect();
+      let dropW = 210;
+      let left  = r.right - dropW;
+      if (left < 4) left = r.left;
+      let top = r.bottom + 4;
+      // Flip up if too close to bottom
+      if (top + 120 > window.innerHeight) top = r.top - 4 - Math.min(120, m.scrollHeight || 100);
+      m.style.left = left + 'px';
+      m.style.top  = top  + 'px';
+      m.style.width = dropW + 'px';
+    }
+  }
 }
 
 // ── Learn session ─────────────────────────────────────────────────
