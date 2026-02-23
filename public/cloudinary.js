@@ -12,8 +12,8 @@
 // -----------------------------------------------------------------
 
 // ── Config (replace with your real values) ──────────────────────
-const CLOUDINARY_CLOUD_NAME    = 'YOUR_CLOUD_NAME';     // ← replace
-const CLOUDINARY_UPLOAD_PRESET = 'YOUR_UPLOAD_PRESET';  // ← replace
+const CLOUDINARY_CLOUD_NAME    = 'dxuxw8o0j';     // ← replace
+const CLOUDINARY_UPLOAD_PRESET = 'medica_unsigned';  // ← replace
 
 const CLOUDINARY_BASE_URL =
   `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
