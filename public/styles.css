@@ -2560,10 +2560,10 @@ body.nav-collapsed .browse-bulk-bar { left: var(--nav-w-col); }
 .fc-acc-chapter-head { display: flex; align-items: center; gap: 8px; flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════
-   SCREEN ROTATION — Programmatic landscape/portrait toggle
+   SCREEN ROTATION — nav button styles only
+   (All rotation logic handled by rotateScreen.js)
    ═══════════════════════════════════════════════════════════ */
 
-/* Rotate button at bottom of side nav */
 .nav-rotate-btn-wrap {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
@@ -2588,37 +2588,39 @@ body.nav-collapsed .browse-bulk-bar { left: var(--nav-w-col); }
   white-space: nowrap;
   overflow: hidden;
 }
-.rotate-screen-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); opacity: 1; box-shadow: none; }
-.rotate-screen-icon { font-size: 16px; flex-shrink: 0; width: 24px; text-align: center; display: flex; align-items: center; justify-content: center; }
-.rotate-screen-label { opacity: 1; transition: opacity 0.2s; overflow: hidden; white-space: nowrap; }
-.side-nav.collapsed .rotate-screen-label { opacity: 0; width: 0; min-width: 0; pointer-events: none; }
-.side-nav.collapsed .rotate-screen-btn { justify-content: center; padding: 8px 0; border-color: transparent; background: transparent; }
-.side-nav.collapsed .nav-rotate-btn-wrap { padding: 8px 2px; }
-
-/* Landscape topbar — shown only when rotated, hidden by default */
-#rs-topbar {
-  display: none;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: 48px;
-  background: rgba(10,18,36,0.97);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid var(--border);
-  z-index: 9999;
-  align-items: center;
-  gap: 0;
-  padding: 0 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
+.rotate-screen-btn:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+  opacity: 1;
+  box-shadow: none;
 }
-#rs-topbar-links {
+.rotate-screen-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
   display: flex;
   align-items: center;
-  flex: 1;
-  gap: 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  justify-content: center;
 }
-#rs-topbar-links::-webkit-scrollbar { display: none; }
+.rotate-screen-label {
+  opacity: 1;
+  transition: opacity 0.2s;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.side-nav.collapsed .rotate-screen-label {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  pointer-events: none;
+}
+.side-nav.collapsed .rotate-screen-btn {
+  justify-content: center;
+  padding: 8px 0;
+  border-color: transparent;
+  background: transparent;
+}
+.side-nav.collapsed .nav-rotate-btn-wrap {
+  padding: 8px 2px;
+}
