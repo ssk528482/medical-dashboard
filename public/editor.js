@@ -151,7 +151,7 @@ function renderEditor() {
               <div class="topic-left" style="flex:1;min-width:0;">
                 <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>${pageInfo}${phaseTag}${_getBadgeHtml(subjectName, unit.name, ch.name)}
               </div>
-              <div class="topic-actions" style="gap:3px;">
+              <div class="topic-actions" style="gap:3px;flex-wrap:wrap;justify-content:flex-end;">
                 <select onchange="setChapterDifficulty('${esc(subjectName)}',${ui},${ci},this.value)"
                   style="font-size:10px;padding:2px 4px;width:52px;background:#1e293b;border:1px solid ${diffColors[diff]};color:${diffColors[diff]};border-radius:5px;">
                   <option value="easy"  ${diff==="easy" ?"selected":""}>Easy</option>

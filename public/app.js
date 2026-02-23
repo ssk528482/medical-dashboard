@@ -574,16 +574,22 @@ function renderRevisionCheckboxList() {
     container.innerHTML = `<span style="color:#9ca3af;font-size:13px;">No revisions due today ✓</span>`;
     return;
   }
+  // Scrollable wrapper after 5 items
+  let wrapper = document.createElement("div");
+  if (due.length > 5) {
+    wrapper.style.cssText = "max-height:220px;overflow-y:auto;border:1px solid #1e293b;border-radius:8px;padding:4px 0;";
+  }
   due.forEach(item => {
     let label = document.createElement("label");
-    label.style.cssText = "display:block;padding:5px 0;font-size:13px;cursor:pointer;";
+    label.style.cssText = "display:block;padding:6px 8px;font-size:13px;cursor:pointer;border-bottom:1px solid #1e293b;";
     label.innerHTML = `
       <input type="checkbox" value="${item.subjectName}|${item.unitIndex}|${item.chapterIndex}" style="margin-right:8px;">
       ${item.subjectName} — ${item.unitName} → ${item.topicName}
       ${item.isOverdue ? `<span style="color:#ef4444;font-size:11px;"> (${item.overdueDays}d overdue)</span>` : ""}
     `;
-    container.appendChild(label);
+    wrapper.appendChild(label);
   });
+  container.appendChild(wrapper);
 }
 
 function deleteEveningUpdate() {

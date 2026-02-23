@@ -105,13 +105,18 @@
     .fc-acc-unit.open .fc-acc-chapters { display: block; }
 
     /* ── Chapter ── */
-    .fc-acc-chapter { border-top: 1px solid rgba(30,51,80,0.5); background: rgba(0,0,0,0.08); }
+    .fc-acc-chapter { border-top: 1px solid rgba(30,51,80,0.5); background: rgba(0,0,0,0.08); overflow: hidden; }
     .fc-acc-chapter-head {
-      display: flex; align-items: center; gap: 6px;
-      padding: 7px 10px 7px 32px; flex-wrap: nowrap;
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 10px 7px 28px; flex-wrap: nowrap; cursor: pointer;
+      user-select: none;
     }
+    .fc-acc-chapter-head:hover { background: rgba(255,255,255,0.02); }
     .fc-acc-chapter-name { font-size: 12px; font-weight: 600; color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fc-acc-chapter-count { font-size: 10px; color: var(--text-dim); flex-shrink: 0; }
+    /* Chapter cards: hidden by default, shown when chapter open */
+    .fc-acc-chapter-cards { display: none; }
+    .fc-acc-chapter.open .fc-acc-chapter-cards { display: block; }
 
     /* ── Learn button ── */
     .fc-learn-btn {
@@ -126,9 +131,10 @@
 
     /* ── Quick add btn ── */
     .fc-quick-add-btn {
-      font-size: 10px; font-weight: 600; padding: 3px 8px; flex-shrink: 0;
+      font-size: 13px; font-weight: 700; padding: 2px 7px; flex-shrink: 0;
       border-radius: 5px; cursor: pointer; border: 1px dashed var(--border);
       background: transparent; color: var(--text-dim); min-height: unset; margin: 0;
+      line-height: 1.4; width: 26px; text-align: center;
     }
     .fc-quick-add-btn:hover { border-color: var(--blue); color: var(--blue); opacity: 1; box-shadow: none; }
 

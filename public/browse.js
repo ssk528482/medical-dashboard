@@ -198,13 +198,14 @@ function _render() {
             '</div>' +
           '</div>';
 
-        return '<div class="fc-acc-chapter">' +
-          '<div class="fc-acc-chapter-head">' +
-            (allDone ? '<span title="All reviewed" style="font-size:12px;">✅</span>' : '') +
+        return '<div class="fc-acc-chapter" id="ch-' + qaId + '">' +
+          '<div class="fc-acc-chapter-head" onclick="event.stopPropagation();toggleChapter(this.closest(\'.fc-acc-chapter\'))">' +
+            '<button class="fc-acc-collapse-btn" onclick="event.stopPropagation();toggleChapter(this.closest(\'.fc-acc-chapter\'))" style="font-size:10px;">▸</button>' +
+            (allDone ? '<span title="All reviewed" style="font-size:11px;flex-shrink:0;">✅</span>' : '') +
             '<span class="fc-acc-chapter-name">' + _esc(chap) + '</span>' +
-            '<span class="fc-acc-chapter-count">' + cCards.length + ' card' + (cCards.length !== 1 ? 's' : '') + '</span>' +
+            '<span class="fc-acc-chapter-count">' + cCards.length + '</span>' +
             '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + cLearnKey + '\')">' + btnLabel + ' ' + cCards.length + '</button>' +
-            '<button class="fc-quick-add-btn" onclick="event.stopPropagation();quickOpen(\'' + qaId + '\')">+ Quick Add</button>' +
+            '<button class="fc-quick-add-btn" onclick="event.stopPropagation();quickOpen(\'' + qaId + '\')">+</button>' +
             '<div class="fc-section-menu">' +
               '<button class="fc-menu-btn" onclick="event.stopPropagation();toggleMenu(\'' + cMenuId + '\')">⋮</button>' +
               '<div class="fc-menu-dropdown" id="' + cMenuId + '">' +
@@ -213,8 +214,10 @@ function _render() {
               '</div>' +
             '</div>' +
           '</div>' +
-          qaForm +
-          '<div id="rows-' + qaId + '">' + cardRows + '</div>' +
+          '<div class="fc-acc-chapter-cards">' +
+            qaForm +
+            '<div id="rows-' + qaId + '">' + cardRows + '</div>' +
+          '</div>' +
         '</div>';
       }).join('');
 
@@ -267,6 +270,13 @@ function toggleUnit(unitEl) {
   if (!unitEl) return;
   let isOpen = unitEl.classList.toggle('open');
   let btn = unitEl.querySelector(':scope > .fc-acc-unit-head .fc-acc-collapse-btn');
+  if (btn) btn.textContent = isOpen ? '▾' : '▸';
+}
+
+function toggleChapter(chapEl) {
+  if (!chapEl) return;
+  let isOpen = chapEl.classList.toggle('open');
+  let btn = chapEl.querySelector(':scope > .fc-acc-chapter-head .fc-acc-collapse-btn');
   if (btn) btn.textContent = isOpen ? '▾' : '▸';
 }
 

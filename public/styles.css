@@ -519,6 +519,13 @@ label {
   padding: 8px 0;
   border-top: 1px solid var(--border);
   gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .chapter-row { align-items: flex-start; }
+  .chapter-row .topic-left { flex-basis: 100%; }
+  .chapter-row .topic-actions { flex-basis: 100%; padding-left: 2px; }
 }
 
 /* ─── Qbank Unit Row ──────────────────────────────────────── */
