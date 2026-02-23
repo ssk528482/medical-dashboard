@@ -7,6 +7,39 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<nav class="side-nav" id="side-nav">
+  <button class="side-nav-toggle" id="side-nav-toggle" title="Toggle sidebar">❮</button>
+  <div class="side-nav-brand">
+    <span class="side-nav-brand-icon">🩺</span>
+    <span class="side-nav-brand-text">Medical OS</span>
+  </div>
+  <div class="side-nav-items">
+    <a href="index.html"      class="side-nav-item active"     data-label="Home">     <span class="side-nav-icon">🏠</span><span class="side-nav-label">Home</span></a>
+    <a href="planner.html"    class="side-nav-item "  data-label="Planner">  <span class="side-nav-icon">📅</span><span class="side-nav-label">Planner</span></a>
+    <a href="editor.html"     class="side-nav-item " data-label="Syllabus"> <span class="side-nav-icon">📚</span><span class="side-nav-label">Syllabus</span></a>
+    <a href="analytics.html"  class="side-nav-item "    data-label="Stats">    <span class="side-nav-icon">📊</span><span class="side-nav-label">Stats</span></a>
+    <a href="profile.html"    class="side-nav-item "  data-label="Profile">  <span class="side-nav-icon">👤</span><span class="side-nav-label">Profile</span></a>
+    <a href="flashcards.html" class="side-nav-item "    data-label="Cards">    <span class="side-nav-icon">🃏</span><span class="side-nav-label">Cards</span><span class="side-nav-badge" id="nav-cards-badge" style="display:none"></span></a>
+    <a href="notes.html"      class="side-nav-item "    data-label="Notes">    <span class="side-nav-icon">📝</span><span class="side-nav-label">Notes</span></a>
+  </div>
+</nav>
+<script>
+(function(){
+  var nav = document.getElementById('side-nav');
+  var btn = document.getElementById('side-nav-toggle');
+  if (localStorage.getItem('navCollapsed') === '1') {
+    nav.classList.add('collapsed');
+    document.body.classList.add('nav-collapsed');
+    if (btn) btn.textContent = '❯';
+  }
+  if (btn) btn.addEventListener('click', function() {
+    var c = nav.classList.toggle('collapsed');
+    document.body.classList.toggle('nav-collapsed', c);
+    btn.textContent = c ? '❯' : '❮';
+    localStorage.setItem('navCollapsed', c ? '1' : '0');
+  });
+})();
+</script>
 
 <script src="router.js"></script>
 
@@ -46,14 +79,7 @@
 </div>
 
 <!-- Bottom Nav (5 items) -->
-<div class="bottom-nav">
-  <a href="index.html" class="active">🏠<br>Home</a>
-  <a href="planner.html">📋<br>Planner</a>
-  <a href="editor.html">📚<br>Syllabus</a>
-  <a href="analytics.html">📊<br>Stats</a>
-  <a href="profile.html">👤<br>Profile</a>
-  <a href="flashcards.html" style="position:relative;">🃏<br>Cards<span id="nav-cards-badge" class="nav-badge" style="display:none"></span></a>
-</div>
+
 
 <script src="utils.js"></script>
 <script src="data.js"></script>

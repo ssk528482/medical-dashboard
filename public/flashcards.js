@@ -394,102 +394,150 @@ function _endSession() {
 
 
 // ══════════════════════════════════════════════════════════════════
-// BROWSE TAB
+// BROWSE TAB — ACCORDION (New / Revise)
 // ══════════════════════════════════════════════════════════════════
 
+let _browseSubTab  = "new";   // "new" | "revise"
+
 async function _loadBrowseCards() {
-  // Populate subject filter from studyData
-  let subjSel = document.getElementById("filter-subject");
-  if (subjSel && subjSel.options.length === 1) {
-    Object.keys(studyData.subjects || {}).forEach(s => {
-      let opt = document.createElement("option");
-      opt.value = s; opt.textContent = s;
-      subjSel.appendChild(opt);
-    });
-  }
-
-  let suspendedVal = document.getElementById("filter-suspended")?.value || "active";
-  let suspended = suspendedVal === "suspended" ? true
-                : suspendedVal === "all"       ? "all"
-                : false;
-
-  let { data } = await fetchCards({ suspended });
+  let { data } = await fetchCards({ suspended: false });
   _browseAll      = data || [];
   _browseFiltered = [..._browseAll];
-  renderBrowseList();
+  renderBrowseAccordion();
 }
 
-function browseFilter() {
-  let search    = (document.getElementById("browse-search")?.value || "").toLowerCase();
-  let subject   = document.getElementById("filter-subject")?.value  || "";
-  let unit      = document.getElementById("filter-unit")?.value     || "";
-  let type      = document.getElementById("filter-type")?.value     || "";
-  let suspVal   = document.getElementById("filter-suspended")?.value || "active";
+function switchBrowseSubTab(tab) {
+  _browseSubTab = tab;
+  document.getElementById("browse-sub-new")?.classList.toggle("active", tab === "new");
+  document.getElementById("browse-sub-revise")?.classList.toggle("active", tab === "revise");
+  renderBrowseAccordion();
+}
 
-  _browseFiltered = _browseAll.filter(card => {
-    if (subject && card.subject !== subject) return false;
-    if (unit    && card.unit    !== unit)    return false;
-    if (type    && card.card_type !== type)  return false;
-    if (suspVal === "active"    && card.is_suspended)  return false;
-    if (suspVal === "suspended" && !card.is_suspended) return false;
-    if (search) {
-      let hay = ((card.front_text || "") + " " + (card.back_text || "")).toLowerCase();
-      if (!hay.includes(search)) return false;
-    }
+function browseSearch() {
+  renderBrowseAccordion();
+}
+
+// Legacy alias (old browseFilter calls)
+function browseFilter() { browseSearch(); }
+
+function renderBrowseAccordion() {
+  let accordion = document.getElementById("browse-accordion");
+  if (!accordion) return;
+
+  let searchQ = (document.getElementById("browse-search")?.value || "").toLowerCase().trim();
+  let todayStr = today();
+
+  // Split cards by sub-tab
+  let cards = _browseAll.filter(c => {
+    if (_browseSubTab === "new")    return c.interval_days === 0 || c.interval_days == null;
+    if (_browseSubTab === "revise") return (c.interval_days > 0) && (c.next_review_date <= todayStr);
     return true;
   });
 
-  // If subject changed, update unit dropdown
-  let unitSel = document.getElementById("filter-unit");
-  if (unitSel && subject) {
-    let units = [...new Set(_browseAll.filter(c => c.subject === subject).map(c => c.unit))];
-    let current = unitSel.value;
-    unitSel.innerHTML = `<option value="">All Units</option>`;
-    units.forEach(u => {
-      let opt = document.createElement("option");
-      opt.value = u; opt.textContent = u;
-      if (u === current) opt.selected = true;
-      unitSel.appendChild(opt);
+  // Apply search filter
+  if (searchQ) {
+    cards = cards.filter(c => {
+      let hay = ((c.front_text || "") + " " + (c.back_text || "") + " " +
+                 (c.subject || "") + " " + (c.unit || "") + " " + (c.chapter || "")).toLowerCase();
+      return hay.includes(searchQ);
     });
   }
 
-  renderBrowseList();
-}
-
-function renderBrowseList() {
-  let list  = document.getElementById("browse-card-list");
-  let empty = document.getElementById("browse-empty");
-  if (!list) return;
-
-  if (_browseFiltered.length === 0) {
-    list.innerHTML = "";
-    if (empty) empty.style.display = "block";
+  if (!cards.length) {
+    accordion.innerHTML = `<div class="fc-browse-loading" style="color:var(--text-dim);">
+      ${searchQ ? `No cards matching "${_fcEsc(searchQ)}"` : (_browseSubTab === "new" ? "No new cards" : "No cards due for revision")}
+    </div>`;
     return;
   }
-  if (empty) empty.style.display = "none";
 
-  list.innerHTML = _browseFiltered.map(card => {
-    let frontPreview = (card.front_text || "").replace(/\{\{(.+?)\}\}/g, "[$1]").substring(0, 80);
-    let due  = card.next_review_date <= today() ? `<span style="color:var(--red);font-weight:700;">Due</span>` : card.next_review_date;
-    let type = { basic: "📄", cloze: "📝", image_occlusion: "🖼" }[card.card_type] || "📄";
-    let susp = card.is_suspended ? `<span style="color:var(--text-dim);font-size:10px;">⏸ Suspended</span>` : "";
+  // Group: subject → unit → chapter
+  let grouped = {};
+  cards.forEach(c => {
+    let s = c.subject || "Uncategorised";
+    let u = c.unit    || "General";
+    let ch = c.chapter || "General";
+    if (!grouped[s]) grouped[s] = {};
+    if (!grouped[s][u]) grouped[s][u] = {};
+    if (!grouped[s][u][ch]) grouped[s][u][ch] = [];
+    grouped[s][u][ch].push(c);
+  });
 
-    return `<div class="fc-browse-item">
-      <div class="fc-bi-content">
-        <div class="fc-bi-front">${type} ${_fcEsc(frontPreview)}${frontPreview.length >= 80 ? "…" : ""}</div>
-        <div class="fc-bi-meta">${_fcEsc(card.subject)} › ${_fcEsc(card.unit)} · ${due} ${susp}</div>
-      </div>
-      <div class="fc-bi-actions">
-        <button class="fc-icon-btn" title="Edit"    onclick="editCard('${card.id}')">✏️</button>
-        <button class="fc-icon-btn" title="${card.is_suspended ? "Unsuspend" : "Suspend"}"
-          onclick="toggleSuspend('${card.id}', ${card.is_suspended})">
-          ${card.is_suspended ? "▶️" : "⏸"}
+  let isRevise = _browseSubTab === "revise";
+  let btnClass = isRevise ? "revise" : "";
+  let btnLabel = isRevise ? "Revise" : "Learn";
+
+  accordion.innerHTML = Object.entries(grouped).map(([subj, units]) => {
+    let subjCount = Object.values(units).reduce((a, u) => a + Object.values(u).reduce((b, chs) => b + chs.length, 0), 0);
+
+    let unitsHtml = Object.entries(units).map(([unit, chapters]) => {
+      let unitCount = Object.values(chapters).reduce((a, chs) => a + chs.length, 0);
+
+      let chapHtml = Object.entries(chapters).map(([chap, cCards]) => {
+        let chapCards = cCards.map(c => c.id);
+        return `<div class="fc-acc-chapter">
+          <span class="fc-acc-chapter-name">${_fcEsc(chap)}</span>
+          <span class="fc-acc-chapter-count">${cCards.length} card${cCards.length !== 1 ? "s" : ""}</span>
+          <button class="fc-acc-learn-btn ${btnClass}" onclick='startFilteredSession(${JSON.stringify(chapCards)})'>
+            ${btnLabel} ${cCards.length}
+          </button>
+        </div>`;
+      }).join("");
+
+      let unitCards = Object.values(chapters).flat().map(c => c.id);
+      return `<div class="fc-acc-unit" id="fc-unit-${_fcEsc(subj)}-${_fcEsc(unit)}">
+        <div class="fc-acc-unit-head" onclick="toggleBrowseUnit(this)">
+          <span class="fc-acc-chevron" style="font-size:10px;margin-right:2px;">▸</span>
+          <span class="fc-acc-unit-name">${_fcEsc(unit)}</span>
+          <span class="fc-acc-subject-count ${isRevise && unitCount > 0 ? "has-due" : ""}">${unitCount}</span>
+          <button class="fc-acc-learn-btn ${btnClass}" onclick='event.stopPropagation();startFilteredSession(${JSON.stringify(unitCards)})'>
+            ${btnLabel} ${unitCount}
+          </button>
+        </div>
+        <div class="fc-acc-chapters">${chapHtml}</div>
+      </div>`;
+    }).join("");
+
+    let subjCardIds = cards.filter(c => (c.subject || "Uncategorised") === subj).map(c => c.id);
+    return `<div class="fc-acc-subject" id="fc-subj-${_fcEsc(subj)}">
+      <div class="fc-acc-subject-head" onclick="toggleBrowseSubject(this)">
+        <span class="fc-acc-subject-name">${_fcEsc(subj)}</span>
+        <span class="fc-acc-subject-count ${isRevise && subjCount > 0 ? "has-due" : ""}">${subjCount} cards</span>
+        <button class="fc-acc-learn-btn ${btnClass}" onclick='event.stopPropagation();startFilteredSession(${JSON.stringify(subjCardIds)})'>
+          ${btnLabel} ${subjCount}
         </button>
-        <button class="fc-icon-btn" title="Delete"  onclick="confirmDeleteCard('${card.id}')">🗑️</button>
+        <span class="fc-acc-chevron">▾</span>
       </div>
+      <div class="fc-acc-units">${unitsHtml}</div>
     </div>`;
   }).join("");
 }
+
+function toggleBrowseSubject(headEl) {
+  let subj = headEl.closest(".fc-acc-subject");
+  subj.classList.toggle("open");
+}
+
+function toggleBrowseUnit(headEl) {
+  let unit = headEl.closest(".fc-acc-unit");
+  unit.classList.toggle("open");
+  let chevron = headEl.querySelector(".fc-acc-chevron");
+  if (chevron) chevron.textContent = unit.classList.contains("open") ? "▾" : "▸";
+}
+
+// Start a filtered session by card IDs
+async function startFilteredSession(cardIds) {
+  if (!cardIds || cardIds.length === 0) return;
+
+  // Fetch the actual card objects for these IDs
+  let cards = _browseAll.filter(c => cardIds.includes(c.id));
+  if (!cards.length) return;
+
+  switchTab("review");
+  startReviewSession(cards);
+}
+
+// Old browse functions kept as stubs for compatibility
+function renderBrowseList() { renderBrowseAccordion(); }
 
 async function toggleSuspend(cardId, currentlySuspended) {
   await setSuspended(cardId, !currentlySuspended);
@@ -506,7 +554,6 @@ function editCard(cardId) {
   let card = _browseAll.find(c => c.id === cardId);
   if (!card) return;
   switchTab("create");
-  // Delegate all form population to cardCreator.js
   if (typeof loadCardForEdit === "function") loadCardForEdit(card);
 }
 

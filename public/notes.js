@@ -1,23 +1,22 @@
 // notes.js — Medical Study OS
-// Full logic for notes.html
+// Full logic for notes.html — DRILL-DOWN CARD NAVIGATION
 // Depends on: data.js, utils.js, supabase.js, cloudinary.js,
-//             noteSync.js (fetchNote, saveNote, deleteNote, fetchUnitNotes,
-//                          fetchAllNotesMeta, searchNotes)
+//             noteSync.js, cardSync.js
 // ─────────────────────────────────────────────────────────────────
 
 // ── Module state ─────────────────────────────────────────────────
-let _notesMeta       = [];        // lightweight array from fetchAllNotesMeta
-let _currentNote     = null;      // full note object currently loaded in editor
+let _notesMeta       = [];
+let _currentNote     = null;
 let _currentSubject  = null;
 let _currentUnit     = null;
 let _currentChapter  = null;
-let _noteTags        = [];        // tag array for current note
-let _noteColor       = "default"; // color for current note
-let _isDirty         = false;     // unsaved changes flag
-let _autoSaveTimer   = null;      // debounce handle
-let _previewMode     = false;     // markdown preview toggle
-let _aiNoteResult    = "";        // last AI-generated markdown
-let _sidebarOpen     = false;     // mobile sidebar state
+let _noteTags        = [];
+let _noteColor       = "default";
+let _isDirty         = false;
+let _autoSaveTimer   = null;
+let _aiNoteResult    = "";
+let _editMode        = false;    // read vs edit mode in note view
+let _navStack        = [];       // ["subjects"] → ["subjects","units","chapters","note"]
 
 // ─────────────────────────────────────────────────────────────────
 // INIT
@@ -25,7 +24,7 @@ let _sidebarOpen     = false;     // mobile sidebar state
 
 async function initNotes() {
   await _loadNotesMeta();
-  renderSidebar();
+  showSubjectsView();
 }
 
 async function _loadNotesMeta() {
@@ -34,98 +33,173 @@ async function _loadNotesMeta() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// SIDEBAR
+// NAVIGATION LAYER
 // ─────────────────────────────────────────────────────────────────
 
-function renderSidebar(metaOverride) {
-  let meta    = metaOverride || _notesMeta;
-  let tree    = document.getElementById("notes-tree");
-  if (!tree) return;
+// Helper: switch visible view
+function _showView(id) {
+  ["view-subjects","view-units","view-chapters","view-note","view-search","view-unit-stack"]
+    .forEach(v => {
+      let el = document.getElementById(v);
+      if (el) el.style.display = v === id ? "" : "none";
+    });
+}
 
-  // Build coverage map from meta: "Subject||Unit||Chapter" → note obj
-  let coverMap = {};
-  meta.forEach(n => { coverMap[`${n.subject}||${n.unit}||${n.chapter}`] = n; });
+// Helper: build breadcrumb bar
+function _setBreadcrumb(crumbs, showBack) {
+  let pathEl = document.getElementById("notes-bc-path");
+  let backEl = document.getElementById("notes-bc-back");
+  if (pathEl) {
+    pathEl.innerHTML = crumbs.map((c, i) =>
+      `<span class="notes-bc-crumb${i === crumbs.length-1 ? " current" : ""}">${_esc(c)}</span>` +
+      (i < crumbs.length-1 ? `<span class="notes-bc-sep">›</span>` : "")
+    ).join("");
+  }
+  if (backEl) backEl.style.display = showBack ? "" : "none";
+}
+
+// ── Level 1: Subjects ──────────────────────────────────────────
+function showSubjectsView() {
+  _navStack = ["subjects"];
+  _setBreadcrumb(["📝 Notes"], false);
+  _showView("view-subjects");
+  document.getElementById("notes-search-bar").style.display = "";
+  document.getElementById("notes-progress-bar").style.display = "";
 
   let subjects = studyData.subjects || {};
-  let html = "";
+  let grid = document.getElementById("subjects-grid");
+  if (!grid) return;
+
+  // Progress: count notes vs total chapters
+  let totalChapters = 0, notedChapters = 0;
+  Object.values(subjects).forEach(s => s.units.forEach(u => {
+    totalChapters += u.chapters.length;
+    notedChapters += u.chapters.filter(ch =>
+      _notesMeta.some(n => n.subject === s && n.unit === u.name && n.chapter === ch.name)
+    ).length;
+  }));
+  // Fix: count by meta
+  notedChapters = _notesMeta.length;
+  let pct = totalChapters > 0 ? Math.round(notedChapters / totalChapters * 100) : 0;
+  let fillEl = document.getElementById("notes-progress-fill");
+  let pctEl  = document.getElementById("notes-progress-pct");
+  if (fillEl) fillEl.style.width = pct + "%";
+  if (pctEl)  pctEl.textContent  = pct + "%";
 
   if (Object.keys(subjects).length === 0) {
-    tree.innerHTML = `<div style="padding:20px 12px;font-size:12px;color:var(--text-dim);text-align:center;">No subjects yet.<br>Add subjects in Syllabus.</div>`;
+    grid.innerHTML = `<div class="notes-empty" style="grid-column:1/-1"><div class="notes-empty-icon">📚</div><div class="notes-empty-text">No subjects yet</div><div class="notes-empty-sub">Add subjects in Syllabus first</div></div>`;
     return;
   }
 
-  Object.entries(subjects).forEach(([subjectName, subjectData]) => {
-    let units = subjectData.units || [];
-    // Count notes in this subject
-    let noteCount = meta.filter(n => n.subject === subjectName).length;
+  // Accent colors cycle
+  const ACCENTS = ["#3b82f6","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4","#ec4899","#84cc16"];
 
-    html += `<div class="notes-tree-subject" onclick="toggleSubjectInSidebar(this, '${_esc(subjectName)}')">
-      <span>${_esc(subjectName)}</span>
-      <span style="font-size:10px;color:var(--text-dim);">${noteCount > 0 ? noteCount + " 📝" : ""}</span>
+  grid.innerHTML = Object.entries(subjects).map(([subjectName, subjectData], idx) => {
+    let noteCount    = _notesMeta.filter(n => n.subject === subjectName).length;
+    let topicCount   = subjectData.units.reduce((s, u) => s + u.chapters.length, 0);
+    let unitCount    = subjectData.units.length;
+    let accent       = ACCENTS[idx % ACCENTS.length];
+    return `<div class="notes-subj-card" onclick="showUnitsView('${_esc(subjectName)}')">
+      <div class="notes-subj-card-accent" style="background:${accent};"></div>
+      <div class="notes-subj-card-name">${_esc(subjectName)}</div>
+      <div class="notes-subj-card-meta">
+        <span class="notes-subj-card-badge">📝 ${noteCount} notes</span>
+        <span class="notes-subj-card-badge"># ${topicCount} topics</span>
+      </div>
     </div>`;
-
-    html += `<div class="notes-subject-children" data-subject="${_esc(subjectName)}" style="display:block;">`;
-
-    units.forEach((unit, ui) => {
-      let unitNoteCount = meta.filter(n => n.subject === subjectName && n.unit === unit.name).length;
-      html += `<div class="notes-tree-unit" onclick="toggleUnitInSidebar(this, '${_esc(subjectName)}', '${_esc(unit.name)}')">
-        <span>▸ ${_esc(unit.name)}</span>
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${unitNoteCount > 0 ? `<span style="font-size:10px;color:var(--text-dim);">${unitNoteCount} 📝</span>` : ""}
-          <span onclick="event.stopPropagation();openUnitView('${_esc(subjectName)}','${_esc(unit.name)}')"
-            style="font-size:10px;color:var(--blue);cursor:pointer;white-space:nowrap;">All</span>
-        </div>
-      </div>`;
-
-      html += `<div class="notes-unit-children" data-subject="${_esc(subjectName)}" data-unit="${_esc(unit.name)}" style="display:block;">`;
-
-      (unit.chapters || []).forEach((chapter, ci) => {
-        let key  = `${subjectName}||${unit.name}||${chapter.name}`;
-        let note = coverMap[key];
-        let colorClass = note ? note.color || "default" : "";
-        let isActive   = (_currentSubject === subjectName && _currentUnit === unit.name && _currentChapter === chapter.name);
-
-        html += `<div class="notes-tree-chapter${isActive ? " active" : ""}"
-          data-subject="${_esc(subjectName)}" data-unit="${_esc(unit.name)}" data-chapter="${_esc(chapter.name)}"
-          onclick="openNote('${_esc(subjectName)}','${_esc(unit.name)}','${_esc(chapter.name)}')">
-          <span class="note-color-dot ${colorClass}"></span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(chapter.name)}</span>
-          ${note ? "📝" : ""}
-        </div>`;
-      });
-
-      html += `</div>`; // /notes-unit-children
-    });
-
-    html += `</div>`; // /notes-subject-children
-  });
-
-  tree.innerHTML = html;
+  }).join("");
 }
 
-function toggleSubjectInSidebar(el, subjectName) {
-  let children = document.querySelector(`.notes-subject-children[data-subject="${subjectName}"]`);
-  if (!children) return;
-  let isOpen = children.style.display !== "none";
-  children.style.display = isOpen ? "none" : "block";
-  el.querySelector("span:first-child").textContent = (isOpen ? "▸ " : "▾ ") + subjectName;
+// ── Level 2: Units ─────────────────────────────────────────────
+function showUnitsView(subject) {
+  _currentSubject = subject;
+  _navStack = ["subjects", "units"];
+  _setBreadcrumb(["📝 Notes", subject], true);
+  _showView("view-units");
+  document.getElementById("notes-progress-bar").style.display = "none";
+
+  let subjectData = studyData.subjects[subject];
+  let grid = document.getElementById("units-grid");
+  if (!grid || !subjectData) return;
+
+  const ACCENTS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#06b6d4","#ec4899","#84cc16"];
+
+  grid.innerHTML = subjectData.units.map((unit, idx) => {
+    let noteCount  = _notesMeta.filter(n => n.subject === subject && n.unit === unit.name).length;
+    let chapCount  = unit.chapters.length;
+    let accent     = ACCENTS[idx % ACCENTS.length];
+    return `<div class="notes-unit-grid-card" onclick="showChaptersView('${_esc(subject)}','${_esc(unit.name)}')">
+      <div class="notes-subj-card-accent" style="background:${accent};border-radius:var(--radius) var(--radius) 0 0;"></div>
+      <div class="notes-unit-grid-card-name">${_esc(unit.name)}</div>
+      <div class="notes-unit-grid-card-badge">${noteCount} notes · ${chapCount} chapters</div>
+      <span class="notes-unit-arrow">›</span>
+    </div>`;
+  }).join("");
+
+  if (!subjectData.units.length) {
+    grid.innerHTML = `<div class="notes-empty" style="grid-column:1/-1"><div class="notes-empty-icon">📂</div><div class="notes-empty-text">No units in ${_esc(subject)}</div></div>`;
+  }
 }
 
-function toggleUnitInSidebar(el, subjectName, unitName) {
-  let children = document.querySelector(`.notes-unit-children[data-subject="${subjectName}"][data-unit="${unitName}"]`);
-  if (!children) return;
-  let isOpen = children.style.display !== "none";
-  children.style.display = isOpen ? "none" : "block";
-  let label = el.querySelector("span:first-child");
-  if (label) label.textContent = (isOpen ? "▸ " : "▾ ") + unitName;
+// ── Level 3: Chapters ──────────────────────────────────────────
+function showChaptersView(subject, unit) {
+  _currentSubject = subject;
+  _currentUnit    = unit;
+  _navStack = ["subjects","units","chapters"];
+  _setBreadcrumb(["📝 Notes", subject, unit], true);
+  _showView("view-chapters");
+  document.getElementById("notes-progress-bar").style.display = "none";
+
+  let subjectData = studyData.subjects[subject];
+  let unitData    = subjectData?.units.find(u => u.name === unit);
+  let chapters    = unitData?.chapters || [];
+  let list        = document.getElementById("chapters-list");
+  if (!list) return;
+
+  // Build coverage map
+  let coverMap = {};
+  _notesMeta.filter(n => n.subject === subject && n.unit === unit)
+    .forEach(n => { coverMap[n.chapter] = n; });
+
+  if (!chapters.length) {
+    list.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">📂</div><div class="notes-empty-text">No chapters in this unit</div></div>`;
+    return;
+  }
+
+  list.innerHTML = chapters.map(ch => {
+    let note      = coverMap[ch.name];
+    let color     = note?.color || "default";
+    let hasNote   = !!note;
+    return `<div class="notes-chap-card${hasNote ? " has-note" : ""}"
+      onclick="openNote('${_esc(subject)}','${_esc(unit)}','${_esc(ch.name)}')">
+      <span class="notes-chap-icon">${hasNote ? "📝" : "📄"}</span>
+      <div style="flex:1;min-width:0;">
+        <div class="notes-chap-name">${_esc(ch.name)}</div>
+        ${note ? `<div class="notes-chap-meta">Last updated ${_formatDate(note.updated_at)}</div>` : `<div class="notes-chap-meta" style="color:var(--text-dim)">No note yet</div>`}
+      </div>
+      <div class="notes-chap-right">
+        <span class="note-color-dot ${color}"></span>
+        ${note?.tags?.length ? `<span style="font-size:9px;color:var(--text-dim);">${note.tags.slice(0,2).map(_esc).join(", ")}</span>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── Back navigation ────────────────────────────────────────────
+function notesBreadcrumbBack() {
+  let cur = _navStack[_navStack.length - 1];
+  if (cur === "units")    { showSubjectsView(); return; }
+  if (cur === "chapters") { showUnitsView(_currentSubject); return; }
+  if (cur === "note")     { showChaptersView(_currentSubject, _currentUnit); return; }
+  if (cur === "search")   { showSubjectsView(); return; }
+  showSubjectsView();
 }
 
 // ─────────────────────────────────────────────────────────────────
-// OPEN NOTE (single chapter)
+// OPEN NOTE
 // ─────────────────────────────────────────────────────────────────
 
 async function openNote(subject, unit, chapter) {
-  // Guard dirty state
   if (_isDirty) {
     let ok = confirm("You have unsaved changes. Discard them?");
     if (!ok) return;
@@ -135,41 +209,99 @@ async function openNote(subject, unit, chapter) {
   _currentSubject = subject;
   _currentUnit    = unit;
   _currentChapter = chapter;
+  _editMode       = false;
+  _navStack       = ["subjects","units","chapters","note"];
 
-  // Show editor, hide other views
-  _showEditorWrap();
+  _setBreadcrumb(["📝 Notes", subject, unit, chapter], true);
+  _showView("view-note");
+  document.getElementById("notes-progress-bar").style.display = "none";
+  document.getElementById("notes-note-topbar-title").textContent = chapter;
 
-  // Update breadcrumb
-  let bc = document.getElementById("notes-breadcrumb");
-  if (bc) bc.textContent = `${subject} › ${unit} › ${chapter}`;
-
-  // Highlight sidebar
-  document.querySelectorAll(".notes-tree-chapter").forEach(el => {
-    el.classList.toggle("active",
-      el.dataset.subject === subject &&
-      el.dataset.unit    === unit    &&
-      el.dataset.chapter === chapter
-    );
-  });
-
-  // Fetch note from Supabase
+  // Load from Supabase
   setSaveStatus("Loading…");
   let { data: note } = await fetchNote(subject, unit, chapter);
   _currentNote = note || null;
 
-  // Populate editor
-  document.getElementById("note-title-input").value   = note?.title   || "";
+  // Populate fields
+  document.getElementById("note-title-input").value    = note?.title   || "";
   document.getElementById("note-content-editor").value = note?.content || "";
   _noteTags  = note?.tags  || [];
   _noteColor = note?.color || "default";
-
   _renderTagChips();
   _setColorSwatchActive(_noteColor);
-  setSaveStatus(note ? "Saved" : "New note");
-  _isDirty = false;
+  setSaveStatus(note ? "Saved" : "");
 
-  // Close mobile sidebar after selection
-  if (window.innerWidth <= 600) closeSidebar();
+  // Start in read mode
+  _enterReadMode();
+}
+
+// ── Read / Edit mode toggle ────────────────────────────────────
+function _enterReadMode() {
+  _editMode = false;
+  let note = _currentNote;
+
+  document.getElementById("notes-read-body").style.display   = "";
+  document.getElementById("notes-edit-wrap").style.display   = "none";
+  document.getElementById("notes-note-empty").style.display  = "none";
+  document.getElementById("btn-save-note").style.display     = "none";
+  document.getElementById("btn-cancel-edit").style.display   = "none";
+  document.getElementById("btn-toggle-edit").style.display   = "";
+  document.getElementById("btn-toggle-edit").classList.remove("active");
+
+  if (note && note.content) {
+    let readEl = document.getElementById("notes-read-body");
+    if (typeof marked !== "undefined") {
+      readEl.innerHTML = marked.parse(note.content);
+    } else {
+      readEl.innerHTML = note.content.replace(/\\n/g, "<br>");
+    }
+  } else {
+    document.getElementById("notes-read-body").style.display  = "none";
+    document.getElementById("notes-note-empty").style.display = "";
+  }
+}
+
+function _enterEditMode() {
+  _editMode = true;
+  document.getElementById("notes-read-body").style.display   = "none";
+  document.getElementById("notes-note-empty").style.display  = "none";
+  document.getElementById("notes-edit-wrap").style.display   = "flex";
+  document.getElementById("btn-save-note").style.display     = "";
+  document.getElementById("btn-cancel-edit").style.display   = "";
+  document.getElementById("btn-toggle-edit").classList.add("active");
+  document.getElementById("btn-toggle-edit").textContent     = "✏️ Editing";
+  document.getElementById("note-content-editor").focus();
+}
+
+function toggleNoteEditMode() {
+  if (_editMode) {
+    _enterReadMode();
+  } else {
+    _enterEditMode();
+  }
+}
+
+function cancelEdit() {
+  if (_isDirty) {
+    let ok = confirm("Discard unsaved changes?");
+    if (!ok) return;
+    _isDirty = false;
+    // Reload note content
+    document.getElementById("note-content-editor").value = _currentNote?.content || "";
+    document.getElementById("note-title-input").value    = _currentNote?.title   || "";
+    _noteTags  = _currentNote?.tags  || [];
+    _noteColor = _currentNote?.color || "default";
+    _renderTagChips();
+    _setColorSwatchActive(_noteColor);
+  }
+  _enterReadMode();
+}
+
+// Legacy alias used by sidebar/unit-view paths
+function _showEditorWrap() { _enterEditMode(); }
+function _showUnitView() {
+  _showView("view-unit-stack");
+  document.getElementById("notes-progress-bar").style.display = "none";
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -211,9 +343,11 @@ async function saveCurrentNote() {
   _isDirty     = false;
   setSaveStatus("Saved ✓");
 
-  // Refresh meta cache + sidebar to update color dot / note icon
+  // Refresh meta cache
   await _loadNotesMeta();
-  renderSidebar();
+
+  // Exit edit mode → show read view with updated content
+  _enterReadMode();
 }
 
 // Auto-save after 2 seconds of inactivity
@@ -232,32 +366,12 @@ function setSaveStatus(msg) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// MARKDOWN PREVIEW
+// MARKDOWN PREVIEW (legacy toggle — kept for AI note modal)
 // ─────────────────────────────────────────────────────────────────
 
 function togglePreview() {
-  _previewMode = !_previewMode;
-  let editor   = document.getElementById("note-content-editor");
-  let preview  = document.getElementById("notes-preview-pane");
-  let btn      = document.getElementById("btn-preview-toggle");
-
-  if (_previewMode) {
-    // Render markdown
-    let md = editor.value;
-    if (typeof marked !== "undefined") {
-      preview.innerHTML = marked.parse(md);
-    } else {
-      // Fallback: basic conversion if marked not loaded
-      preview.innerHTML = md.replace(/\n/g, "<br>");
-    }
-    preview.classList.add("visible");
-    editor.style.display  = "none";
-    if (btn) { btn.textContent = "Edit"; btn.style.color = "var(--blue)"; }
-  } else {
-    preview.classList.remove("visible");
-    editor.style.display = "";
-    if (btn) { btn.textContent = "Preview"; btn.style.color = ""; }
-  }
+  // In new layout, preview is always the read view
+  // This is only called from AI note modal flow — no-op here
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -385,45 +499,39 @@ async function handleNotesSearch(query) {
   clearTimeout(_searchTimer);
   _searchTimer = setTimeout(async () => {
     if (!query.trim()) {
-      // Reset to full tree
-      await _loadNotesMeta();
-      renderSidebar();
+      // Return to subjects view on clear
+      showSubjectsView();
       return;
     }
     let { data } = await searchNotes(query);
-    // Render a flat result list instead of the tree
     _renderSearchResults(data || [], query);
   }, 280);
 }
 
 function _renderSearchResults(results, query) {
-  let tree = document.getElementById("notes-tree");
-  if (!tree) return;
+  _navStack = ["search"];
+  _setBreadcrumb(["📝 Notes", `Search: "${query}"`], true);
+  _showView("view-search");
+  document.getElementById("notes-progress-bar").style.display = "none";
+
+  let container = document.getElementById("notes-search-results");
+  if (!container) return;
 
   if (results.length === 0) {
-    tree.innerHTML = `<div style="padding:20px 12px;font-size:12px;color:var(--text-dim);text-align:center;">No notes match "${_esc(query)}"</div>`;
+    container.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">🔍</div><div class="notes-empty-text">No notes match "${_esc(query)}"</div></div>`;
     return;
   }
 
-  let html = `<div style="padding:6px 12px;font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em;">${results.length} result${results.length > 1 ? "s" : ""}</div>`;
-
-  results.forEach(n => {
-    let isActive = _currentSubject === n.subject && _currentUnit === n.unit && _currentChapter === n.chapter;
-    let preview  = (n.content || "").substring(0, 60).replace(/[#*`\n]/g, " ");
-
-    html += `<div class="notes-tree-chapter${isActive ? " active" : ""}"
-      onclick="openNote('${_esc(n.subject)}','${_esc(n.unit)}','${_esc(n.chapter)}')"
-      style="padding:8px 12px;flex-direction:column;align-items:flex-start;gap:2px;">
-      <div style="display:flex;align-items:center;gap:6px;width:100%;">
-        <span class="note-color-dot ${n.color || "default"}"></span>
-        <strong style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(n.chapter)}</strong>
-      </div>
-      <div style="font-size:10px;color:var(--text-muted);padding-left:13px;">${_esc(n.subject)} › ${_esc(n.unit)}</div>
-      ${preview ? `<div style="font-size:11px;color:var(--text-dim);padding-left:13px;margin-top:2px;">${_esc(preview)}…</div>` : ""}
-    </div>`;
-  });
-
-  tree.innerHTML = html;
+  container.innerHTML = `<div style="font-size:11px;color:var(--text-dim);padding:4px 0 10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;">${results.length} result${results.length !== 1 ? "s" : ""}</div>` +
+    results.map(n => {
+      let preview = (n.content || "").substring(0, 80).replace(/[#*`\n]/g, " ");
+      return `<div class="notes-search-result-item"
+        onclick="openNote('${_esc(n.subject)}','${_esc(n.unit)}','${_esc(n.chapter)}')">
+        <div class="notes-search-result-title">${_esc(n.chapter)}</div>
+        <div class="notes-search-result-path">${_esc(n.subject)} › ${_esc(n.unit)}</div>
+        ${preview ? `<div class="notes-search-result-preview">${_esc(preview)}…</div>` : ""}
+      </div>`;
+    }).join("");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -441,19 +549,15 @@ async function openUnitView(subject, unit) {
   _currentUnit    = unit;
   _currentChapter = null;
   _currentNote    = null;
+  _navStack       = ["subjects","units","unit-stack"];
 
-  let bc = document.getElementById("notes-breadcrumb");
-  if (bc) bc.textContent = `${subject} › ${unit}`;
-
-  // Show unit view, hide others
+  _setBreadcrumb(["📝 Notes", subject, unit, "All Notes"], true);
   _showUnitView();
 
   document.getElementById("unit-view-title").textContent = `${unit} — All Notes`;
 
-  // Fetch all chapter notes for this unit
   let { data: notes } = await fetchUnitNotes(subject, unit);
 
-  // Get chapter order from studyData
   let subjectData = studyData.subjects[subject];
   let unitData    = subjectData?.units.find(u => u.name === unit);
   let chapters    = unitData?.chapters || [];
@@ -466,7 +570,6 @@ async function openUnitView(subject, unit) {
     return;
   }
 
-  // Build note lookup by chapter name
   let noteMap = {};
   notes.forEach(n => { noteMap[n.chapter] = n; });
 
@@ -492,9 +595,7 @@ async function openUnitView(subject, unit) {
     card.style.borderColor = colorBorder;
 
     if (note) {
-      // Preview first 120 chars of content, strip markdown
-      let preview = (note.content || "").substring(0, 120).replace(/[#*`_\[\]!\n]/g, " ").trim();
-      // Find first image in content
+      let preview  = (note.content || "").substring(0, 120).replace(/[#*`_\[\]!\n]/g, " ").trim();
       let imgMatch = (note.content || "").match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
       let imgUrl   = imgMatch ? imgMatch[1] : null;
 
@@ -523,8 +624,6 @@ async function openUnitView(subject, unit) {
     card.onclick = () => openNote(subject, unit, chapter.name);
     container.appendChild(card);
   });
-
-  if (window.innerWidth <= 600) closeSidebar();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -583,8 +682,8 @@ function exportUnitPdf() {
 // ─────────────────────────────────────────────────────────────────
 
 function openAiNoteModal() {
-  if (!_currentSubject) {
-    alert("Open a chapter note first.");
+  if (!_currentSubject || !_editMode) {
+    alert("Open a chapter note in edit mode first.");
     return;
   }
   document.getElementById("ai-note-source").value  = "";
@@ -695,52 +794,6 @@ function applyAiNote() {
 
   markDirty();
   closeAiNoteModal();
-}
-
-// ─────────────────────────────────────────────────────────────────
-// MOBILE SIDEBAR TOGGLE
-// ─────────────────────────────────────────────────────────────────
-
-function toggleSidebar() {
-  _sidebarOpen ? closeSidebar() : openSidebar();
-}
-
-function openSidebar() {
-  _sidebarOpen = true;
-  document.getElementById("notes-sidebar").classList.add("open");
-}
-
-function closeSidebar() {
-  _sidebarOpen = false;
-  document.getElementById("notes-sidebar").classList.remove("open");
-}
-
-// ─────────────────────────────────────────────────────────────────
-// VIEW SWITCHING (editor / unit view / empty)
-// ─────────────────────────────────────────────────────────────────
-
-function _showEditorWrap() {
-  document.getElementById("notes-empty-state").style.display = "none";
-  document.getElementById("notes-unit-view").style.display   = "none";
-  let wrap = document.getElementById("notes-editor-wrap");
-  wrap.style.display       = "flex";
-  wrap.style.flexDirection = "column";
-  wrap.style.flex          = "1";
-  wrap.style.overflow      = "hidden";
-
-  // Show save/preview buttons
-  document.getElementById("btn-save-note").style.display    = "";
-  document.getElementById("btn-preview-toggle").style.display = "";
-}
-
-function _showUnitView() {
-  document.getElementById("notes-empty-state").style.display = "none";
-  document.getElementById("notes-editor-wrap").style.display = "none";
-  document.getElementById("notes-unit-view").style.display   = "flex";
-
-  // Hide note-specific buttons
-  document.getElementById("btn-save-note").style.display    = "none";
-  document.getElementById("btn-preview-toggle").style.display = "none";
 }
 
 // ─────────────────────────────────────────────────────────────────
