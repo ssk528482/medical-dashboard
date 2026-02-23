@@ -105,9 +105,21 @@ async function fetchAllNotesMeta() {
     .eq('user_id', userId)
     .order('subject', { ascending: true })
     .order('unit',    { ascending: true })
-    .order('chapter', { ascending: true });
+    .order('chapter', { ascending: true })
+    .order('updated_at', { ascending: false }); // newest first for dedup
 
-  return { data: data ?? [], error };
+  if (error || !data) return { data: [], error };
+
+  // Deduplicate: keep only the most recently updated note per subject+unit+chapter
+  const seen = new Set();
+  const unique = data.filter(n => {
+    const key = `${n.subject}||${n.unit}||${n.chapter}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return { data: unique, error };
 }
 
 /**
@@ -138,14 +150,16 @@ async function searchNotes(query) {
     .eq('user_id', userId)
     .ilike('title', `%${q}%`);
 
-  // Merge and deduplicate by id
+  // Merge and deduplicate by subject+unit+chapter (keep latest updated)
   const merged = [...(data ?? []), ...(titleData ?? [])];
-  const seen   = new Set();
-  const unique = merged.filter(n => {
-    if (seen.has(n.id)) return false;
-    seen.add(n.id);
-    return true;
+  const seen   = new Map();
+  merged.forEach(n => {
+    const key = `${n.subject}||${n.unit}||${n.chapter}`;
+    if (!seen.has(key) || new Date(n.updated_at) > new Date(seen.get(key).updated_at)) {
+      seen.set(key, n);
+    }
   });
+  const unique = Array.from(seen.values());
 
   return { data: unique, error };
 }
@@ -238,7 +252,7 @@ async function saveNote(noteObj) {
   };
 
   if (noteObj.id) {
-    // Update existing
+    // Update existing by id
     const { data, error } = await supabaseClient
       .from('notes')
       .update(payload)
@@ -248,13 +262,37 @@ async function saveNote(noteObj) {
       .single();
     return { data, error };
   } else {
-    // Insert new
-    const { data, error } = await supabaseClient
+    // Try to find an existing note for this subject/unit/chapter first
+    // to avoid duplicates (handles race conditions from auto-save)
+    const { data: existing } = await supabaseClient
       .from('notes')
-      .insert(payload)
-      .select()
-      .single();
-    return { data, error };
+      .select('id')
+      .eq('user_id', userId)
+      .eq('subject', payload.subject)
+      .eq('unit',    payload.unit)
+      .eq('chapter', payload.chapter)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      // Update the existing record instead of inserting
+      const { data, error } = await supabaseClient
+        .from('notes')
+        .update(payload)
+        .eq('id', existing.id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      return { data, error };
+    } else {
+      // Insert new
+      const { data, error } = await supabaseClient
+        .from('notes')
+        .insert(payload)
+        .select()
+        .single();
+      return { data, error };
+    }
   }
 }
 

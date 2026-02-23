@@ -13,6 +13,7 @@ let _currentChapter  = null;
 let _noteTags        = [];
 let _noteColor       = "default";
 let _isDirty         = false;
+let _isSaving        = false;
 let _autoSaveTimer   = null;
 let _aiNoteResult    = "";
 let _editMode        = false;    // read vs edit mode in note view
@@ -314,6 +315,8 @@ function _showUnitView() {
 
 async function saveCurrentNote() {
   if (!_currentSubject) return;
+  if (_isSaving) return; // prevent concurrent saves
+  _isSaving = true;
 
   let title   = document.getElementById("note-title-input").value.trim();
   let content = document.getElementById("note-content-editor").value;
@@ -324,9 +327,19 @@ async function saveCurrentNote() {
 
   // If both title and content are empty AND we have an existing note, delete it
   if (!contentTrimmed && !title && _currentNote?.id) {
-    let { error } = await deleteNote(_currentNote.id);
+    // Delete this note and any duplicates for the same chapter
+    const userId = (await supabaseClient.auth.getUser()).data?.user?.id;
+    if (userId) {
+      await supabaseClient.from('notes').delete()
+        .eq('user_id', userId)
+        .eq('subject', _currentSubject)
+        .eq('unit', _currentUnit)
+        .eq('chapter', _currentChapter);
+    } else {
+      await deleteNote(_currentNote.id);
+    }
     document.getElementById("btn-save-note").disabled = false;
-    if (error) { setSaveStatus("Delete failed ✗"); return; }
+    _isSaving = false;
     _currentNote = null;
     _isDirty     = false;
     setSaveStatus("Note cleared ✓");
@@ -338,6 +351,7 @@ async function saveCurrentNote() {
   // If content is empty and there's no existing note — nothing to save
   if (!contentTrimmed && !title && !_currentNote?.id) {
     document.getElementById("btn-save-note").disabled = false;
+    _isSaving = false;
     setSaveStatus("");
     _enterReadMode();
     return;
@@ -358,6 +372,7 @@ async function saveCurrentNote() {
   let { data, error } = await saveNote(payload);
 
   document.getElementById("btn-save-note").disabled = false;
+  _isSaving = false;
 
   if (error) {
     setSaveStatus("Save failed ✗");
@@ -379,7 +394,7 @@ function markDirty() {
   setSaveStatus("Unsaved…");
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(() => {
-    if (_isDirty && _currentSubject) saveCurrentNote();
+    if (_isDirty && _currentSubject && !_isSaving) saveCurrentNote();
   }, 2000);
 }
 

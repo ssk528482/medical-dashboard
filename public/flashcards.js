@@ -493,10 +493,55 @@ function reviewDeleteCard() {
 // BROWSE — ACCORDION
 // ══════════════════════════════════════════════════════════════════
 
+// Collect which subjects/units are currently open in the accordion
+function _getAccordionOpenStates() {
+  let open = { subjects: new Set(), units: new Set() };
+  document.querySelectorAll(".fc-acc-subject.open").forEach(el => {
+    open.subjects.add(el.id);
+  });
+  document.querySelectorAll(".fc-acc-unit.open").forEach(el => {
+    open.units.add(el.id);
+  });
+  return open;
+}
+
+// Re-render accordion then restore previously open items
+function _renderAccordionPreservingState() {
+  let open = _getAccordionOpenStates();
+  renderBrowseAccordion();
+  // Restore open states
+  open.subjects.forEach(id => {
+    let el = document.getElementById(id);
+    if (el) el.classList.add("open");
+  });
+  open.units.forEach(id => {
+    let el = document.getElementById(id);
+    if (el) {
+      el.classList.add("open");
+      let chevron = el.querySelector(".fc-acc-chevron");
+      if (chevron) chevron.textContent = "▾";
+    }
+  });
+}
+
 async function _loadBrowseCards() {
+  let open = _getAccordionOpenStates();
   let { data } = await fetchCards({ suspended: false });
   _browseAll = data || [];
   renderBrowseAccordion();
+  // Restore open states after fresh render
+  open.subjects.forEach(id => {
+    let el = document.getElementById(id);
+    if (el) el.classList.add("open");
+  });
+  open.units.forEach(id => {
+    let el = document.getElementById(id);
+    if (el) {
+      el.classList.add("open");
+      let chevron = el.querySelector(".fc-acc-chevron");
+      if (chevron) chevron.textContent = "▾";
+    }
+  });
 }
 
 function switchBrowseSubTab(tab) {
@@ -741,16 +786,21 @@ function toggleBrowseSelectMode() {
       btn.style.background = ""; btn.style.color = ""; btn.style.borderColor = "";
     }
   }
-  renderBrowseAccordion();
+  _renderAccordionPreservingState();
 }
 
 function browseCardToggle(cardId, checked) {
   if (checked) _selectedCardIds.add(cardId);
   else         _selectedCardIds.delete(cardId);
   _updateBulkBar();
+  // Update all checkboxes for this card (in case there are duplicates) without re-rendering
+  document.querySelectorAll('.browse-select-cb[data-id="' + cardId + '"]').forEach(cb => {
+    cb.checked = checked;
+  });
 }
 
 function selectCardIds(ids) {
+  let wasSelectMode = _browseSelectMode;
   ids.forEach(id => _selectedCardIds.add(id));
   if (!_browseSelectMode) {
     _browseSelectMode = true;
@@ -758,7 +808,14 @@ function selectCardIds(ids) {
     if (btn) { btn.textContent = "✕ Done"; btn.style.background="rgba(239,68,68,0.12)"; btn.style.color="var(--red)"; btn.style.borderColor="rgba(239,68,68,0.3)"; }
   }
   _updateBulkBar();
-  renderBrowseAccordion();
+  // If we just entered select mode, re-render to add checkboxes; otherwise just check them
+  if (!wasSelectMode) {
+    _renderAccordionPreservingState();
+  } else {
+    ids.forEach(id => {
+      document.querySelectorAll('.browse-select-cb[data-id="' + id + '"]').forEach(cb => { cb.checked = true; });
+    });
+  }
 }
 
 function _updateBulkBar() {
@@ -1177,7 +1234,8 @@ function csvParse() {
   let maxCols = Math.max(...rows.map(r => r.length));
 
   let firstRow = rows[0];
-  let hasHeader = maxCols >= 2 && firstRow.every(c => isNaN(Number(c)) && c.trim() !== "");
+  // Only treat first row as header if: it has non-numeric text AND there are more rows below it
+  let hasHeader = rows.length > 1 && maxCols >= 2 && firstRow.every(c => isNaN(Number(c)) && c.trim() !== "");
   let headers, dataRows;
   if (hasHeader) {
     headers  = firstRow.map((h, i) => h || "Col " + (i+1));
