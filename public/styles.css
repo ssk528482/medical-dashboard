@@ -1838,7 +1838,7 @@ label {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 16px 9px 28px;
+  padding: 9px 10px 9px 14px;
   cursor: pointer;
   background: rgba(255,255,255,0.01);
   transition: background 0.15s;
@@ -1857,20 +1857,20 @@ label {
 .fc-acc-chapters { display: none; }
 .fc-acc-unit.open .fc-acc-chapters { display: block; }
 
+/* fc-acc-chapter is now a block container — head + cards stack vertically */
 .fc-acc-chapter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px 8px 44px;
+  display: block;
   border-bottom: 1px solid rgba(30,51,80,0.5);
   background: rgba(255,255,255,0.005);
-  transition: background 0.15s;
 }
-.fc-acc-chapter:hover { background: rgba(255,255,255,0.02); }
 .fc-acc-chapter-name {
   font-size: 12px;
   color: var(--text-dim);
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .fc-acc-chapter-count {
   font-size: 10px;
