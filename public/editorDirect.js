@@ -386,6 +386,124 @@ async function updateChapterDirect(subjectName, unitIndex, chapterIndex, updates
   }
 }
 
+// ─── UPDATE UNIT QUESTION COUNT ────────────────────────────────
+async function updateUnitQuestionCountDirect(subjectName, unitIndex, questionCount) {
+  const user = await _getUser();
+  if (!user) {
+    alert("Not logged in");
+    return false;
+  }
+
+  try {
+    const subject = studyData.subjects[subjectName];
+    if (!subject || !subject.units[unitIndex]) {
+      alert("Unit not found");
+      return false;
+    }
+
+    const unitName = subject.units[unitIndex].name;
+
+    // Get subject_id
+    const { data: subjData, error: subjErr } = await supabaseClient
+      .from("subjects")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("name", subjectName)
+      .single();
+
+    if (subjErr) throw subjErr;
+
+    // Update unit question count
+    const { error } = await supabaseClient
+      .from("units")
+      .update({
+        question_count: questionCount,
+        updated_at: new Date().toISOString()
+      })
+      .eq("subject_id", subjData.id)
+      .eq("name", unitName);
+
+    if (error) throw error;
+
+    console.log(`[Direct] Updated question count for "${unitName}" to ${questionCount}`);
+    
+    // Update in-memory studyData
+    studyData.subjects[subjectName].units[unitIndex].questionCount = questionCount;
+    
+    return true;
+  } catch (err) {
+    console.error("Error updating question count:", err);
+    alert("Failed to update question count: " + err.message);
+    return false;
+  }
+}
+
+// ─── UPDATE UNIT QBANK STATS ───────────────────────────────────
+async function updateUnitQbankStatsDirect(subjectName, unitIndex, qbankStats, qbankDone = false, questionCount = null) {
+  const user = await _getUser();
+  if (!user) {
+    alert("Not logged in");
+    return false;
+  }
+
+  try {
+    const subject = studyData.subjects[subjectName];
+    if (!subject || !subject.units[unitIndex]) {
+      alert("Unit not found");
+      return false;
+    }
+
+    const unitName = subject.units[unitIndex].name;
+
+    // Get subject_id
+    const { data: subjData, error: subjErr } = await supabaseClient
+      .from("subjects")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("name", subjectName)
+      .single();
+
+    if (subjErr) throw subjErr;
+
+    // Prepare update data
+    const updateData = {
+      qbank_total: qbankStats.total,
+      qbank_correct: qbankStats.correct,
+      qbank_done: qbankDone,
+      updated_at: new Date().toISOString()
+    };
+
+    // Add questionCount if provided
+    if (questionCount !== null) {
+      updateData.question_count = questionCount;
+    }
+
+    // Update unit qbank stats
+    const { error } = await supabaseClient
+      .from("units")
+      .update(updateData)
+      .eq("subject_id", subjData.id)
+      .eq("name", unitName);
+
+    if (error) throw error;
+
+    console.log(`[Direct] Updated qbank stats for "${unitName}"`);
+    
+    // Update in-memory studyData
+    studyData.subjects[subjectName].units[unitIndex].qbankStats = qbankStats;
+    studyData.subjects[subjectName].units[unitIndex].qbankDone = qbankDone;
+    if (questionCount !== null) {
+      studyData.subjects[subjectName].units[unitIndex].questionCount = questionCount;
+    }
+    
+    return true;
+  } catch (err) {
+    console.error("Error updating qbank stats:", err);
+    alert("Failed to update qbank stats: " + err.message);
+    return false;
+  }
+}
+
 // ─── LOAD DIRECTLY FROM SUPABASE ──────────────────────────────
 async function loadEditorDataDirect() {
   const user = await _getUser();
