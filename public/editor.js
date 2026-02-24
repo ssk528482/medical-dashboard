@@ -348,43 +348,65 @@ async function _saveQcount(subjectName, ui) {
 
 // ─── Unit-level Bulk Actions ──────────────────────────────────
 
-function toggleUnitCompleted(subjectName, ui) {
+async function toggleUnitCompleted(subjectName, ui) {
   let unit = studyData.subjects[subjectName].units[ui];
   if (!unit || !unit.chapters.length) return;
 
   let allDone = unit.chapters.every(c => c.status === "completed");
 
-  unit.chapters.forEach(ch => {
-    if (allDone) {
-      // Toggle OFF — reset all chapters to not-started
-      ch.status = "not-started";
-      ch.revisionIndex = 0;
-      ch.nextRevision = null;
-      ch.revisionDates = [];
-    } else {
-      // Toggle ON — mark any incomplete chapter as completed
-      if (ch.status !== "completed") {
-        ch.status = "completed";
-        ch.completedOn = today();
-        ch.lastReviewedOn = today();
-        let dates = [], cursor = today();
-        for (let i = 0; i < BASE_INTERVALS.length; i++) {
-          cursor = addDays(cursor, computeNextInterval(ch, i));
-          dates.push(cursor);
+  _showLoadingOverlay(true);
+  
+  try {
+    for (let ci = 0; ci < unit.chapters.length; ci++) {
+      let ch = unit.chapters[ci];
+      let updates = {};
+      
+      if (allDone) {
+        // Toggle OFF — reset all chapters to not-started
+        updates = {
+          status: "not-started",
+          revision_index: 0,
+          next_revision: null,
+          revision_dates: [],
+          completed_on: null,
+          last_reviewed_on: null
+        };
+      } else {
+        // Toggle ON — mark any incomplete chapter as completed
+        if (ch.status !== "completed") {
+          let dates = [], cursor = today();
+          for (let i = 0; i < BASE_INTERVALS.length; i++) {
+            cursor = addDays(cursor, computeNextInterval(ch, i));
+            dates.push(cursor);
+          }
+          updates = {
+            status: "completed",
+            completed_on: today(),
+            last_reviewed_on: today(),
+            revision_dates: dates,
+            next_revision: dates[0],
+            revision_index: 0
+          };
         }
-        ch.revisionDates = dates;
-        ch.nextRevision = dates[0];
-        ch.revisionIndex = 0;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await updateChapterDirect(subjectName, ui, ci, updates);
       }
     }
-  });
 
-  fixPointer(subjectName);
-  saveData();
-  renderEditor();
+    fixPointer(subjectName);
+    await loadEditorDataDirect();
+    _showLoadingOverlay(false);
+    renderEditor();
+  } catch (err) {
+    console.error("Error toggling unit completion:", err);
+    _showLoadingOverlay(false);
+    alert("Failed to update unit: " + err.message);
+  }
 }
 
-function markUnitRevised(subjectName, ui, level) {
+async function markUnitRevised(subjectName, ui, level) {
   let unit = studyData.subjects[subjectName].units[ui];
   if (!unit || !unit.chapters.length) return;
 
@@ -403,41 +425,66 @@ function markUnitRevised(subjectName, ui, level) {
       return;
     }
   }
-  if (level === 1) {
-    // Auto-complete any chapter not yet marked completed (same as individual R1 behavior)
-    unit.chapters.forEach(ch => {
-      if (ch.status !== "completed") {
-        ch.status = "completed";
-        ch.completedOn = today();
-        ch.lastReviewedOn = today();
-        let dates = [], cursor = today();
-        for (let i = 0; i < BASE_INTERVALS.length; i++) {
-          cursor = addDays(cursor, computeNextInterval(ch, i));
-          dates.push(cursor);
+
+  _showLoadingOverlay(true);
+  
+  try {
+    // R1 auto-completes any incomplete chapters
+    if (level === 1) {
+      for (let ci = 0; ci < unit.chapters.length; ci++) {
+        let ch = unit.chapters[ci];
+        if (ch.status !== "completed") {
+          let dates = [], cursor = today();
+          for (let i = 0; i < BASE_INTERVALS.length; i++) {
+            cursor = addDays(cursor, computeNextInterval(ch, i));
+            dates.push(cursor);
+          }
+          let updates = {
+            status: "completed",
+            completed_on: today(),
+            last_reviewed_on: today(),
+            revision_dates: dates,
+            next_revision: dates[0],
+            revision_index: 0
+          };
+          await updateChapterDirect(subjectName, ui, ci, updates);
         }
-        ch.revisionDates = dates;
-        ch.nextRevision = dates[0];
-        ch.revisionIndex = 0;
       }
-    });
-  }
-
-  let allAtLevel = unit.chapters.every(c => c.revisionIndex >= level);
-
-  unit.chapters.forEach(ch => {
-    if (allAtLevel) {
-      // Toggle OFF — drop all chapters back one level
-      if (ch.revisionIndex >= level) ch.revisionIndex = level - 1;
-    } else {
-      // Toggle ON — bring all chapters up to this level
-      if (ch.revisionIndex < level) ch.revisionIndex = level;
-      ch.lastReviewedOn = today();
     }
-  });
 
-  fixPointer(subjectName);
-  saveData();
-  renderEditor();
+    let allAtLevel = unit.chapters.every(c => c.revisionIndex >= level);
+
+    for (let ci = 0; ci < unit.chapters.length; ci++) {
+      let ch = unit.chapters[ci];
+      let updates = {};
+      
+      if (allAtLevel) {
+        // Toggle OFF — drop all chapters back one level
+        if (ch.revisionIndex >= level) {
+          updates.revision_index = level - 1;
+        }
+      } else {
+        // Toggle ON — bring all chapters up to this level
+        if (ch.revisionIndex < level) {
+          updates.revision_index = level;
+          updates.last_reviewed_on = today();
+        }
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await updateChapterDirect(subjectName, ui, ci, updates);
+      }
+    }
+
+    fixPointer(subjectName);
+    await loadEditorDataDirect();
+    _showLoadingOverlay(false);
+    renderEditor();
+  } catch (err) {
+    console.error("Error marking unit revised:", err);
+    _showLoadingOverlay(false);
+    alert("Failed to update unit: " + err.message);
+  }
 }
 
 // ─── Chapter Actions ──────────────────────────────────────────
@@ -469,40 +516,59 @@ async function deleteChapter(subjectName, ui, ci) {
   }
 }
 
-function setChapterDifficulty(subjectName, ui, ci, level) {
+async function setChapterDifficulty(subjectName, ui, ci, level) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
   if (!ch) return;
-  ch.difficulty = level;
+  
   const factorMap = { easy: 3.5, medium: 2.5, hard: 1.5 };
-  ch.difficultyFactor = factorMap[level] || 2.5;
-  saveData(); renderEditor();
+  const updates = {
+    difficulty: level,
+    difficulty_factor: factorMap[level] || 2.5
+  };
+  
+  const success = await updateChapterDirect(subjectName, ui, ci, updates);
+  if (success) {
+    renderEditor();
+  }
 }
 
-function toggleChapterCompleted(subjectName, ui, ci) {
+async function toggleChapterCompleted(subjectName, ui, ci) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
+  let updates = {};
+  
   if (ch.status === "completed") {
-    ch.status = "not-started";
-    ch.revisionIndex = 0;
-    ch.nextRevision = null;
-    ch.revisionDates = [];
+    updates = {
+      status: "not-started",
+      revision_index: 0,
+      next_revision: null,
+      revision_dates: [],
+      completed_on: null,
+      last_reviewed_on: null
+    };
   } else {
-    ch.status = "completed";
-    ch.completedOn = today();
-    ch.lastReviewedOn = today();
     let dates = [], cursor = today();
     for (let i = 0; i < BASE_INTERVALS.length; i++) {
       cursor = addDays(cursor, computeNextInterval(ch, i));
       dates.push(cursor);
     }
-    ch.revisionDates = dates;
-    ch.nextRevision = dates[0];
-    ch.revisionIndex = 0;
+    updates = {
+      status: "completed",
+      completed_on: today(),
+      last_reviewed_on: today(),
+      revision_dates: dates,
+      next_revision: dates[0],
+      revision_index: 0
+    };
   }
-  fixPointer(subjectName);
-  saveData(); renderEditor();
+  
+  const success = await updateChapterDirect(subjectName, ui, ci, updates);
+  if (success) {
+    fixPointer(subjectName);
+    renderEditor();
+  }
 }
 
-function markChapterRevised(subjectName, ui, ci, level) {
+async function markChapterRevised(subjectName, ui, ci, level) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
 
   // Require previous level: R2 needs R1, R3 needs R2
@@ -520,30 +586,38 @@ function markChapterRevised(subjectName, ui, ci, level) {
     return;
   }
 
+  let updates = {};
+  
   // Auto-mark completed when any revision is marked
   if (ch.status !== "completed") {
-    ch.status = "completed";
-    ch.completedOn = today();
-    ch.lastReviewedOn = today();
     let dates = [], cursor = today();
     for (let i = 0; i < BASE_INTERVALS.length; i++) {
       cursor = addDays(cursor, computeNextInterval(ch, i));
       dates.push(cursor);
     }
-    ch.revisionDates = dates;
-    ch.nextRevision  = dates[0];
-    ch.missedRevisions = 0;
+    updates = {
+      status: "completed",
+      completed_on: today(),
+      last_reviewed_on: today(),
+      revision_dates: dates,
+      next_revision: dates[0],
+      missed_revisions: 0
+    };
     fixPointer(subjectName);
   }
 
   // Toggle off if clicking same level
   if (ch.revisionIndex === level) {
-    ch.revisionIndex = level - 1;
+    updates.revision_index = level - 1;
   } else {
-    ch.revisionIndex = level;
+    updates.revision_index = level;
   }
-  ch.lastReviewedOn = today();
-  saveData(); renderEditor();
+  updates.last_reviewed_on = today();
+  
+  const success = await updateChapterDirect(subjectName, ui, ci, updates);
+  if (success) {
+    renderEditor();
+  }
 }
 
 // ─── Qbank Tab ────────────────────────────────────────────────
@@ -1036,21 +1110,79 @@ function bulkGoStep1() {
   l1.style.background = "#334155";
 }
 
-function bulkConfirmImport() {
+async function bulkConfirmImport() {
   let keys = Object.keys(_bulkSubjects);
   if (!keys.length) return;
-  keys.forEach(name => {
-    if (studyData.subjects[name]) {
-      // Merge units
-      _bulkSubjects[name].units.forEach(u => studyData.subjects[name].units.push(u));
-    } else {
-      studyData.subjects[name] = _bulkSubjects[name];
+  
+  const user = await _getUser();
+  if (!user) {
+    alert("Not logged in");
+    return;
+  }
+
+  // Show loading overlay
+  _showLoadingOverlay(true);
+  
+  try {
+    for (const name of keys) {
+      const subjectData = _bulkSubjects[name];
+      
+      // Check if subject exists
+      if (studyData.subjects[name]) {
+        // Subject exists - add units to existing subject
+        for (const unit of subjectData.units) {
+          const success = await addUnitDirect(name, unit.name, unit.questionCount || 0);
+          if (!success) {
+            _showLoadingOverlay(false);
+            alert(`Failed to add unit "${unit.name}" to existing subject "${name}"`);
+            return;
+          }
+          
+          // Get the index of the newly added unit
+          const unitIndex = studyData.subjects[name].units.length - 1;
+          
+          // Add chapters to this unit
+          for (const chapter of unit.chapters) {
+            await addChapterDirect(name, unitIndex, chapter.name, chapter.startPage || 0, chapter.endPage || 0);
+          }
+        }
+      } else {
+        // New subject - create it first
+        const success = await addSubjectDirect(name, subjectData.size);
+        if (!success) {
+          _showLoadingOverlay(false);
+          alert(`Failed to create subject "${name}"`);
+          return;
+        }
+        
+        // Add all units
+        for (const unit of subjectData.units) {
+          await addUnitDirect(name, unit.name, unit.questionCount || 0);
+          
+          // Get the index of the newly added unit
+          const unitIndex = studyData.subjects[name].units.length - 1;
+          
+          // Add chapters to this unit
+          for (const chapter of unit.chapters) {
+            await addChapterDirect(name, unitIndex, chapter.name, chapter.startPage || 0, chapter.endPage || 0);
+          }
+        }
+      }
     }
-  });
-  saveData();
-  closeBulkModal();
-  renderEditor();
-  alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
+    
+    // Reload from Supabase to sync everything
+    await loadEditorDataDirect();
+    
+    _showLoadingOverlay(false);
+    closeBulkModal();
+    renderEditor();
+    alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
+    
+  } catch (err) {
+    console.error("Bulk import error:", err);
+    _showLoadingOverlay(false);
+    alert("Bulk import failed: " + err.message);
+  }
 }
 
 function toggleaddSubjectCollapse(buttonElement, contentId) {
