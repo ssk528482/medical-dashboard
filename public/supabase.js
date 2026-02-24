@@ -129,84 +129,181 @@ async function _saveUserMeta(uid) {
 
 // ── subjects + units + chapters ────────────────────────────────
 // Uses select-then-insert/update to avoid requiring unique constraints.
+// CRITICAL FIX: Now properly deletes removed subjects/units/chapters from cloud
 async function _saveSubjectsUnitsChapters(uid) {
   const subjects = studyData.subjects || {};
-
-  for (const [subjectName, subject] of Object.entries(subjects)) {
-
-    // 1. Upsert subject row
-    const { data: subjRow, error: subjErr } = await supabaseClient
+  
+  try {
+    // Track which subjects/units/chapters exist in local data
+    const localSubjectNames = Object.keys(subjects);
+    
+    // Step 0: Delete subjects that exist in cloud but not in local data
+    // Do this in a single query instead of looping
+    const { data: cloudSubjects, error: fetchErr } = await supabaseClient
       .from("subjects")
-      .upsert(
-        { user_id: uid, name: subjectName, size: subject.size || "medium", updated_at: new Date().toISOString() },
-        { onConflict: "user_id,name" }
-      )
-      .select("id")
-      .single();
-    if (subjErr) { console.error("Subject save error:", subjErr); continue; }
-    const subjectId = subjRow.id;
+      .select("id, name")
+      .eq("user_id", uid);
+    
+    if (fetchErr) {
+      console.error("Error fetching cloud subjects:", fetchErr);
+    } else if (cloudSubjects && cloudSubjects.length > 0) {
+      const subjectsToDelete = cloudSubjects
+        .filter(cs => !localSubjectNames.includes(cs.name))
+        .map(cs => cs.id);
+      
+      if (subjectsToDelete.length > 0) {
+        // Delete in batch
+        const { error: delErr } = await supabaseClient
+          .from("subjects")
+          .delete()
+          .in("id", subjectsToDelete);
+        
+        if (delErr) {
+          console.error("Error deleting subjects:", delErr);
+        } else {
+          console.log(`[Sync] Deleted ${subjectsToDelete.length} subject(s) from cloud`);
+        }
+      }
+    }
 
-    // 2. Find or create each unit
-    const units = subject.units || [];
-    for (let ui = 0; ui < units.length; ui++) {
-      const unit = units[ui];
+    // Now upsert all local subjects, units, and chapters
+    for (const [subjectName, subject] of Object.entries(subjects)) {
 
-      const { data: unitRow, error: unitErr } = await supabaseClient
-        .from("units")
+      // 1. Upsert subject row
+      const { data: subjRow, error: subjErr } = await supabaseClient
+        .from("subjects")
         .upsert(
-          {
-            user_id:        uid,
-            subject_id:     subjectId,
-            subject_name:   subjectName,
-            name:           unit.name,
-            sort_order:     ui,
-            question_count: unit.questionCount       || 0,
-            qbank_total:    unit.qbankStats?.total   || 0,
-            qbank_correct:  unit.qbankStats?.correct || 0,
-            qbank_done:     unit.qbankDone           || false,
-            collapsed:      unit.collapsed           || false,
-            updated_at:     new Date().toISOString(),
-          },
-          { onConflict: "subject_id,name" }
+          { user_id: uid, name: subjectName, size: subject.size || "medium", updated_at: new Date().toISOString() },
+          { onConflict: "user_id,name" }
         )
         .select("id")
         .single();
-      if (unitErr) { console.error("Unit save error:", unitErr); continue; }
-      const unitId = unitRow.id;
+      
+      if (subjErr) { 
+        console.error(`Subject save error for "${subjectName}":`, subjErr); 
+        continue; 
+      }
+      
+      const subjectId = subjRow.id;
 
-      // 3. Find or create each chapter
-      const chapters = unit.chapters || [];
-      for (let ci = 0; ci < chapters.length; ci++) {
-        const ch = chapters[ci];
-        const { error: chErr } = await supabaseClient
-          .from("chapters")
+      // Track local unit names for this subject
+      const localUnitNames = (subject.units || []).map(u => u.name);
+      
+      // Delete units that exist in cloud but not locally (single query)
+      try {
+        const { data: cloudUnits } = await supabaseClient
+          .from("units")
+          .select("id, name")
+          .eq("subject_id", subjectId);
+        
+        if (cloudUnits && cloudUnits.length > 0) {
+          const unitsToDelete = cloudUnits
+            .filter(cu => !localUnitNames.includes(cu.name))
+            .map(cu => cu.id);
+          
+          if (unitsToDelete.length > 0) {
+            await supabaseClient.from("units").delete().in("id", unitsToDelete);
+            console.log(`[Sync] Deleted ${unitsToDelete.length} unit(s) from "${subjectName}"`);
+          }
+        }
+      } catch (unitDelErr) {
+        console.error(`Error managing units for "${subjectName}":`, unitDelErr);
+      }
+
+      // 2. Upsert each unit
+      const units = subject.units || [];
+      for (let ui = 0; ui < units.length; ui++) {
+        const unit = units[ui];
+
+        const { data: unitRow, error: unitErr } = await supabaseClient
+          .from("units")
           .upsert(
             {
-              user_id:          uid,
-              unit_id:          unitId,
-              subject_name:     subjectName,
-              unit_name:        unit.name,
-              name:             ch.name,
-              sort_order:       ci,
-              status:           ch.status            || "not-started",
-              difficulty:       ch.difficulty        || "medium",
-              difficulty_factor: ch.difficultyFactor ?? 2.5,
-              missed_revisions: ch.missedRevisions   || 0,
-              start_page:       ch.startPage         || 0,
-              end_page:         ch.endPage           || 0,
-              page_count:       ch.pageCount         || 0,
-              completed_on:     ch.completedOn       || null,
-              last_reviewed_on: ch.lastReviewedOn    || null,
-              next_revision:    ch.nextRevision      || null,
-              revision_index:   ch.revisionIndex     || 0,
-              revision_dates:   ch.revisionDates     || [],
-              updated_at:       new Date().toISOString(),
+              user_id:        uid,
+              subject_id:     subjectId,
+              subject_name:   subjectName,
+              name:           unit.name,
+              sort_order:     ui,
+              question_count: unit.questionCount       || 0,
+              qbank_total:    unit.qbankStats?.total   || 0,
+              qbank_correct:  unit.qbankStats?.correct || 0,
+              qbank_done:     unit.qbankDone           || false,
+              collapsed:      unit.collapsed           || false,
+              updated_at:     new Date().toISOString(),
             },
-            { onConflict: "unit_id,name" }
-          );
-        if (chErr) console.error("Chapter save error:", chErr);
+            { onConflict: "subject_id,name" }
+          )
+          .select("id")
+          .single();
+        
+        if (unitErr) { 
+          console.error(`Unit save error for "${unit.name}":`, unitErr); 
+          continue; 
+        }
+        
+        const unitId = unitRow.id;
+
+        // Track local chapter names for this unit
+        const localChapterNames = (unit.chapters || []).map(ch => ch.name);
+        
+        // Delete chapters that exist in cloud but not locally (single query)
+        try {
+          const { data: cloudChapters } = await supabaseClient
+            .from("chapters")
+            .select("id, name")
+            .eq("unit_id", unitId);
+          
+          if (cloudChapters && cloudChapters.length > 0) {
+            const chaptersToDelete = cloudChapters
+              .filter(cc => !localChapterNames.includes(cc.name))
+              .map(cc => cc.id);
+            
+            if (chaptersToDelete.length > 0) {
+              await supabaseClient.from("chapters").delete().in("id", chaptersToDelete);
+              console.log(`[Sync] Deleted ${chaptersToDelete.length} chapter(s) from "${unit.name}"`);
+            }
+          }
+        } catch (chDelErr) {
+          console.error(`Error managing chapters for "${unit.name}":`, chDelErr);
+        }
+
+        // 3. Upsert each chapter
+        const chapters = unit.chapters || [];
+        for (let ci = 0; ci < chapters.length; ci++) {
+          const ch = chapters[ci];
+          const { error: chErr } = await supabaseClient
+            .from("chapters")
+            .upsert(
+              {
+                user_id:          uid,
+                unit_id:          unitId,
+                subject_name:     subjectName,
+                unit_name:        unit.name,
+                name:             ch.name,
+                sort_order:       ci,
+                status:           ch.status            || "not-started",
+                difficulty:       ch.difficulty        || "medium",
+                difficulty_factor: ch.difficultyFactor ?? 2.5,
+                missed_revisions: ch.missedRevisions   || 0,
+                start_page:       ch.startPage         || 0,
+                end_page:         ch.endPage           || 0,
+                page_count:       ch.pageCount         || 0,
+                completed_on:     ch.completedOn       || null,
+                last_reviewed_on: ch.lastReviewedOn    || null,
+                next_revision:    ch.nextRevision      || null,
+                revision_index:   ch.revisionIndex     || 0,
+                revision_dates:   ch.revisionDates     || [],
+                updated_at:       new Date().toISOString(),
+              },
+              { onConflict: "unit_id,name" }
+            );
+          if (chErr) console.error(`Chapter save error for "${ch.name}":`, chErr);
+        }
       }
     }
+  } catch (err) {
+    console.error("Critical error in _saveSubjectsUnitsChapters:", err);
+    throw err; // Re-throw to be caught by saveToCloud's try-catch
   }
 }
 
@@ -325,10 +422,20 @@ async function loadFromCloud() {
       Object.entries(cloudData.subjects || {}).map(([k,v]) => [k, v.units?.length || 0])
     ));
 
-    // Cloud normalized tables are always the source of truth.
-    // Do NOT run migrateData() here — that function is for upgrading the old
-    // localStorage blob format and would incorrectly wrap subjects in a "General" unit.
-    studyData = cloudData;
+    // CRITICAL FIX: Use smart merge instead of overwriting
+    // This preserves local changes that haven't synced yet
+    const localData = JSON.parse(localStorage.getItem("studyData") || "{}");
+    
+    if (typeof mergeData === "function" && localData && localData.updatedAt) {
+      // Merge cloud and local data intelligently
+      studyData = mergeData(localData, cloudData);
+      console.log("[Load] Used smart merge (local + cloud)");
+    } else {
+      // No local data or merge function not available - use cloud as source of truth
+      studyData = cloudData;
+      console.log("[Load] Used cloud data as source of truth");
+    }
+    
     localStorage.setItem("studyData", JSON.stringify(studyData));
 
   } catch (err) {
@@ -438,19 +545,33 @@ function _reconstructStudyData(meta, subjectRows, unitRows, chapterRows, history
 // ─── LOADING OVERLAY ──────────────────────────────────────────
 function _showLoadingOverlay(show) {
   let el = document.getElementById("cloud-loading-overlay");
+  
   if (!el && show) {
+    // Check if nav is collapsed to adjust left position
+    const navCollapsed = document.body.classList.contains('nav-collapsed');
+    const leftOffset = navCollapsed ? '64px' : '220px';
+    
     el = document.createElement("div");
     el.id = "cloud-loading-overlay";
     el.style.cssText = `
-      position:fixed;inset:0;background:rgba(2,6,23,0.75);
-      z-index:9998;display:flex;align-items:center;justify-content:center;
-      transition:opacity 0.3s;
+      position: fixed;
+      top: 0;
+      left: ${leftOffset};
+      right: 0;
+      bottom: 0;
+      background: rgba(2, 6, 23, 0.95);
+      z-index: 9998;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.3s, left 0.3s;
+      opacity: 0;
     `;
     el.innerHTML = `
       <div style="text-align:center;">
-        <div style="width:36px;height:36px;border:3px solid #1e3a5f;border-top-color:#3b82f6;
-          border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
-        <div style="color:#94a3b8;font-size:13px;">Syncing your data...</div>
+        <div style="width:48px;height:48px;border:4px solid #1e3a5f;border-top-color:#3b82f6;
+          border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px;"></div>
+        <div style="color:#e2e8f0;font-size:15px;font-weight:500;">Syncing your data...</div>
       </div>
     `;
     if (!document.getElementById("spin-style")) {
@@ -460,10 +581,42 @@ function _showLoadingOverlay(show) {
       document.head.appendChild(s);
     }
     document.body.appendChild(el);
+    
+    // Observe body class changes to update overlay position when nav toggles
+    if (!window._navObserver) {
+      window._navObserver = new MutationObserver(() => {
+        const overlay = document.getElementById("cloud-loading-overlay");
+        if (overlay && overlay.style.display !== 'none') {
+          const navCollapsed = document.body.classList.contains('nav-collapsed');
+          overlay.style.left = navCollapsed ? '64px' : '220px';
+        }
+      });
+      window._navObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+    }
+    
+    // Force reflow and fade in immediately
+    requestAnimationFrame(() => {
+      if (el) el.style.opacity = "1";
+    });
+  } else if (el && show) {
+    // Update left position if nav state changed
+    const navCollapsed = document.body.classList.contains('nav-collapsed');
+    const leftOffset = navCollapsed ? '64px' : '220px';
+    el.style.left = leftOffset;
+    el.style.display = "flex";
+    requestAnimationFrame(() => {
+      if (el) el.style.opacity = "1";
+    });
   }
-  if (el) {
-    el.style.opacity = show ? "1" : "0";
-    if (!show) setTimeout(() => el?.remove(), 300);
+  
+  if (el && !show) {
+    el.style.opacity = "0";
+    setTimeout(() => {
+      if (el) el.style.display = "none";
+    }, 300);
   }
 }
 
@@ -527,11 +680,21 @@ function renderAll() {
 // ─── REALTIME ─────────────────────────────────────────────────
 // Listen on chapters table for the most granular real-time changes
 let realtimeChannel = null;
+let _realtimeReloadDebounce = null;
 
 async function setupRealtime() {
   const user = await _getUser();
   if (!user) return;
   if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+
+  // Debounced reload function - prevents fighting with local saves
+  if (typeof debounce === "function") {
+    _realtimeReloadDebounce = debounce(async () => {
+      console.log("[Realtime] Reloading from cloud...");
+      await loadFromCloud();
+      renderAll();
+    }, 3000); // Wait 3 seconds after last change before reloading
+  }
 
   realtimeChannel = supabaseClient
     .channel("normalized-data-listener")
@@ -545,8 +708,12 @@ async function setupRealtime() {
       },
       async () => {
         // Reload from cloud on any user_meta change (settings, plan, etc.)
-        await loadFromCloud();
-        renderAll();
+        if (_realtimeReloadDebounce) {
+          _realtimeReloadDebounce();
+        } else {
+          await loadFromCloud();
+          renderAll();
+        }
       }
     )
     .on(
@@ -559,11 +726,25 @@ async function setupRealtime() {
       },
       async () => {
         // Reload when any chapter changes (covers multi-device study)
-        await loadFromCloud();
-        renderAll();
+        // Debounced to avoid conflicts with local saves
+        if (_realtimeReloadDebounce) {
+          _realtimeReloadDebounce();
+        } else {
+          await loadFromCloud();
+          renderAll();
+        }
       }
     )
     .subscribe();
 }
 
 document.addEventListener("DOMContentLoaded", checkUser);
+
+// Show loading overlay immediately when script loads (before DOMContentLoaded)
+if (document.readyState === 'loading') {
+  // DOM is still loading, show overlay immediately
+  _showLoadingOverlay(true);
+} else {
+  // DOM already loaded (script loaded late), check user immediately
+  checkUser();
+}
