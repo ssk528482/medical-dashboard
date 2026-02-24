@@ -320,19 +320,16 @@ async function loadFromCloud() {
       history.data  || []
     );
 
-    // Task #1: smart merge with localStorage
-    let localData = JSON.parse(localStorage.getItem("studyData") || "{}");
-    let merged = mergeData(localData, cloudData);
-    merged = migrateData(merged);
+    console.log("[Load] Cloud subjects:", Object.keys(cloudData.subjects || {}));
+    console.log("[Load] Units per subject:", Object.fromEntries(
+      Object.entries(cloudData.subjects || {}).map(([k,v]) => [k, v.units?.length || 0])
+    ));
 
-    studyData = merged;
+    // Cloud normalized tables are always the source of truth.
+    // Do NOT run migrateData() here — that function is for upgrading the old
+    // localStorage blob format and would incorrectly wrap subjects in a "General" unit.
+    studyData = cloudData;
     localStorage.setItem("studyData", JSON.stringify(studyData));
-
-    // Push local back if it's newer
-    if (localData.updatedAt && cloudData.updatedAt &&
-        new Date(localData.updatedAt) > new Date(cloudData.updatedAt)) {
-      await saveToCloud();
-    }
 
   } catch (err) {
     console.error("Load error:", err);
