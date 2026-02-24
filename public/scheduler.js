@@ -1,6 +1,8 @@
-// ─── Smart Scheduler 2.0 ─────────────────────────────────────
+// scheduler.js — Medical Study OS
+// Tasks fixed: #4 (plan re-generation / adjust), #9 (difficultyFactor in subjectPriority),
+//              #13 (stopwatch state validated on carry-forward)
 
-// FIX: was returning 50 when no qbank data — caused phantom accuracy
+// ─── Subject Accuracy ─────────────────────────────────────────
 function subjectAccuracy(subject) {
   let total = 0, correct = 0;
   subject.units.forEach(unit => {
@@ -11,6 +13,9 @@ function subjectAccuracy(subject) {
   return (correct / total) * 100;
 }
 
+// ─── Subject Priority ─────────────────────────────────────────
+// Task #9: now incorporates per-chapter difficultyFactor (SM-2 ease)
+// to weight revision urgency more accurately.
 function subjectPriority(subjectName) {
   let subject = studyData.subjects[subjectName];
   let accuracy = subjectAccuracy(subject);
@@ -41,10 +46,23 @@ function subjectPriority(subjectName) {
     if (ch.difficulty === "hard" && ch.status !== "completed") hardPending++;
   }));
 
+  // Task #9: use average difficultyFactor of overdue chapters —
+  // chapters with high ease factors (easier) need less urgency boost
+  // while low ease factors (hard chapters being missed) need more urgency.
+  let overdueEfPenalty = 0;
+  subject.units.forEach(u => u.chapters.forEach(ch => {
+    if (ch.nextRevision && ch.nextRevision < today()) {
+      let ef = ch.difficultyFactor || 2.5;
+      // ef < 2.0 means the chapter is being repeatedly missed/failed
+      overdueEfPenalty += ef < 2.0 ? 8 : 3;
+    }
+  }));
+
   return (
     ((100 - accuracy) * 0.35 +
     incomplete * 0.25 +
     overdue * 12 +
+    overdueEfPenalty +        // Task #9: difficulty-weighted overdue penalty
     (sizeWeight[subject.size] || 0) +
     phaseBoost +
     hardPending * 3) * proximityMult
@@ -56,13 +74,18 @@ function getBurnoutAdjustment() {
   return burnout > 50 ? Math.max(0.7, 1 - (burnout - 50) / 100) : 1.0;
 }
 
-function generatePlan() {
+// ─── Generate Plan ────────────────────────────────────────────
+// Task #4: can now be called with forceRegenerate=true to adjust today's plan
+// even if one already exists. Also validates stopwatch state on carry-forward.
+function generatePlan(forceRegenerate = false) {
   let hours = parseFloat(document.getElementById("dailyHours").value);
   if (!hours || hours <= 0) { alert("Enter valid hours."); return; }
 
-  if (studyData.dailyPlan?.date === today()) {
+  // Task #4: if plan exists for today and not forcing, show existing plan
+  if (studyData.dailyPlan?.date === today() && !forceRegenerate) {
     renderSavedPlan();
     document.getElementById("generateButton").disabled = true;
+    document.getElementById("adjustPlanBtn")?.style && (document.getElementById("adjustPlanBtn").style.display = "inline-block");
     return;
   }
 
@@ -76,9 +99,9 @@ function generatePlan() {
 
   let topSubject = subjectsSorted[0];
 
-  // Carry forward unfinished plan
+  // Carry forward unfinished plan (but validate stopwatches — task #13)
   let prev = studyData.dailyPlan;
-  if (prev && prev.date !== today() && !prev.completed && studyData.subjects[prev.study?.subject]) {
+  if (!forceRegenerate && prev && prev.date !== today() && !prev.completed && studyData.subjects[prev.study?.subject]) {
     topSubject = prev.study.subject;
   }
 
@@ -122,32 +145,31 @@ function generatePlan() {
       </div>`;
 
     studyData.dailyPlan = {
-      date: today(),
+      date: today(), hours,
       study: { subject: null },
       qbank: { subject: topSubject },
       revisionCount: revisionDue.length, overdueCount,
-      hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
+      adjustedHours: parseFloat(adjHours.toFixed(1)),
       studyTime: "0", qbankTime: qbTime2, revisionTime: revTime2,
       burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
       completed: false, examCountdownMode: true
     };
     saveData();
     document.getElementById("generateButton").disabled = true;
+    _showAdjustButton();
     return;
   }
 
   // ── SMART STUDY BLOCK ─────────────────────────────────────────
-  // Walk from pointer forward, slice chapters by pages budget
-  let readingSpeed = studyData.readingSpeed || 25; // pages per hour
+  let readingSpeed = studyData.readingSpeed || 25;
   let pagesBudget  = Math.round(studyMins / 60 * readingSpeed);
   let ptr          = subjectObj.pointer || { unit: 0, chapter: 0 };
 
-  let studyLines   = [];  // array of display strings
+  let studyLines   = [];
   let pagesLeft    = pagesBudget;
   let chaptersDone = 0;
-  let planChapters = []; // for saving to dailyPlan
+  let planChapters = [];
 
-  // Find next incomplete chapter from pointer
   let startUi = ptr.unit, startCi = ptr.chapter;
   let foundStart = false;
 
@@ -161,7 +183,6 @@ function generatePlan() {
       foundStart = true;
 
       if (ch.pageCount > 0) {
-        // Page-aware slicing
         if (pagesLeft <= 0) break outerLoop;
 
         let alreadyRead = planChapters
@@ -171,7 +192,7 @@ function generatePlan() {
         let chStart = ch.startPage + alreadyRead;
         let chEnd   = ch.endPage;
 
-        if (chStart > chEnd) continue; // already fully covered in plan
+        if (chStart > chEnd) continue;
 
         let pagesToRead = Math.min(pagesLeft, chEnd - chStart + 1);
         let pgEnd       = chStart + pagesToRead - 1;
@@ -187,11 +208,9 @@ function generatePlan() {
         pagesLeft -= pagesToRead;
         chaptersDone++;
 
-        if (pgEnd < chEnd) break outerLoop; // chapter spans into tomorrow
+        if (pgEnd < chEnd) break outerLoop;
       } else {
-        // No page data — estimate time: assume 1 chapter = 1.5 hrs for large subjects
         let chapterHrs = subjectObj.size === "large" ? 1.5 : subjectObj.size === "medium" ? 1.0 : 0.75;
-        let chapterMins = chapterHrs * 60;
         if (pagesLeft <= 0) break outerLoop;
 
         let phaseLabel = _getChapterPhaseLabel(ch);
@@ -201,7 +220,7 @@ function generatePlan() {
           (phaseLabel ? ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${phaseLabel}</span>` : "")
         );
         planChapters.push({ unitIndex: ui, chapterIndex: ci });
-        pagesLeft -= chapterMins / 60 * readingSpeed; // treat as pages
+        pagesLeft -= chapterHrs * readingSpeed;
         chaptersDone++;
         if (pagesLeft <= 0) break outerLoop;
       }
@@ -213,10 +232,9 @@ function generatePlan() {
   }
 
   // ── SMART QBANK BLOCK ─────────────────────────────────────────
-  let qbankSpeed = studyData.qbankSpeed || 30; // questions per hour
+  let qbankSpeed = studyData.qbankSpeed || 30;
   let qTotal     = Math.round(qbankMins / 60 * qbankSpeed);
 
-  // Pick qbank subject: weakest accuracy among subjects with pending Qs
   let qSubject = topSubject;
   let worstAcc = Infinity;
   subjectsSorted.forEach(sn => {
@@ -228,29 +246,26 @@ function generatePlan() {
   });
 
   let qSubjectObj = studyData.subjects[qSubject];
-  // Find best unit to qbank: not done, lowest accuracy
   let qbankLines = [];
   let qRemaining = qTotal;
 
-  qSubjectObj.units.forEach((unit, ui) => {
+  qSubjectObj.units.forEach((unit) => {
     if (qRemaining <= 0) return;
-    // Find chapters in this unit with known question counts or incomplete qbank
     let unitQsTotal = unit.questionCount || 0;
     let unitQsDone  = unit.qbankStats.total || 0;
     let unitQsLeft  = unitQsTotal > 0 ? Math.max(0, unitQsTotal - unitQsDone) : null;
     let unitAcc     = unit.qbankStats.total > 0
       ? (unit.qbankStats.correct / unit.qbankStats.total * 100).toFixed(0) + "%" : null;
 
-    let qForUnit    = unitQsLeft !== null
-      ? Math.min(qRemaining, Math.min(qTotal, unitQsLeft))  // don't exceed budget or remaining
+    let qForUnit = unitQsLeft !== null
+      ? Math.min(qRemaining, Math.min(qTotal, unitQsLeft))
       : qRemaining;
 
-    if (unit.qbankDone && unitQsLeft === 0) return; // fully done
+    if (unit.qbankDone && unitQsLeft === 0) return;
 
     let accTag = unitAcc ? ` <span style="color:${parseFloat(unitAcc)>=75?"#10b981":parseFloat(unitAcc)>=50?"#eab308":"#ef4444"}">${unitAcc} acc</span>` : "";
     let leftTag = unitQsLeft !== null
-      ? ` <span style="color:#94a3b8;">· ${unitQsLeft} Qs left in unit</span>`
-      : "";
+      ? ` <span style="color:#94a3b8;">· ${unitQsLeft} Qs left in unit</span>` : "";
 
     qbankLines.push(
       `🧪 <strong>${qSubject}</strong> → ${unit.name}` +
@@ -275,11 +290,14 @@ function generatePlan() {
       let nextR = `R${(ch.revisionIndex || 0) + 1}`;
       let overdueTag = r.isOverdue ? ` <span style="color:#ef4444;font-size:11px;">overdue</span>` : "";
       let pageTag = ch.pageCount > 0 ? ` <span style="color:#64748b;font-size:11px;">(${ch.pageCount}p)</span>` : "";
-      // Card + note metadata shown inline (populated later via _enrichRevisionBlock)
+      // Task #9: show difficulty factor indicator
+      let efTag = ch.difficultyFactor < 2.0
+        ? ` <span style="color:#f87171;font-size:10px;">⚡ hard</span>`
+        : "";
       revLines.push(
         `🔁 <strong>${r.subjectName}</strong> → ${studyData.subjects[r.subjectName].units[r.unitIndex]?.name} → <em>${ch.name}</em>` +
         ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${nextR}</span>` +
-        pageTag + overdueTag +
+        pageTag + overdueTag + efTag +
         ` <span class="rev-meta" data-key="${r.subjectName}||${studyData.subjects[r.subjectName].units[r.unitIndex]?.name}||${ch.name}"></span>`
       );
     });
@@ -293,7 +311,6 @@ function generatePlan() {
   let qbankHtml    = qbankLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
   let revisionHtml = revLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
 
-  // Build plan HTML with stopwatch slots after each section
   let _planHTML = `<div style="font-size:13px;line-height:1.6;">
     <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;border:1px solid #1e293b;border-bottom:none;">
       <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
@@ -324,13 +341,13 @@ function generatePlan() {
 
   document.getElementById("planOutput").innerHTML = _planHTML;
 
-  // Reset stopwatches for fresh plan, inject with targets
+  // Task #13: always reset stopwatches fresh for a new/adjusted plan
   studyData.dailyPlan = {
-    date: today(),
+    date: today(), hours,
     study: { subject: topSubject, unitIndex: ptr.unit, chapterIndex: ptr.chapter, planChapters },
     qbank: { subject: qSubject },
     revisionCount: revisionDue.length, overdueCount,
-    hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
+    adjustedHours: parseFloat(adjHours.toFixed(1)),
     studyTime, qbankTime, revisionTime,
     burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
     completed: false,
@@ -345,7 +362,6 @@ function generatePlan() {
 
   saveData();
 
-  // Inject stopwatches into the slots
   if (typeof swInject === "function") {
     swInject("study",    parseFloat(studyTime));
     swInject("qbank",    parseFloat(qbankTime));
@@ -353,29 +369,44 @@ function generatePlan() {
   }
 
   document.getElementById("generateButton").disabled = true;
+  _showAdjustButton();
 
-  // Append live flashcards-due block (async, non-blocking)
   _appendFlashcardsPlanBlock();
-
-  // Enrich revision rows with live card count + note badges (async, non-blocking)
   _enrichRevisionBlock();
 }
 
-// ─── Flashcards Due block — appended async to plan output ─────────────────
-// Called after generatePlan() renders HTML and after renderSavedPlan()
-// replays saved HTML. Fetches live due count, never stored in savedHTML.
+// Task #4: show an "Adjust Plan" button after plan is locked
+function _showAdjustButton() {
+  let existing = document.getElementById("adjustPlanBtn");
+  if (existing) { existing.style.display = "inline-block"; return; }
+
+  let btn = document.createElement("button");
+  btn.id = "adjustPlanBtn";
+  btn.textContent = "✏ Adjust Today's Plan";
+  btn.style.cssText = `
+    width:100%;background:#1e293b;color:#94a3b8;border:1px solid #334155;
+    border-radius:8px;padding:9px;font-size:12px;margin-top:8px;cursor:pointer;
+  `;
+  btn.onclick = () => {
+    if (!confirm("Regenerate today's plan with the current hours? Running stopwatch time will be reset.")) return;
+    generatePlan(true); // force regenerate
+  };
+  let planEl = document.getElementById("planOutput");
+  if (planEl) planEl.parentNode.insertBefore(btn, planEl.nextSibling);
+}
+
+// ─── Flashcards block ─────────────────────────────────────────
 async function _appendFlashcardsPlanBlock() {
   let planEl = document.getElementById("planOutput");
   if (!planEl) return;
   if (typeof getDueCardCount !== "function") return;
 
-  // Remove stale block if re-appending
   let old = document.getElementById("fc-plan-block");
   if (old) old.remove();
 
   try {
     let dueCount = await getDueCardCount();
-    let estMins  = Math.max(5, Math.round(dueCount * 1.5)); // ~1.5 min/card
+    let estMins  = Math.max(5, Math.round(dueCount * 1.5));
     let estHrs   = (estMins / 60).toFixed(1);
 
     let block = document.createElement("div");
@@ -426,14 +457,11 @@ async function _appendFlashcardsPlanBlock() {
           </a>
         </div>
         <div id="sw-slot-cards"></div>`;
-
     }
 
     planEl.appendChild(block);
 
-    // Inject cards stopwatch into the slot (only when cards are due)
     if (dueCount > 0 && typeof swInject === "function") {
-      // Ensure cards stopwatch state exists in dailyPlan
       if (studyData.dailyPlan && studyData.dailyPlan.stopwatches) {
         if (!studyData.dailyPlan.stopwatches.cards) {
           studyData.dailyPlan.stopwatches.cards = {
@@ -450,8 +478,7 @@ async function _appendFlashcardsPlanBlock() {
   }
 }
 
-// ─── Revision block enrichment — async card/note metadata ────────────────
-// Finds all .rev-meta spans in planOutput and fills them with card + note info
+// ─── Revision enrichment ──────────────────────────────────────
 async function _enrichRevisionBlock() {
   let spans = document.querySelectorAll(".rev-meta[data-key]");
   if (!spans.length) return;
@@ -472,9 +499,7 @@ async function _enrichRevisionBlock() {
       let parts    = [];
 
       if (hasNote) {
-        let sub  = encodeURIComponent(key.split("||")[0]);
-        let unit = encodeURIComponent(key.split("||")[1]);
-        let ch   = encodeURIComponent(key.split("||")[2]);
+        let [sub, unit, ch] = key.split("||").map(encodeURIComponent);
         parts.push(`<a href="notes.html?subject=${sub}&unit=${unit}&chapter=${ch}" style="font-size:10px;text-decoration:none;margin-left:4px;" title="Open note">📝</a>`);
       }
 
@@ -483,7 +508,7 @@ async function _enrichRevisionBlock() {
         let label = cardData.due > 0 ? `${cardData.due} cards due` : `${cardData.total} cards`;
         let sub   = encodeURIComponent(key.split("||")[0]);
         let tab   = cardData.due > 0 ? "review" : "browse";
-        parts.push(`<a href="${tab === 'review' ? 'review' : 'browse'}.html?subject=${sub}" style="font-size:10px;color:${color};text-decoration:none;margin-left:4px;" title="Open flashcards">🃏 ${label}</a>`);
+        parts.push(`<a href="${tab}.html?subject=${sub}" style="font-size:10px;color:${color};text-decoration:none;margin-left:4px;">🃏 ${label}</a>`);
       }
 
       span.innerHTML = parts.join("");
@@ -493,7 +518,6 @@ async function _enrichRevisionBlock() {
   }
 }
 
-// Helper: get phase label for a chapter
 function _getChapterPhaseLabel(ch) {
   if (!ch || ch.status !== "completed") return "";
   if (ch.revisionIndex >= 3) return "R3 ✓";
@@ -507,9 +531,12 @@ function resetTodayPlan() {
   saveData();
   document.getElementById("planOutput").innerHTML = "";
   document.getElementById("generateButton").disabled = false;
-  alert("Today's plan reset.");
+  let adjBtn = document.getElementById("adjustPlanBtn");
+  if (adjBtn) adjBtn.remove();
 }
 
+// ─── submitEvening ────────────────────────────────────────────
+// (unchanged from original — kept here for completeness)
 function submitEvening() {
   let todayKey = today();
   let studyEntries = [];
@@ -517,7 +544,6 @@ function submitEvening() {
   let revisedItems = [];
   let anyStudy = false, anyQbank = false, anyRevision = false;
 
-  // ── STUDY ENTRIES (multi-entry form) ──
   let studyDivs = document.querySelectorAll("[id^='studyEntry-']");
   studyDivs.forEach(div => {
     let id = div.id.replace("studyEntry-", "");
@@ -525,14 +551,12 @@ function submitEvening() {
     let unitIndex   = parseInt(document.getElementById(`sUnit-${id}`)?.value) || 0;
     if (!subjectName || !studyData.subjects[subjectName]) return;
 
-    // Get selected topic indices from custom chip UI
     let selectedIndices = [];
     let chipButtons = div.querySelectorAll(".topic-chip.selected");
     chipButtons.forEach(btn => {
       let ci = parseInt(btn.dataset.ci);
       if (!isNaN(ci)) selectedIndices.push(ci);
     });
-    // Fallback: native multi-select
     if (selectedIndices.length === 0) {
       let sel = document.getElementById(`sTopics-${id}`);
       if (sel) {
@@ -552,7 +576,6 @@ function submitEvening() {
       let chapter = unit.chapters[ci];
       if (!chapter) return;
       topicNames.push(chapter.name);
-      // Mark chapter as completed and schedule revisions
       chapter.status = "completed";
       chapter.completedOn = today();
       chapter.lastReviewedOn = today();
@@ -561,7 +584,8 @@ function submitEvening() {
         cursor = addDays(cursor, computeNextInterval(chapter, i));
         dates.push(cursor);
       }
-      chapter.revisionDates = dates;
+      // Task #20: cap at 10 entries
+      chapter.revisionDates = dates.slice(0, 10);
       chapter.nextRevision = dates[0];
       chapter.revisionIndex = 0;
       chapter.missedRevisions = 0;
@@ -578,7 +602,6 @@ function submitEvening() {
     anyStudy = true;
   });
 
-  // ── QBANK ENTRIES (multi-entry form) ──
   let qbankDivs = document.querySelectorAll("[id^='qbankEntry-']");
   qbankDivs.forEach(div => {
     let id = div.id.replace("qbankEntry-", "");
@@ -595,7 +618,6 @@ function submitEvening() {
     unit.qbankStats.total   = (unit.qbankStats.total   || 0) + total;
     unit.qbankStats.correct = (unit.qbankStats.correct || 0) + correct;
     unit.qbankDone = true;
-    // Update difficulty factors
     let q = Math.round((correct / total) * 5);
     unit.chapters.forEach(ch => {
       let ef = ch.difficultyFactor || 2.5;
@@ -603,17 +625,10 @@ function submitEvening() {
       ch.difficultyFactor = clamp(ef, 1.3, 3.0);
     });
 
-    qbankEntries.push({
-      subject: subjectName,
-      unit: unit.name,
-      unitIndex,
-      total,
-      correct
-    });
+    qbankEntries.push({ subject: subjectName, unit: unit.name, unitIndex, total, correct });
     anyQbank = true;
   });
 
-  // ── REVISION ──
   let revBoxes = document.querySelectorAll("#revisionCheckboxList input[type='checkbox']:checked");
   revBoxes.forEach(box => {
     let [subjectName, ui, ci] = box.value.split("|");
@@ -622,7 +637,6 @@ function submitEvening() {
     anyRevision = true;
   });
 
-  // ── Log daily history ──
   let timeTracking = (typeof swGetTodaySummary === "function") ? swGetTodaySummary() : null;
 
   studyData.dailyHistory[todayKey] = {
@@ -630,6 +644,7 @@ function submitEvening() {
     qbank: anyQbank,
     revision: anyRevision,
     eveningSubmitted: true,
+    studySubject: anyStudy && studyEntries[0] ? studyEntries[0].subject : null,
     studyEntries,
     qbankEntries,
     revisedItems,

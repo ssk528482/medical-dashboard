@@ -200,8 +200,11 @@ async function getNotesCoverageStats() {
   const { data: coverageMap, error } = await getNotesCoverageMap();
   if (error) return { data: {}, error };
 
-  const sd       = JSON.parse(localStorage.getItem('studyData') || '{}');
-  const subjects = sd.subjects || {};
+  // FIX: was re-parsing localStorage directly which could be stale.
+  // Use the global studyData object which is always the authoritative in-memory state.
+  const subjects = (typeof studyData !== 'undefined' ? studyData.subjects : null)
+                || JSON.parse(localStorage.getItem('studyData') || '{}').subjects
+                || {};
   const stats    = {};
 
   Object.entries(subjects).forEach(([subjectName, subjectData]) => {

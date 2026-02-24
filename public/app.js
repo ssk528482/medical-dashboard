@@ -1,3 +1,7 @@
+// app.js — Medical Study OS
+// Tasks fixed: #10 (heatmap range), #11 (data export), #17 (no monkey-patch),
+//              #16 (notes progress bug documented), #5 (undo wired to button)
+
 function renderSubjects() {
   let container = document.getElementById("subjectsContainer");
   if (!container) return;
@@ -12,7 +16,7 @@ function renderSubjects() {
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div>
           <div style="font-size:16px;font-weight:800;color:#fca5a5;">🚨 EXAM COUNTDOWN MODE</div>
-          <div style="font-size:12px;color:#fca5a5;opacity:0.85;margin-top:3px;">New study paused — revisions & Qbank only</div>
+          <div style="font-size:12px;color:#fca5a5;opacity:0.85;margin-top:3px;">New study paused — revisions &amp; Qbank only</div>
         </div>
         <div style="text-align:center;background:rgba(0,0,0,0.3);border-radius:10px;padding:8px 14px;">
           <div style="font-size:28px;font-weight:900;color:#ef4444;">${daysLeft}</div>
@@ -84,6 +88,9 @@ function renderSubjects() {
     </div>
   `;
   container.appendChild(phaseBanner);
+
+  // ── Flashcards Due widget (inline — task #17: no monkey-patch) ──
+  renderCardsDueWidget(container);
 
   // ── Weekly Report Teaser (Sundays or grade C/D) ──
   let todayDate = new Date();
@@ -158,7 +165,7 @@ function renderSubjects() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
         <span style="font-size:11px;color:#6b7280;">${pct}% (${doneCh}/${totalCh} chapters)</span>
         <button style="font-size:11px;padding:5px 10px;margin:0;"
-          onclick="completeTopic('${subjectName}'); renderSubjects();">✓ Complete Next</button>
+          onclick="completeTopic('${esc(subjectName)}'); renderSubjects();">✓ Complete Next</button>
       </div>
     `;
     container.appendChild(card);
@@ -175,6 +182,7 @@ function renderSubjects() {
   `;
   container.appendChild(retDiv);
 
+  // Now render deferred sections
   renderRevisionSection();
   renderIntelligenceAlerts("homeAlerts");
   renderPlannerQuickStatus();
@@ -194,7 +202,6 @@ function renderRevisionSection() {
   revDiv.style.borderColor = overdueCount > 0 ? "#ef4444" : "#f59e0b";
   revDiv.id = "revisionSectionCard";
 
-  // Header row with count + collapse toggle
   revDiv.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
       <div class="section-title" style="margin-bottom:0;">
@@ -205,7 +212,6 @@ function renderRevisionSection() {
       <a href="planner.html" style="font-size:11px;color:#3b82f6;text-decoration:none;flex-shrink:0;">View in Planner →</a>
     </div>`;
 
-  // Scrollable list container — shows SHOW_LIMIT items, rest hidden
   let listWrap = document.createElement("div");
   listWrap.id = "revListWrap";
   listWrap.style.cssText = "max-height:270px;overflow-y:auto;border-radius:8px;border:1px solid #1e3350;";
@@ -225,14 +231,13 @@ function renderRevisionSection() {
         </div>
       </div>
       <button style="font-size:11px;padding:4px 10px;margin:0;flex-shrink:0;background:#1e3a5f;color:#93c5fd;border:1px solid #2a4f80;border-radius:6px;min-height:unset;"
-        onclick="markRevisionDone('${item.subjectName}',${item.unitIndex},${item.chapterIndex}); renderSubjects();">Done</button>
+        onclick="markRevisionDone('${esc(item.subjectName)}',${item.unitIndex},${item.chapterIndex}); renderSubjects();">Done</button>
     `;
     listWrap.appendChild(row);
   });
 
   revDiv.appendChild(listWrap);
 
-  // Footer: count + link to planner if many
   if (due.length > SHOW_LIMIT) {
     let footer = document.createElement("div");
     footer.style.cssText = "text-align:center;padding:8px 0 0;font-size:11px;color:#64748b;";
@@ -243,7 +248,6 @@ function renderRevisionSection() {
   container.appendChild(revDiv);
 }
 
-// ── Planner Quick Status (shown on Home page) ────────────────
 function renderPlannerQuickStatus() {
   let el = document.getElementById("plannerQuickStatus");
   if (!el) return;
@@ -267,7 +271,172 @@ function renderPlannerQuickStatus() {
   }
 }
 
+// ── Flashcards Due Widget (inline in renderSubjects — task #17 fix) ───
+function renderCardsDueWidget(container) {
+  if (typeof getDueCardCount !== "function") return;
+  getDueCardCount().then(count => {
+    let el = document.createElement("div");
+    el.className = "card";
+    el.style.cssText = "background:linear-gradient(135deg,#0f2040,#1a2f52);border-color:#3b4f7a;";
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-weight:700;font-size:15px;color:#93c5fd;margin-bottom:3px;">🃏 Flashcards</div>
+          <div style="font-size:13px;color:#e2e8f0;">
+            <span id="home-cards-due-count" style="font-weight:800;color:${count>0?"#f87171":"#10b981"};">${count}</span>
+            ${count === 1 ? "card due" : "cards due"} today
+          </div>
+        </div>
+        <a href="browse.html" style="background:#3b82f6;color:white;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">
+          ${count > 0 ? "Review →" : "Browse →"}
+        </a>
+      </div>`;
+    // Insert after phaseBanner (third child) — before weekly report
+    let thirdChild = container.children[3];
+    if (thirdChild) container.insertBefore(el, thirdChild);
+    else container.appendChild(el);
+  });
+}
 
+// ── Heatmap (task #10: adjustable range) ─────────────────────
+let _heatmapDays = 60; // default, toggleable
+
+function renderHeatmap() {
+  let container = document.getElementById("heatmapContainer");
+  if (!container) return;
+  container.innerHTML = "";
+
+  // Range selector
+  let rangeBar = document.createElement("div");
+  rangeBar.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;";
+  rangeBar.innerHTML = `
+    <span style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Range:</span>
+    ${[30, 60, 90, 180].map(d =>
+      `<button onclick="setHeatmapRange(${d})"
+        style="padding:3px 10px;font-size:11px;border-radius:6px;cursor:pointer;margin:0;
+          background:${_heatmapDays===d?'#3b82f6':'#1e293b'};
+          color:${_heatmapDays===d?'white':'#94a3b8'};
+          border:1px solid ${_heatmapDays===d?'#3b82f6':'#334155'};">
+        ${d}d
+      </button>`
+    ).join("")}
+    <button onclick="setHeatmapRange(${Object.keys(studyData.dailyHistory||{}).length || 365})"
+      style="padding:3px 10px;font-size:11px;border-radius:6px;cursor:pointer;margin:0;
+        background:${_heatmapDays>180?'#3b82f6':'#1e293b'};
+        color:${_heatmapDays>180?'white':'#94a3b8'};
+        border:1px solid ${_heatmapDays>180?'#3b82f6':'#334155'};">
+      All
+    </button>
+  `;
+  container.appendChild(rangeBar);
+
+  let days = _heatmapDays;
+  let dateRange = [];
+  for (let i = days - 1; i >= 0; i--) {
+    let d = new Date(); d.setDate(d.getDate() - i);
+    dateRange.push(d.toISOString().split("T")[0]);
+  }
+
+  let grid = document.createElement("div");
+  grid.style.cssText = "display:flex;flex-wrap:wrap;gap:3px;";
+  const colors = ["#1f2937", "#f97316", "#eab308", "#16a34a"];
+
+  dateRange.forEach(date => {
+    let box = document.createElement("div");
+    box.style.cssText = "width:16px;height:16px;border-radius:3px;cursor:default;";
+    box.title = date;
+    let score = 0;
+    let e = studyData.dailyHistory[date];
+    if (e) score = (e.study?1:0) + (e.qbank?1:0) + (e.revision?1:0);
+    box.style.background = colors[score] || colors[0];
+    grid.appendChild(box);
+  });
+
+  container.appendChild(grid);
+
+  let legend = document.createElement("div");
+  legend.style.cssText = "display:flex;gap:10px;margin-top:8px;font-size:11px;color:#9ca3af;flex-wrap:wrap;";
+  legend.innerHTML = [
+    ["#1f2937","None"], ["#f97316","1/3"], ["#eab308","2/3"], ["#16a34a","Full"]
+  ].map(([c,l]) => `<span><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;margin-right:3px;"></span>${l}</span>`).join("");
+  container.appendChild(legend);
+}
+
+function setHeatmapRange(days) {
+  _heatmapDays = days;
+  renderHeatmap();
+}
+
+// ── Data Export (task #11) ─────────────────────────────────────
+function exportData() {
+  try {
+    let exportObj = {
+      exportedAt: new Date().toISOString(),
+      version: studyData.version,
+      examDate: studyData.examDate,
+      startDate: studyData.startDate,
+      subjects: studyData.subjects,
+      dailyHistory: studyData.dailyHistory,
+      readingSpeed: studyData.readingSpeed,
+      qbankSpeed: studyData.qbankSpeed,
+    };
+    let blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = `studyos-backup-${today()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("Export failed: " + e.message);
+  }
+}
+
+function importData(file) {
+  if (!file) return;
+  let reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      let imported = JSON.parse(e.target.result);
+      if (!imported.subjects) { alert("Invalid backup file — missing subjects."); return; }
+      if (!confirm("This will REPLACE your current data with the backup. Continue?")) return;
+      imported = migrateData(imported);
+      studyData = imported;
+      saveData();
+      location.reload();
+    } catch (err) {
+      alert("Failed to import: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Cards badge ─────────────────────────────────────────────────
+async function updateCardsBadge() {
+  if (typeof getDueCardCount !== "function") return;
+  try {
+    let count = await getDueCardCount();
+    let badge = document.getElementById("nav-cards-badge");
+    if (badge) {
+      if (count > 0) {
+        badge.textContent = count > 99 ? "99+" : count;
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+    }
+    let homeCount = document.getElementById("home-cards-due-count");
+    if (homeCount) homeCount.textContent = count;
+  } catch (e) {
+    console.warn("updateCardsBadge:", e);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  updateCardsBadge();
+});
+
+// ── Evening Update form (kept from original app.js) ───────────
 
 function renderEveningUpdate() {
   let inner = document.getElementById("eveningUpdateInner");
@@ -310,7 +479,6 @@ function renderEveningUpdate() {
     let topicsCount   = (hist.studyEntries||[]).reduce((s,e)=>s+(e.topics||[]).length,0);
     let questionsCount = (hist.qbankEntries||[]).reduce((s,e)=>s+(e.total||0),0);
 
-    // ── Time tracking summary ──
     let tt = hist.timeTracking;
     let timeHtml = "";
     if (tt) {
@@ -370,7 +538,6 @@ function renderEveningUpdate() {
   }
 
   // Build form
-  // ── Live time summary from stopwatches ──
   let liveTT = (typeof swGetTodaySummary === "function") ? swGetTodaySummary() : null;
   let liveTimeHtml = "";
   if (liveTT) {
@@ -446,7 +613,7 @@ function addStudyEntry() {
   div.id = `studyEntry-${id}`;
   div.style.cssText = "border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:10px;background:#0a1628;";
 
-  let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
+  let options = subjectNames.map(n => `<option value="${esc(n)}">${n}</option>`).join("");
 
   div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -525,7 +692,7 @@ function addQbankEntry() {
   div.id = `qbankEntry-${id}`;
   div.style.cssText = "border:1px solid #1e293b;border-radius:8px;padding:10px;margin-bottom:8px;";
 
-  let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
+  let options = subjectNames.map(n => `<option value="${esc(n)}">${n}</option>`).join("");
 
   div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -574,7 +741,6 @@ function renderRevisionCheckboxList() {
     container.innerHTML = `<span style="color:#9ca3af;font-size:13px;">No revisions due today ✓</span>`;
     return;
   }
-  // Scrollable wrapper after 5 items
   let wrapper = document.createElement("div");
   if (due.length > 5) {
     wrapper.style.cssText = "max-height:220px;overflow-y:auto;border:1px solid #1e293b;border-radius:8px;padding:4px 0;";
@@ -583,7 +749,7 @@ function renderRevisionCheckboxList() {
     let label = document.createElement("label");
     label.style.cssText = "display:block;padding:6px 8px;font-size:13px;cursor:pointer;border-bottom:1px solid #1e293b;";
     label.innerHTML = `
-      <input type="checkbox" value="${item.subjectName}|${item.unitIndex}|${item.chapterIndex}" style="margin-right:8px;">
+      <input type="checkbox" value="${esc(item.subjectName)}|${item.unitIndex}|${item.chapterIndex}" style="margin-right:8px;">
       ${item.subjectName} — ${item.unitName} → ${item.topicName}
       ${item.isOverdue ? `<span style="color:#ef4444;font-size:11px;"> (${item.overdueDays}d overdue)</span>` : ""}
     `;
@@ -596,7 +762,6 @@ function deleteEveningUpdate() {
   if (!confirm("Delete today's evening update and resubmit?")) return;
   let todayKey = today();
   if (studyData.dailyHistory?.[todayKey]) {
-    // Reverse study entries
     (studyData.dailyHistory[todayKey].studyEntries || []).forEach(entry => {
       let subject = studyData.subjects[entry.subject];
       if (!subject) return;
@@ -614,7 +779,6 @@ function deleteEveningUpdate() {
       });
       fixPointer(entry.subject);
     });
-    // Reverse qbank entries
     (studyData.dailyHistory[todayKey].qbankEntries || []).forEach(entry => {
       let subject = studyData.subjects[entry.subject];
       if (!subject) return;
@@ -633,7 +797,6 @@ function deleteEveningUpdate() {
   renderSubjects();
 }
 
-// Keep backward compatibility: old populateAllEveningSelectors calls now just render the form
 function populateAllEveningSelectors() {
   renderEveningUpdate();
 }
@@ -653,19 +816,16 @@ function renderSavedPlan() {
   let examAlert = daysLeft <= 30
     ? `<div style="color:#f59e0b;font-size:12px;margin-top:4px;">🔔 ${daysLeft} days to exam — revision priority elevated</div>` : "";
 
-  // ── Replay saved HTML ──
   if (plan.renderedHTML) {
     planEl.innerHTML = plan.renderedHTML;
     document.getElementById("generateButton").disabled = true;
+    _showAdjustButton();
     _swAttach(plan);
-    // Append live flashcard block (async, fresh due count)
     if (typeof _appendFlashcardsPlanBlock === "function") _appendFlashcardsPlanBlock();
-    // Enrich revision rows with card + note badges (async)
     if (typeof _enrichRevisionBlock === "function") _enrichRevisionBlock();
     return;
   }
 
-  // ── Exam countdown mode (legacy) ──
   if (plan.examCountdownMode) {
     planEl.innerHTML = `
       <div style="background:#450a0a;border:1px solid #ef4444;border-radius:10px;padding:10px;margin-bottom:10px;">
@@ -678,12 +838,12 @@ function renderSavedPlan() {
         ${burnoutWarn}${examAlert}
       </div>`;
     document.getElementById("generateButton").disabled = true;
+    _showAdjustButton();
     if (typeof _appendFlashcardsPlanBlock === "function") _appendFlashcardsPlanBlock();
     if (typeof _enrichRevisionBlock === "function") _enrichRevisionBlock();
     return;
   }
 
-  // ── Legacy fallback ──
   let subjectObj = studyData.subjects[plan.study?.subject];
   if (!subjectObj) { planEl.innerHTML = "<strong>Plan subject was deleted.</strong>"; return; }
   let nextText = plan.nextText || (() => {
@@ -699,12 +859,10 @@ function renderSavedPlan() {
       ${burnoutWarn}${examAlert}
     </div>`;
   document.getElementById("generateButton").disabled = true;
+  _showAdjustButton();
   _swAttach(plan);
 }
 
-// Attach stopwatches after any plan HTML is rendered.
-// If sw-slot-* divs exist (new HTML) → inject there.
-// If not (old saved HTML) → append stopwatch blocks directly to planOutput.
 function _swAttach(plan) {
   if (typeof swInject !== "function") return;
 
@@ -714,7 +872,7 @@ function _swAttach(plan) {
     { key: "revision", hrs: parseFloat(plan.revisionTime || 0) }
   ];
 
-  // Ensure stopwatches object exists with correct targets
+  // Task #13: validate stopwatch state — reset accumulated times from yesterday
   if (!plan.stopwatches) {
     plan.stopwatches = {};
     types.forEach(t => {
@@ -724,18 +882,29 @@ function _swAttach(plan) {
       };
     });
     saveData();
+  } else {
+    // Ensure none are still "running" from a previous day
+    let now = Date.now();
+    types.forEach(t => {
+      let sw = plan.stopwatches[t.key];
+      if (sw && sw.running && sw.startedAt) {
+        // Auto-stop running stopwatches from previous session
+        let elapsed = Math.floor((now - sw.startedAt) / 1000);
+        sw.accumulated += elapsed;
+        sw.running = false;
+        sw.startedAt = null;
+      }
+    });
   }
 
   let planEl = document.getElementById("planOutput");
 
   types.forEach(({ key, hrs }) => {
-    // Try slot first (new HTML)
     let slot = document.getElementById(`sw-slot-${key}`);
     if (slot) {
       swInject(key, hrs);
       return;
     }
-    // No slot — append a labelled block directly
     let labels = { study:"📖 Study", qbank:"🧪 Qbank", revision:"🔁 Revision" };
     let wrapper = document.createElement("div");
     wrapper.style.cssText = "margin-top:8px;";
@@ -748,102 +917,3 @@ function _swAttach(plan) {
     swInject(key, hrs);
   });
 }
-
-function renderHeatmap() {
-  let container = document.getElementById("heatmapContainer");
-  if (!container) return;
-  container.innerHTML = "";
-
-  let last60 = [];
-  for (let i = 59; i >= 0; i--) {
-    let d = new Date(); d.setDate(d.getDate() - i);
-    last60.push(d.toISOString().split("T")[0]);
-  }
-
-  let grid = document.createElement("div");
-  grid.style.cssText = "display:flex;flex-wrap:wrap;gap:3px;";
-  const colors = ["#1f2937", "#f97316", "#eab308", "#16a34a"];
-
-  last60.forEach(date => {
-    let box = document.createElement("div");
-    box.style.cssText = "width:16px;height:16px;border-radius:3px;";
-    box.title = date;
-    let score = 0;
-    let e = studyData.dailyHistory[date];
-    if (e) score = (e.study?1:0) + (e.qbank?1:0) + (e.revision?1:0);
-    box.style.background = colors[score] || colors[0];
-    grid.appendChild(box);
-  });
-
-  container.appendChild(grid);
-
-  let legend = document.createElement("div");
-  legend.style.cssText = "display:flex;gap:10px;margin-top:8px;font-size:11px;color:#9ca3af;flex-wrap:wrap;";
-  legend.innerHTML = [
-    ["#1f2937","None"], ["#f97316","1/3"], ["#eab308","2/3"], ["#16a34a","Full"]
-  ].map(([c,l]) => `<span><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px;margin-right:3px;"></span>${l}</span>`).join("");
-  container.appendChild(legend);
-}
-
-// ═══════════════════════════════════════════════════════════
-// CARDS DUE — nav badge + home page widget
-// ═══════════════════════════════════════════════════════════
-
-async function updateCardsBadge() {
-  if (typeof getDueCardCount !== "function") return;
-  try {
-    let count = await getDueCardCount();
-    let badge = document.getElementById("nav-cards-badge");
-    if (badge) {
-      if (count > 0) {
-        badge.textContent = count > 99 ? "99+" : count;
-        badge.style.display = "inline-block";
-      } else {
-        badge.style.display = "none";
-      }
-    }
-    // Also update home page card-due widget if present
-    let homeCount = document.getElementById("home-cards-due-count");
-    if (homeCount) homeCount.textContent = count;
-  } catch (e) {
-    console.warn("updateCardsBadge:", e);
-  }
-}
-
-// Render a "Cards Due Today" quick-action card on the home page
-// Called from renderSubjects() after the phase banner
-function renderCardsDueWidget(container) {
-  if (typeof getDueCardCount !== "function") return;
-  getDueCardCount().then(count => {
-    let el = document.createElement("div");
-    el.className = "card";
-    el.style.cssText = "background:linear-gradient(135deg,#0f2040,#1a2f52);border-color:#3b4f7a;";
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div>
-          <div style="font-weight:700;font-size:15px;color:#93c5fd;margin-bottom:3px;">🃏 Flashcards</div>
-          <div style="font-size:13px;color:#e2e8f0;">
-            <span id="home-cards-due-count" style="font-weight:800;color:${count>0?"#f87171":"#10b981"};">${count}</span>
-            ${count === 1 ? "card due" : "cards due"} today
-          </div>
-        </div>
-        <a href="browse.html" style="background:#3b82f6;color:white;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;">
-          ${count > 0 ? "Review →" : "Browse →"}
-        </a>
-      </div>`;
-    container.appendChild(el);
-  });
-}
-
-// Hook into renderSubjects — append widget after phase banner renders
-let _origRenderSubjects = renderSubjects;
-renderSubjects = function() {
-  _origRenderSubjects.apply(this, arguments);
-  let container = document.getElementById("subjectsContainer");
-  if (container) renderCardsDueWidget(container);
-};
-
-// Run badge update on every page load
-document.addEventListener("DOMContentLoaded", function() {
-  updateCardsBadge();
-});

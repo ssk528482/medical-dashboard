@@ -335,3 +335,55 @@ function closeConfirm() {
   _confirmFn = null;
 }
 async function runConfirm() { closeConfirm(); if (_confirmFn) await _confirmFn(); }
+
+// ── Undo last card rating (task #6) ──────────────────────────────────
+let _lastRatedCard = null;
+
+// Wrap the original rateCard to save a snapshot before advancing
+const _origRateCard = rateCard;
+rateCard = async function(rating) {
+  if (!_active || !_flipped) return;
+  let card = _queue[_index];
+  // Save snapshot for undo
+  _lastRatedCard = { card: Object.assign({}, card), rating, prevIndex: _index, prevStreak: _streak };
+  await _origRateCard(rating);
+  _showReviewUndoToast(rating);
+};
+
+function undoLastRating() {
+  if (!_lastRatedCard || !_active) return;
+  let snap = _lastRatedCard;
+  _lastRatedCard = null;
+  let toast = document.getElementById("review-undo-toast");
+  if (toast) toast.remove();
+
+  // Go back
+  _index = snap.prevIndex;
+  _streak = snap.prevStreak;
+  _ratings[snap.rating] = Math.max(0, (_ratings[snap.rating] || 0) - 1);
+
+  // Remove re-queued card if Again was undone
+  if (snap.rating === 1) {
+    for (let i = _queue.length - 1; i > snap.prevIndex; i--) {
+      if (_queue[i]._requeued && _queue[i].id === snap.card.id) {
+        _queue.splice(i, 1); break;
+      }
+    }
+  }
+
+  _updateStreak();
+  _flipped = false;
+  _renderCard();
+}
+
+function _showReviewUndoToast(rating) {
+  let old = document.getElementById("review-undo-toast");
+  if (old) old.remove();
+  let labels = { 1:"Again 🔴", 2:"Hard 🟠", 3:"Good 🟢", 4:"Easy 🔵" };
+  let toast = document.createElement("div");
+  toast.id = "review-undo-toast";
+  toast.style.cssText = "position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;font-size:12px;color:#e2e8f0;z-index:9990;box-shadow:0 4px 20px rgba(0,0,0,0.5);";
+  toast.innerHTML = `<span style="font-weight:600;">${labels[rating]}</span><button onclick="undoLastRating()" style="background:#475569;color:white;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Undo</button>`;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.remove(); _lastRatedCard = null; }, 8000);
+}

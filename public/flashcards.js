@@ -1370,15 +1370,20 @@ function _fcEsc(str) {
 }
 
 async function getDueCardCount(date) {
-  const userId = (JSON.parse(localStorage.getItem("studyData") || "{}")).userId
-               || localStorage.getItem("userId");
-  if (!userId) return 0;
-  let d = date || today();
-  const { count, error } = await supabaseClient
-    .from("flashcards")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("is_suspended", false)
-    .lte("next_review_date", d);
-  return error ? 0 : (count ?? 0);
+  // FIX: was reading userId from localStorage.studyData which is unreliable.
+  // Now uses Supabase auth session directly — matches every other function in cardSync.js.
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return 0;
+    let d = date || today();
+    const { count, error } = await supabaseClient
+      .from("flashcards")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("is_suspended", false)
+      .lte("next_review_date", d);
+    return error ? 0 : (count ?? 0);
+  } catch (e) {
+    return 0;
+  }
 }

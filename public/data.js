@@ -1,3 +1,7 @@
+// data.js — Medical Study OS
+// Tasks fixed: #1 (smart merge), #2 (debounced save), #3 (localStorage size guard),
+//              #18 (addSubject uses smart parser), #20 (revisionDates trimmed)
+
 const DATA_VERSION = 5;
 
 let studyData = JSON.parse(localStorage.getItem("studyData")) || {};
@@ -9,7 +13,7 @@ function makeUnitObj(name, questionCount) {
     collapsed: false,
     qbankStats: { total: 0, correct: 0 },
     qbankDone: false,
-    questionCount: questionCount || 0,  // total Qs in this unit (for plan estimation)
+    questionCount: questionCount || 0,
     chapters: []
   };
 }
@@ -35,16 +39,12 @@ function makeChapterObj(name, startPage, endPage) {
 }
 
 // ─── Smart Line Parser ────────────────────────────────────────
-// Parses: "Upper Limb [180] | Bones(1-42), Muscles(43-67), Nerves(68-95)"
-// Also:   "Lower Limb | Hip Joint(1-30), Knee(31-55)"   (no question count)
-// Also:   "Head & Neck"                                   (no topics, no Qs)
 function parseUnitLine(line) {
   line = line.trim();
   if (!line) return null;
 
   let [unitRaw, topicsPart] = line.split("|").map(s => s ? s.trim() : "");
 
-  // Extract optional [questionCount] from unit name
   let questionCount = 0;
   let unitName = unitRaw.replace(/\[(\d+)\]/, (_, n) => { questionCount = parseInt(n); return ""; }).trim();
 
@@ -54,7 +54,6 @@ function parseUnitLine(line) {
     unit.chapters = topicsPart.split(",").map(raw => {
       raw = raw.trim();
       if (!raw) return null;
-      // Match "Chapter Name(startPage-endPage)" or "Chapter Name(page)"
       let pageMatch = raw.match(/^(.+?)\((\d+)(?:-(\d+))?\)\s*$/);
       if (pageMatch) {
         let name  = pageMatch[1].trim();
@@ -62,7 +61,6 @@ function parseUnitLine(line) {
         let end   = pageMatch[3] ? parseInt(pageMatch[3]) : start;
         return makeChapterObj(name, start, end);
       }
-      // No page range — plain chapter name
       return makeChapterObj(raw);
     }).filter(Boolean);
   }
@@ -70,7 +68,6 @@ function parseUnitLine(line) {
   return unit;
 }
 
-// Convenience: parse many lines → array of unit objects
 function parseUnitsText(text) {
   return text.split("\n").map(l => parseUnitLine(l)).filter(Boolean);
 }
@@ -100,10 +97,8 @@ function migrateData(data) {
   }
 
   if (data.version < 4) {
-    // v3 → v4: topics[] → units[{name, chapters[]}]
     Object.values(data.subjects || {}).forEach(subject => {
       if (subject.topics !== undefined) {
-        // All old topics become chapters inside a single "General" unit
         let oldPointer = typeof subject.pointer === "number" ? subject.pointer : 0;
         subject.units = [{
           name: "General",
@@ -127,7 +122,6 @@ function migrateData(data) {
         subject.pointer = { unit: 0, chapter: oldPointer };
       }
 
-      // Fix pointer shape
       if (typeof subject.pointer === "number") {
         subject.pointer = { unit: 0, chapter: subject.pointer };
       }
@@ -139,7 +133,6 @@ function migrateData(data) {
     data.version = 4;
   }
 
-  // v4 → v5: add pageCount/startPage/endPage to chapters, questionCount to units
   if (!data.version || data.version < 5) {
     Object.values(data.subjects || {}).forEach(subject => {
       (subject.units || []).forEach(unit => {
@@ -172,21 +165,128 @@ if (!studyData.uiState.unitCollapsed)   studyData.uiState.unitCollapsed = {};
 if (!studyData.examDate)        studyData.examDate = "2026-12-01";
 if (!studyData.startDate)       studyData.startDate = today();
 if (!studyData.version)         studyData.version = DATA_VERSION;
-if (!studyData.readingSpeed)    studyData.readingSpeed = 25;  // pages per hour
-if (!studyData.qbankSpeed)      studyData.qbankSpeed   = 30;  // questions per hour
+if (!studyData.readingSpeed)    studyData.readingSpeed = 25;
+if (!studyData.qbankSpeed)      studyData.qbankSpeed   = 30;
+// Dismissed alerts cache: { alertKey: snoozedUntil|"permanent" }
+if (!studyData.dismissedAlerts) studyData.dismissedAlerts = {};
 
-// ─── Save ─────────────────────────────────────────────────────
+// ─── Save (with debounced cloud sync) ─────────────────────────
+// Task #2: saveToCloud is debounced — localStorage writes still happen
+// immediately (fast, local), but Supabase upsert fires max once per 2.5s.
+let _debouncedCloudSave = null;
+
 async function saveData() {
+  // Task #20: keep revisionDates arrays trimmed before saving
+  trimRevisionDates(10);
+
   studyData.updatedAt = new Date().toISOString();
   localStorage.setItem("studyData", JSON.stringify(studyData));
-  if (typeof saveToCloud === "function") await saveToCloud();
+
+  // Task #3: check localStorage size after save
+  if (typeof checkLocalStorageSize === "function" && checkLocalStorageSize()) {
+    // Auto-trim history > 180 days old when approaching limit
+    if (typeof trimOldDailyHistory === "function") trimOldDailyHistory(180);
+    localStorage.setItem("studyData", JSON.stringify(studyData));
+  }
+
+  // Lazy-create debounced cloud save (needs supabase.js to be loaded)
+  if (typeof saveToCloud === "function") {
+    if (!_debouncedCloudSave) {
+      _debouncedCloudSave = typeof debounce === "function"
+        ? debounce(saveToCloud, 2500)
+        : saveToCloud;
+    }
+    _debouncedCloudSave();
+  }
 }
 
-// ─── Conflict-safe merge ──────────────────────────────────────
+// ─── Conflict-safe SMART merge ────────────────────────────────
+// Task #1: Instead of last-write-wins, this unions dailyHistory,
+// accumulates qbankStats, and merges revisionDates properly.
 function mergeData(local, cloud) {
-  if (!local.updatedAt) return cloud;
-  if (!cloud.updatedAt) return local;
-  return new Date(local.updatedAt) >= new Date(cloud.updatedAt) ? local : cloud;
+  if (!local || !local.updatedAt) return cloud || {};
+  if (!cloud || !cloud.updatedAt) return local || {};
+
+  // Pick the "base" (newer overall) and "other" (older)
+  let base  = new Date(local.updatedAt) >= new Date(cloud.updatedAt) ? local : cloud;
+  let other = base === local ? cloud : local;
+
+  // Deep clone the base so we don't mutate it
+  let merged = JSON.parse(JSON.stringify(base));
+
+  // ── Union dailyHistory ──
+  // Each day entry from the "other" side is merged in if missing or richer.
+  let otherHistory = other.dailyHistory || {};
+  if (!merged.dailyHistory) merged.dailyHistory = {};
+  Object.keys(otherHistory).forEach(date => {
+    let oEntry = otherHistory[date];
+    let mEntry = merged.dailyHistory[date];
+    if (!mEntry) {
+      merged.dailyHistory[date] = oEntry;
+    } else {
+      // Merge flags (OR) and union arrays
+      merged.dailyHistory[date] = {
+        ...mEntry,
+        study:    mEntry.study    || oEntry.study,
+        qbank:    mEntry.qbank    || oEntry.qbank,
+        revision: mEntry.revision || oEntry.revision,
+        eveningSubmitted: mEntry.eveningSubmitted || oEntry.eveningSubmitted,
+        studyEntries:  _mergeArrayById(mEntry.studyEntries  || [], oEntry.studyEntries  || [], "unit"),
+        qbankEntries:  _mergeArrayById(mEntry.qbankEntries  || [], oEntry.qbankEntries  || [], "unit"),
+        revisedItems:  _mergeArrayById(mEntry.revisedItems  || [], oEntry.revisedItems  || [], "chapterIndex"),
+        timeTracking:  mEntry.timeTracking || oEntry.timeTracking,
+        submittedAt:   mEntry.submittedAt  || oEntry.submittedAt,
+      };
+    }
+  });
+
+  // ── Union subject/unit qbankStats ──
+  // Accumulate from other side if not already reflected in base.
+  let otherSubjects = other.subjects || {};
+  Object.keys(otherSubjects).forEach(sName => {
+    if (!merged.subjects[sName]) {
+      merged.subjects[sName] = otherSubjects[sName];
+      return;
+    }
+    let oSubj = otherSubjects[sName];
+    let mSubj = merged.subjects[sName];
+    (oSubj.units || []).forEach((oUnit, ui) => {
+      let mUnit = mSubj.units[ui];
+      if (!mUnit) return;
+      // Take max of cumulative qbank stats (prevents double-counting)
+      mUnit.qbankStats = {
+        total:   Math.max(mUnit.qbankStats?.total   || 0, oUnit.qbankStats?.total   || 0),
+        correct: Math.max(mUnit.qbankStats?.correct || 0, oUnit.qbankStats?.correct || 0),
+      };
+      mUnit.qbankDone = mUnit.qbankDone || oUnit.qbankDone;
+      // Merge chapter statuses: completed wins over not-started
+      (oUnit.chapters || []).forEach((oCh, ci) => {
+        let mCh = mUnit.chapters[ci];
+        if (!mCh) return;
+        if (oCh.status === "completed" && mCh.status !== "completed") {
+          mCh.status = oCh.status;
+          mCh.completedOn = oCh.completedOn;
+          mCh.revisionDates = oCh.revisionDates;
+          mCh.revisionIndex = oCh.revisionIndex;
+          mCh.nextRevision  = oCh.nextRevision;
+        } else if (mCh.status === "completed" && oCh.revisionIndex > mCh.revisionIndex) {
+          // Other side has more revisions done
+          mCh.revisionIndex  = oCh.revisionIndex;
+          mCh.nextRevision   = oCh.nextRevision;
+          mCh.lastReviewedOn = oCh.lastReviewedOn;
+        }
+      });
+    });
+  });
+
+  return merged;
+}
+
+// Helper: merge two arrays keeping unique entries by a key field
+function _mergeArrayById(arrA, arrB, keyField) {
+  let seen = new Set(arrA.map(e => JSON.stringify(e[keyField])));
+  let extra = arrB.filter(e => !seen.has(JSON.stringify(e[keyField])));
+  return [...arrA, ...extra];
 }
 
 // ─── Pointer ──────────────────────────────────────────────────
@@ -208,18 +308,25 @@ function fixPointer(subjectName) {
 }
 
 // ─── Subject setup ────────────────────────────────────────────
+// Task #18: addSubject() now uses the smart parseUnitLine() parser
+// so the "Unit [200] | Chapter(1-30), Chapter(31-60)" syntax works
+// when adding subjects post-setup, not just during initial setup.
 function addSubject() {
   let name = document.getElementById("subjectName")?.value.trim();
   let size = document.getElementById("subjectSize")?.value || "medium";
   let topicsRaw = document.getElementById("topicsInput")?.value.trim();
   if (!name || !topicsRaw) { alert("Enter subject and units."); return; }
 
-  let units = topicsRaw.split("\n").filter(t => t.trim()).map(t => makeUnitObj(t.trim()));
+  // FIX: use smart parser instead of plain makeUnitObj
+  let units = topicsRaw.split("\n").filter(t => t.trim()).map(t => parseUnitLine(t));
+  units = units.filter(Boolean);
+  if (!units.length) { alert("Could not parse any units. Check format."); return; }
+
   studyData.subjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   saveData();
   if (document.getElementById("subjectName")) document.getElementById("subjectName").value = "";
   if (document.getElementById("topicsInput")) document.getElementById("topicsInput").value = "";
-  alert("Subject added.");
+  alert(`Subject "${name}" added with ${units.length} unit(s).`);
 }
 
 function finishSetup() {
@@ -266,7 +373,6 @@ function getGlobalPhaseStats() {
     r2:         { count: r2,        pct: (r2/tc*100).toFixed(1) },
     r3:         { count: r3,        pct: (r3/tc*100).toFixed(1) },
     qbank:      { count: qbankUnits,pct: (qbankUnits/tu*100).toFixed(1) },
-    // legacy aliases so old code calling phases.phase1/phase2/phase3 still works
     phase1:     { count: completed, pct: (completed/tc*100).toFixed(1) },
     phase2:     { count: r1,        pct: (r1/tc*100).toFixed(1) },
     phase3:     { count: r2,        pct: (r2/tc*100).toFixed(1) },
@@ -275,7 +381,6 @@ function getGlobalPhaseStats() {
 
 // ─── Analytics Helpers ────────────────────────────────────────
 
-// FIX: Returns 0 when nothing studied — no phantom 10%
 function calculateRetention() {
   let totalChapters = 0, revisedOnce = 0;
   let totalQ = 0, totalCorrect = 0;
@@ -296,7 +401,6 @@ function calculateRetention() {
   let revisionCompliance = (revisedOnce / totalChapters) * 100;
   let avgAccuracy = totalQ > 0 ? (totalCorrect / totalQ) * 100 : 0;
 
-  // FIX: No phantom base bonus — pure weighted score
   return (revisionCompliance * 0.6 + avgAccuracy * 0.4).toFixed(1);
 }
 
@@ -315,8 +419,6 @@ function calculateConsistencyForDays(days) {
 function calculateWeeklyConsistency()  { return calculateConsistencyForDays(7);  }
 function calculateMonthlyConsistency() { return calculateConsistencyForDays(30); }
 
-// Weighted 7-day rolling average (recent days count more)
-// Weight: day-1=7, day-2=6, ..., day-7=1 → total weight = 28
 function calculateAverageDailyCompletion() {
   let weighted = 0, totalWeight = 0;
   for (let i = 1; i <= 7; i++) {
@@ -324,12 +426,10 @@ function calculateAverageDailyCompletion() {
     let hist = studyData.dailyHistory?.[d];
     let topics = 0;
     if (hist) {
-      // Count topics studied this day from studyEntries
       (hist.studyEntries || []).forEach(e => { topics += (e.topics || []).length || 1; });
-      // Fallback: if old-style study=true but no entries, count as 1
       if (!hist.studyEntries && hist.study) topics = 1;
     }
-    let w = 8 - i; // weight: 7 for yesterday, 1 for 7 days ago
+    let w = 8 - i;
     weighted    += topics * w;
     totalWeight += w;
   }

@@ -72,15 +72,14 @@ function showSubjectsView() {
   if (!grid) return;
 
   // Progress: count notes vs total chapters
+  // FIX #16: was comparing n.subject === s (object ref) — must use subjectName (string key)
   let totalChapters = 0, notedChapters = 0;
-  Object.values(subjects).forEach(s => s.units.forEach(u => {
+  Object.entries(subjects).forEach(([subjectName, s]) => s.units.forEach(u => {
     totalChapters += u.chapters.length;
     notedChapters += u.chapters.filter(ch =>
-      _notesMeta.some(n => n.subject === s && n.unit === u.name && n.chapter === ch.name)
+      _notesMeta.some(n => n.subject === subjectName && n.unit === u.name && n.chapter === ch.name)
     ).length;
   }));
-  // Fix: count by meta
-  notedChapters = _notesMeta.length;
   let pct = totalChapters > 0 ? Math.round(notedChapters / totalChapters * 100) : 0;
   let fillEl = document.getElementById("notes-progress-fill");
   let pctEl  = document.getElementById("notes-progress-pct");
