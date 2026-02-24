@@ -170,11 +170,7 @@ if (!studyData.qbankSpeed)      studyData.qbankSpeed   = 30;
 // Dismissed alerts cache: { alertKey: snoozedUntil|"permanent" }
 if (!studyData.dismissedAlerts) studyData.dismissedAlerts = {};
 
-// ─── Save (with debounced cloud sync) ─────────────────────────
-// Task #2: saveToCloud is debounced — localStorage writes still happen
-// immediately (fast, local), but Supabase upsert fires max once per 2.5s.
-let _debouncedCloudSave = null;
-
+// ─── Save (immediate cloud sync) ──────────────────────────────
 async function saveData() {
   // Task #20: keep revisionDates arrays trimmed before saving
   trimRevisionDates(10);
@@ -189,14 +185,9 @@ async function saveData() {
     localStorage.setItem("studyData", JSON.stringify(studyData));
   }
 
-  // Lazy-create debounced cloud save (needs supabase.js to be loaded)
+  // IMMEDIATE cloud save (no debouncing)
   if (typeof saveToCloud === "function") {
-    if (!_debouncedCloudSave) {
-      _debouncedCloudSave = typeof debounce === "function"
-        ? debounce(saveToCloud, 2500)
-        : saveToCloud;
-    }
-    _debouncedCloudSave();
+    await saveToCloud();
   }
 }
 
