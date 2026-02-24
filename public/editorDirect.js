@@ -521,21 +521,20 @@ async function bulkImportSubjectsDirect(bulkSubjects) {
     const unitsToInsert = [];
     const chaptersToInsert = [];
     
+    // Get all existing subjects first
+    const { data: existingSubjects } = await supabaseClient
+      .from("subjects")
+      .select("id, name")
+      .eq("user_id", uid);
+    
+    const existingSubjectMap = {};
+    (existingSubjects || []).forEach(s => {
+      existingSubjectMap[s.name] = s.id;
+    });
+    
+    // Determine which subjects need to be inserted
     for (const [subjectName, subjectData] of Object.entries(bulkSubjects)) {
-      // Check if subject already exists
-      const { data: existingSubject } = await supabaseClient
-        .from("subjects")
-        .select("id")
-        .eq("user_id", uid)
-        .eq("name", subjectName)
-        .single();
-      
-      let subjectId;
-      
-      if (existingSubject) {
-        // Subject exists, use existing ID
-        subjectId = existingSubject.id;
-      } else {
+      if (!existingSubjectMap[subjectName]) {
         // New subject, prepare for batch insert
         subjectsToInsert.push({
           user_id: uid,
@@ -547,7 +546,6 @@ async function bulkImportSubjectsDirect(bulkSubjects) {
     }
     
     // Insert all new subjects at once
-    let insertedSubjects = [];
     if (subjectsToInsert.length > 0) {
       const { data, error } = await supabaseClient
         .from("subjects")
@@ -555,24 +553,16 @@ async function bulkImportSubjectsDirect(bulkSubjects) {
         .select("id, name");
       
       if (error) throw error;
-      insertedSubjects = data;
+      
+      // Add newly inserted subjects to the map
+      (data || []).forEach(s => {
+        existingSubjectMap[s.name] = s.id;
+      });
     }
-    
-    // Get all subject IDs (existing + newly inserted)
-    const { data: allSubjects } = await supabaseClient
-      .from("subjects")
-      .select("id, name")
-      .eq("user_id", uid)
-      .in("name", Object.keys(bulkSubjects));
-    
-    const subjectIdMap = {};
-    allSubjects.forEach(s => {
-      subjectIdMap[s.name] = s.id;
-    });
     
     // Prepare units for batch insert
     for (const [subjectName, subjectData] of Object.entries(bulkSubjects)) {
-      const subjectId = subjectIdMap[subjectName];
+      const subjectId = existingSubjectMap[subjectName];
       
       // Get current max sort_order for this subject
       const { data: existingUnits } = await supabaseClient
@@ -611,7 +601,7 @@ async function bulkImportSubjectsDirect(bulkSubjects) {
     
     // Create unit ID map
     const unitIdMap = {};
-    insertedUnits.forEach(u => {
+    (insertedUnits || []).forEach(u => {
       const key = `${u.subject_name}||${u.name}`;
       unitIdMap[key] = u.id;
     });
