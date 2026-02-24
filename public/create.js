@@ -14,16 +14,7 @@ let _aiCards   = [];
 
 // ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
-  // Ensure studyData is loaded
-  await new Promise(resolve => {
-    if (Object.keys(studyData.subjects || {}).length > 0) {
-      resolve();
-    } else {
-      // Wait a bit for data.js to finish loading
-      setTimeout(resolve, 100);
-    }
-  });
-
+  // Populate subjects dropdown
   _fillSubjects();
 
   // Check for ?edit=ID deep link (edit a specific card)
@@ -41,25 +32,29 @@ document.addEventListener('DOMContentLoaded', async function () {
   let subj = params.get('subject');
   let unit = params.get('unit');
   let chap = params.get('chapter');
+  
   if (subj) {
+    // Use async approach for proper cascade
     let sel = document.getElementById('sel-subject');
-    if (sel) { 
-      sel.value = subj; 
-      fillUnits(); // This will trigger immediately
+    if (sel && sel.querySelector(`option[value="${subj}"]`)) {
+      sel.value = subj;
+      fillUnits(); // This populates the units dropdown
       
-      // Wait for units to populate, then set unit
       if (unit) {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Wait for DOM update
+        await new Promise(resolve => setTimeout(resolve, 100));
         let uSel = document.getElementById('sel-unit');
-        if (uSel) { 
-          uSel.value = unit; 
-          fillChapters(); // This will trigger immediately
+        if (uSel && uSel.querySelector(`option[value="${unit}"]`)) {
+          uSel.value = unit;
+          fillChapters(); // This populates the chapters dropdown
           
-          // Wait for chapters to populate, then set chapter
           if (chap) {
-            await new Promise(resolve => setTimeout(resolve, 50));
+            // Wait for DOM update
+            await new Promise(resolve => setTimeout(resolve, 100));
             let cSel = document.getElementById('sel-chapter');
-            if (cSel) cSel.value = chap;
+            if (cSel && cSel.querySelector(`option[value="${chap}"]`)) {
+              cSel.value = chap;
+            }
           }
         }
       }
