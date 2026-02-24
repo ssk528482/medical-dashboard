@@ -201,7 +201,7 @@ function _getBadgeHtml(subject, unit, chapter) {
 
   // Card badge — links to flashcards.html create tab
   if (cards) {
-    let cardHref = "flashcards.html?tab=" + (cards.due > 0 ? "review" : "browse")
+    let cardHref = "create.html?tab=" + (cards.due > 0 ? "review" : "browse")
                  + "&subject=" + encodeURIComponent(subject)
                  + "&unit="    + encodeURIComponent(unit)
                  + "&chapter=" + encodeURIComponent(chapter);
