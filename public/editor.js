@@ -201,7 +201,7 @@ function _getBadgeHtml(subject, unit, chapter) {
 
   // Card badge — links to flashcards.html create tab
   if (cards) {
-    let cardHref = "create.html?tab=" + (cards.due > 0 ? "review" : "browse")
+    let cardHref = "review.html?tab=" + (cards.due > 0 ? "review" : "browse")
                  + "&subject=" + encodeURIComponent(subject)
                  + "&unit="    + encodeURIComponent(unit)
                  + "&chapter=" + encodeURIComponent(chapter);
@@ -215,7 +215,7 @@ function _getBadgeHtml(subject, unit, chapter) {
           + (cards.due > 0 ? cards.due + "🃏" : cards.total + "🃏") + '</a>';
   } else {
     // No cards yet — quick-add link
-    let createHref = "flashcards.html?tab=create"
+    let createHref = "create.html?tab=create"
                    + "&subject=" + encodeURIComponent(subject)
                    + "&unit="    + encodeURIComponent(unit)
                    + "&chapter=" + encodeURIComponent(chapter);
