@@ -1123,10 +1123,10 @@ async function _goToBrowseChapter(subject, unit, chapter) {
       return;
     }
 
-    // Store card IDs in sessionStorage and navigate
+    // Store card IDs in sessionStorage and navigate to browse page
     let cardIds = filtered.map(c => c.id);
-    sessionStorage.setItem('reviewCardIds', JSON.stringify(cardIds));
-    window.location.href = 'review.html?mode=filtered';
+    sessionStorage.setItem('browseCardIds', JSON.stringify(cardIds));
+    window.location.href = 'browse.html?mode=filtered';
   } catch (err) {
     console.error('Error navigating to browse:', err);
     alert('Error loading cards. Please try again.');
