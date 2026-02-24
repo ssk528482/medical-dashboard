@@ -14,6 +14,16 @@ let _aiCards   = [];
 
 // ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
+  // Ensure studyData is loaded
+  await new Promise(resolve => {
+    if (Object.keys(studyData.subjects || {}).length > 0) {
+      resolve();
+    } else {
+      // Wait a bit for data.js to finish loading
+      setTimeout(resolve, 100);
+    }
+  });
+
   _fillSubjects();
 
   // Check for ?edit=ID deep link (edit a specific card)
@@ -27,21 +37,33 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.querySelector('.create-title').textContent = '✏️ Edit Card';
   }
 
-  // Pre-fill subject/unit/chapter from query params (from notes → cards bridge)
+  // Pre-fill subject/unit/chapter from query params (from editor → cards bridge)
   let subj = params.get('subject');
   let unit = params.get('unit');
   let chap = params.get('chapter');
   if (subj) {
     let sel = document.getElementById('sel-subject');
-    if (sel) { sel.value = subj; fillUnits(); }
-    setTimeout(() => {
-      let uSel = document.getElementById('sel-unit');
-      if (uSel && unit) { uSel.value = unit; fillChapters(); }
-      setTimeout(() => {
-        let cSel = document.getElementById('sel-chapter');
-        if (cSel && chap) cSel.value = chap;
-      }, 60);
-    }, 60);
+    if (sel) { 
+      sel.value = subj; 
+      fillUnits(); // This will trigger immediately
+      
+      // Wait for units to populate, then set unit
+      if (unit) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        let uSel = document.getElementById('sel-unit');
+        if (uSel) { 
+          uSel.value = unit; 
+          fillChapters(); // This will trigger immediately
+          
+          // Wait for chapters to populate, then set chapter
+          if (chap) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            let cSel = document.getElementById('sel-chapter');
+            if (cSel) cSel.value = chap;
+          }
+        }
+      }
+    }
   }
 
   // If arriving for AI with n2c bridge (from notes page)
