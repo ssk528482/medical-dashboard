@@ -575,6 +575,9 @@ async function loadEditorDataDirect() {
 
     console.log("[Direct Load] Loaded editor data from Supabase");
     
+    // Save to localStorage so other pages (like create.html) can access it
+    localStorage.setItem("studyData", JSON.stringify(studyData));
+    
   } catch (err) {
     console.error("Error loading editor data:", err);
     alert("Failed to load data: " + err.message);
