@@ -22,7 +22,7 @@ function _setOnlineStatus(online) {
       position:fixed;bottom:0;left:0;right:0;z-index:9999;
       background:#1a0a00;border-top:2px solid #f59e0b;
       color:#fcd34d;font-size:12px;font-weight:600;
-      text-align:center;padding:8px 16px;
+      text-align:center;padding:0px 0px;
       display:none;transition:opacity 0.3s;
     `;
     document.body.appendChild(banner);
