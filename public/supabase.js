@@ -96,112 +96,140 @@ async function saveToCloud() {
 
 // ── user_meta ─────────────────────────────────────────────────
 async function _saveUserMeta(uid) {
-  // Build subject_pointers: { subjectName: { unit, chapter } }
   const pointers = {};
   Object.entries(studyData.subjects || {}).forEach(([name, s]) => {
     pointers[name] = s.pointer || { unit: 0, chapter: 0 };
   });
 
-  const { error } = await supabaseClient
-    .from("user_meta")
-    .upsert({
-      user_id:           uid,
-      exam_date:         studyData.examDate     || "2026-12-01",
-      start_date:        studyData.startDate    || today(),
-      reading_speed:     studyData.readingSpeed || 25,
-      qbank_speed:       studyData.qbankSpeed   || 30,
-      user_name:         studyData.userName     || null,
-      setup_complete:    studyData.setupComplete || false,
-      subject_pointers:  pointers,
-      ui_state:          studyData.uiState       || {},
-      daily_plan:        studyData.dailyPlan     || null,
-      dismissed_alerts:  studyData.dismissedAlerts || {},
-      updated_at:        new Date().toISOString(),
-    }, { onConflict: "user_id" });
+  const payload = {
+    exam_date:        studyData.examDate        || "2026-12-01",
+    start_date:       studyData.startDate       || today(),
+    reading_speed:    studyData.readingSpeed    || 25,
+    qbank_speed:      studyData.qbankSpeed      || 30,
+    user_name:        studyData.userName        || null,
+    setup_complete:   studyData.setupComplete   || false,
+    subject_pointers: pointers,
+    ui_state:         studyData.uiState         || {},
+    daily_plan:       studyData.dailyPlan       || null,
+    dismissed_alerts: studyData.dismissedAlerts || {},
+    updated_at:       new Date().toISOString(),
+  };
+
+  const { data: existing } = await supabaseClient
+    .from("user_meta").select("user_id").eq("user_id", uid).maybeSingle();
+
+  let error;
+  if (existing) {
+    ({ error } = await supabaseClient.from("user_meta").update(payload).eq("user_id", uid));
+  } else {
+    ({ error } = await supabaseClient.from("user_meta").insert({ user_id: uid, ...payload }));
+  }
 
   if (error) throw error;
 }
 
 // ── subjects + units + chapters ────────────────────────────────
+// Uses select-then-insert/update to avoid requiring unique constraints.
 async function _saveSubjectsUnitsChapters(uid) {
   const subjects = studyData.subjects || {};
 
   for (const [subjectName, subject] of Object.entries(subjects)) {
 
-    // 1. Upsert subject row
-    let { data: subjRow, error: subjErr } = await supabaseClient
-      .from("subjects")
-      .upsert({
-        user_id:      uid,
-        name:         subjectName,
-        size:         subject.size || "medium",
-        subject_name: subjectName,
-        updated_at:   new Date().toISOString(),
-      }, { onConflict: "user_id,name" })
-      .select("id")
-      .single();
+    // 1. Find or create subject row
+    const subjectId = await _upsertRow(
+      "subjects",
+      { user_id: uid, name: subjectName },          // match keys
+      { size: subject.size || "medium" }             // update fields
+    );
+    if (!subjectId) { console.error("Could not save subject:", subjectName); continue; }
 
-    if (subjErr) { console.error("Subject save error:", subjErr); continue; }
-    const subjectId = subjRow.id;
-
-    // 2. Upsert each unit
+    // 2. Find or create each unit
     const units = subject.units || [];
     for (let ui = 0; ui < units.length; ui++) {
       const unit = units[ui];
 
-      let { data: unitRow, error: unitErr } = await supabaseClient
-        .from("units")
-        .upsert({
+      const unitId = await _upsertRow(
+        "units",
+        { subject_id: subjectId, name: unit.name },
+        {
           user_id:        uid,
-          subject_id:     subjectId,
           subject_name:   subjectName,
-          name:           unit.name,
           sort_order:     ui,
-          question_count: unit.questionCount  || 0,
+          question_count: unit.questionCount       || 0,
           qbank_total:    unit.qbankStats?.total   || 0,
           qbank_correct:  unit.qbankStats?.correct || 0,
-          qbank_done:     unit.qbankDone      || false,
-          collapsed:      unit.collapsed      || false,
-          updated_at:     new Date().toISOString(),
-        }, { onConflict: "subject_id,name" })
-        .select("id")
-        .single();
+          qbank_done:     unit.qbankDone           || false,
+          collapsed:      unit.collapsed           || false,
+        }
+      );
+      if (!unitId) { console.error("Could not save unit:", unit.name); continue; }
 
-      if (unitErr) { console.error("Unit save error:", unitErr); continue; }
-      const unitId = unitRow.id;
-
-      // 3. Upsert each chapter
+      // 3. Find or create each chapter
       const chapters = unit.chapters || [];
       for (let ci = 0; ci < chapters.length; ci++) {
         const ch = chapters[ci];
-
-        const { error: chErr } = await supabaseClient
-          .from("chapters")
-          .upsert({
-            user_id:         uid,
-            unit_id:         unitId,
-            subject_name:    subjectName,
-            unit_name:       unit.name,
-            name:            ch.name,
-            sort_order:      ci,
-            status:          ch.status          || "not-started",
-            difficulty:      ch.difficulty      || "medium",
+        await _upsertRow(
+          "chapters",
+          { unit_id: unitId, name: ch.name },
+          {
+            user_id:          uid,
+            subject_name:     subjectName,
+            unit_name:        unit.name,
+            sort_order:       ci,
+            status:           ch.status            || "not-started",
+            difficulty:       ch.difficulty        || "medium",
             difficulty_factor: ch.difficultyFactor ?? 2.5,
-            missed_revisions:  ch.missedRevisions  || 0,
-            start_page:      ch.startPage       || 0,
-            end_page:        ch.endPage         || 0,
-            page_count:      ch.pageCount       || 0,
-            completed_on:    ch.completedOn     || null,
-            last_reviewed_on: ch.lastReviewedOn || null,
-            next_revision:   ch.nextRevision    || null,
-            revision_index:  ch.revisionIndex   || 0,
-            revision_dates:  ch.revisionDates   || [],
-            updated_at:      new Date().toISOString(),
-          }, { onConflict: "unit_id,name" });
-
-        if (chErr) console.error("Chapter save error:", chErr);
+            missed_revisions: ch.missedRevisions   || 0,
+            start_page:       ch.startPage         || 0,
+            end_page:         ch.endPage           || 0,
+            page_count:       ch.pageCount         || 0,
+            completed_on:     ch.completedOn       || null,
+            last_reviewed_on: ch.lastReviewedOn    || null,
+            next_revision:    ch.nextRevision      || null,
+            revision_index:   ch.revisionIndex     || 0,
+            revision_dates:   ch.revisionDates     || [],
+          }
+        );
       }
     }
+  }
+}
+
+// ── Generic select-then-insert/update helper ──────────────────
+// matchKeys: { col: val } used to find existing row
+// updateFields: fields to set on update or merge on insert
+// Returns the row id, or null on failure.
+async function _upsertRow(table, matchKeys, updateFields) {
+  try {
+    // Try to find existing row
+    let query = supabaseClient.from(table).select("id");
+    for (const [col, val] of Object.entries(matchKeys)) {
+      query = query.eq(col, val);
+    }
+    const { data: existing, error: selErr } = await query.maybeSingle();
+    if (selErr) throw selErr;
+
+    if (existing) {
+      // Update
+      const { error: updErr } = await supabaseClient
+        .from(table)
+        .update({ ...updateFields, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (updErr) throw updErr;
+      return existing.id;
+    } else {
+      // Insert
+      const { data: inserted, error: insErr } = await supabaseClient
+        .from(table)
+        .insert({ ...matchKeys, ...updateFields, updated_at: new Date().toISOString() })
+        .select("id")
+        .single();
+      if (insErr) throw insErr;
+      return inserted.id;
+    }
+  } catch (err) {
+    console.error(`_upsertRow(${table}) error:`, err);
+    return null;
   }
 }
 
