@@ -1,4 +1,3 @@
-
 // ─── Flashcard + Note Badge Cache ─────────────────────────────────────────
 // Loaded async on DOMContentLoaded; renderEditor() reads from these maps.
 let _cardCountMap  = {};  // "Subject||Unit||Chapter" → { total, due }
@@ -339,12 +338,14 @@ function editUnitQuestionCount(subjectName, ui) {
   }, 50);
 }
 
-function _saveQcount(subjectName, ui) {
+async function _saveQcount(subjectName, ui) {
   let val = parseInt(document.getElementById("qcountInput")?.value) || 0;
-  studyData.subjects[subjectName].units[ui].questionCount = val;
   document.getElementById("qcountOverlay")?.remove();
-  saveData();
-  renderQbank();
+  
+  const success = await updateUnitQuestionCountDirect(subjectName, ui, val);
+  if (success) {
+    renderQbank();
+  }
 }
 
 // ─── Unit-level Bulk Actions ──────────────────────────────────
@@ -789,20 +790,13 @@ function markUnitQbankComplete(subjectName, ui) {
   }, 50);
 }
 
-function _confirmUnitComplete(subjectName, ui, totalQs) {
+async function _confirmUnitComplete(subjectName, ui, totalQs) {
   let correct = parseInt(document.getElementById("qCompleteCorrect")?.value) || 0;
   let unit = studyData.subjects[subjectName].units[ui];
 
   // Use questionCount as total if set, else use what was entered
   let total = totalQs > 0 ? totalQs : correct;
   if (correct > total) { alert("Correct cannot exceed total."); return; }
-
-  // Set stats — replace (not add) since this is a direct complete
-  unit.qbankStats.total   = total;
-  unit.qbankStats.correct = correct;
-  unit.questionCount      = unit.questionCount > 0 ? unit.questionCount : total;
-  unit.qbankDone          = true;
-  unit.qbankLocked        = true; // auto-lock on complete
 
   // Adjust difficulty
   let q = Math.round((correct / total) * 5);
@@ -812,8 +806,21 @@ function _confirmUnitComplete(subjectName, ui, totalQs) {
     ch.difficultyFactor = clamp(ef, 1.3, 3.0);
   });
 
-  document.getElementById("qcountOverlay")?.remove();
-  saveData(); renderQbank();
+  const newQuestionCount = unit.questionCount > 0 ? unit.questionCount : total;
+
+  // Save to Supabase directly
+  const success = await updateUnitQbankStatsDirect(
+    subjectName,
+    ui,
+    { total: total, correct: correct },
+    true, // qbankDone
+    newQuestionCount
+  );
+  
+  if (success) {
+    document.getElementById("qcountOverlay")?.remove();
+    renderQbank();
+  }
 }
 
 // ── Lock / Unlock ──────────────────────────────────────────────
@@ -846,7 +853,7 @@ function setQbankRevision(subjectName, ui, level) {
   saveData(); renderQbank();
 }
 
-function logUnitQbank(subjectName, ui) {
+async function logUnitQbank(subjectName, ui) {
   let total   = parseInt(document.getElementById(`qb-total-${subjectName}-${ui}`)?.value) || 0;
   let correct = parseInt(document.getElementById(`qb-correct-${subjectName}-${ui}`)?.value) || 0;
   if (total <= 0) { alert("Enter attempted questions."); return; }
@@ -856,16 +863,17 @@ function logUnitQbank(subjectName, ui) {
 
   // Auto-expand questionCount if logging exceeds it
   let newTotal = unit.qbankStats.total + total;
+  let newCorrect = unit.qbankStats.correct + correct;
+  let newQuestionCount = unit.questionCount;
+  
   if (unit.questionCount > 0 && newTotal > unit.questionCount) {
-    unit.questionCount = newTotal;
+    newQuestionCount = newTotal;
   }
 
-  unit.qbankStats.total   += total;
-  unit.qbankStats.correct += correct;
-
-  // Auto-complete if fully attempted
-  if (unit.questionCount > 0 && unit.qbankStats.total >= unit.questionCount) {
-    unit.qbankDone = true;
+  // Check if auto-complete
+  let isDone = unit.qbankDone;
+  if (newQuestionCount > 0 && newTotal >= newQuestionCount) {
+    isDone = true;
   }
 
   // Adjust difficulty
@@ -876,16 +884,40 @@ function logUnitQbank(subjectName, ui) {
     ch.difficultyFactor = clamp(ef, 1.3, 3.0);
   });
 
-  saveData(); renderQbank();
+  // Save to Supabase directly
+  const success = await updateUnitQbankStatsDirect(
+    subjectName, 
+    ui, 
+    { total: newTotal, correct: newCorrect },
+    isDone,
+    newQuestionCount !== unit.questionCount ? newQuestionCount : null
+  );
+  
+  if (success) {
+    // Clear inputs
+    let totalInput = document.getElementById(`qb-total-${subjectName}-${ui}`);
+    let correctInput = document.getElementById(`qb-correct-${subjectName}-${ui}`);
+    if (totalInput) totalInput.value = "";
+    if (correctInput) correctInput.value = "";
+    
+    renderQbank();
+  }
 }
 
-function clearUnitQbank(subjectName, ui) {
+async function clearUnitQbank(subjectName, ui) {
   if (!confirm("Clear all qbank data for this unit? This resets attempts, accuracy, lock and completion.")) return;
-  let unit = studyData.subjects[subjectName].units[ui];
-  unit.qbankStats   = { total: 0, correct: 0 };
-  unit.qbankDone    = false;
-  unit.qbankLocked  = false;
-  saveData(); renderQbank();
+  
+  const success = await updateUnitQbankStatsDirect(
+    subjectName,
+    ui,
+    { total: 0, correct: 0 },
+    false, // qbankDone
+    null // keep questionCount as is
+  );
+  
+  if (success) {
+    renderQbank();
+  }
 }
 
 // ─── Tab Switching ────────────────────────────────────────────
