@@ -770,7 +770,7 @@ async function renderFlashcardAnalytics() {
     <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Cards by Subject</div>
     ${subjRows}
 
-    <a href="flashcards.html" style="display:block;text-align:center;margin-top:12px;padding:10px;background:#1e293b;border-radius:10px;color:#a78bfa;font-size:13px;font-weight:600;text-decoration:none;">
+    <a href="browse.html" style="display:block;text-align:center;margin-top:12px;padding:10px;background:#1e293b;border-radius:10px;color:#a78bfa;font-size:13px;font-weight:600;text-decoration:none;">
       Go to Flashcards →
     </a>
   `;
