@@ -109,9 +109,8 @@ async function _saveUserMeta(uid) {
     user_name:        studyData.userName        || null,
     setup_complete:   studyData.setupComplete   || false,
     subject_pointers: pointers,
-    ui_state:         studyData.uiState         || {},
+    ui_state:         { ...(studyData.uiState || {}), dismissedAlerts: studyData.dismissedAlerts || {} },
     daily_plan:       studyData.dailyPlan       || null,
-    dismissed_alerts: studyData.dismissedAlerts || {},
     updated_at:       new Date().toISOString(),
   };
 
@@ -135,61 +134,77 @@ async function _saveSubjectsUnitsChapters(uid) {
 
   for (const [subjectName, subject] of Object.entries(subjects)) {
 
-    // 1. Find or create subject row
-    const subjectId = await _upsertRow(
-      "subjects",
-      { user_id: uid, name: subjectName },          // match keys
-      { size: subject.size || "medium" }             // update fields
-    );
-    if (!subjectId) { console.error("Could not save subject:", subjectName); continue; }
+    // 1. Upsert subject row
+    const { data: subjRow, error: subjErr } = await supabaseClient
+      .from("subjects")
+      .upsert(
+        { user_id: uid, name: subjectName, size: subject.size || "medium", updated_at: new Date().toISOString() },
+        { onConflict: "user_id,name" }
+      )
+      .select("id")
+      .single();
+    if (subjErr) { console.error("Subject save error:", subjErr); continue; }
+    const subjectId = subjRow.id;
 
     // 2. Find or create each unit
     const units = subject.units || [];
     for (let ui = 0; ui < units.length; ui++) {
       const unit = units[ui];
 
-      const unitId = await _upsertRow(
-        "units",
-        { subject_id: subjectId, name: unit.name },
-        {
-          user_id:        uid,
-          subject_name:   subjectName,
-          sort_order:     ui,
-          question_count: unit.questionCount       || 0,
-          qbank_total:    unit.qbankStats?.total   || 0,
-          qbank_correct:  unit.qbankStats?.correct || 0,
-          qbank_done:     unit.qbankDone           || false,
-          collapsed:      unit.collapsed           || false,
-        }
-      );
-      if (!unitId) { console.error("Could not save unit:", unit.name); continue; }
+      const { data: unitRow, error: unitErr } = await supabaseClient
+        .from("units")
+        .upsert(
+          {
+            user_id:        uid,
+            subject_id:     subjectId,
+            subject_name:   subjectName,
+            name:           unit.name,
+            sort_order:     ui,
+            question_count: unit.questionCount       || 0,
+            qbank_total:    unit.qbankStats?.total   || 0,
+            qbank_correct:  unit.qbankStats?.correct || 0,
+            qbank_done:     unit.qbankDone           || false,
+            collapsed:      unit.collapsed           || false,
+            updated_at:     new Date().toISOString(),
+          },
+          { onConflict: "subject_id,name" }
+        )
+        .select("id")
+        .single();
+      if (unitErr) { console.error("Unit save error:", unitErr); continue; }
+      const unitId = unitRow.id;
 
       // 3. Find or create each chapter
       const chapters = unit.chapters || [];
       for (let ci = 0; ci < chapters.length; ci++) {
         const ch = chapters[ci];
-        await _upsertRow(
-          "chapters",
-          { unit_id: unitId, name: ch.name },
-          {
-            user_id:          uid,
-            subject_name:     subjectName,
-            unit_name:        unit.name,
-            sort_order:       ci,
-            status:           ch.status            || "not-started",
-            difficulty:       ch.difficulty        || "medium",
-            difficulty_factor: ch.difficultyFactor ?? 2.5,
-            missed_revisions: ch.missedRevisions   || 0,
-            start_page:       ch.startPage         || 0,
-            end_page:         ch.endPage           || 0,
-            page_count:       ch.pageCount         || 0,
-            completed_on:     ch.completedOn       || null,
-            last_reviewed_on: ch.lastReviewedOn    || null,
-            next_revision:    ch.nextRevision      || null,
-            revision_index:   ch.revisionIndex     || 0,
-            revision_dates:   ch.revisionDates     || [],
-          }
-        );
+        const { error: chErr } = await supabaseClient
+          .from("chapters")
+          .upsert(
+            {
+              user_id:          uid,
+              unit_id:          unitId,
+              subject_name:     subjectName,
+              unit_name:        unit.name,
+              name:             ch.name,
+              sort_order:       ci,
+              status:           ch.status            || "not-started",
+              difficulty:       ch.difficulty        || "medium",
+              difficulty_factor: ch.difficultyFactor ?? 2.5,
+              missed_revisions: ch.missedRevisions   || 0,
+              start_page:       ch.startPage         || 0,
+              end_page:         ch.endPage           || 0,
+              page_count:       ch.pageCount         || 0,
+              completed_on:     ch.completedOn       || null,
+              last_reviewed_on: ch.lastReviewedOn    || null,
+              next_revision:    ch.nextRevision      || null,
+              revision_index:   ch.revisionIndex     || 0,
+              revision_dates:   ch.revisionDates     || [],
+              updated_at:       new Date().toISOString(),
+            },
+            { onConflict: "unit_id,name" }
+          );
+        if (chErr) console.error("Chapter save error:", chErr);
       }
     }
   }
@@ -338,9 +353,11 @@ function _reconstructStudyData(meta, subjectRows, unitRows, chapterRows, history
     data.qbankSpeed       = meta.qbank_speed       || 30;
     data.userName         = meta.user_name         || null;
     data.setupComplete    = meta.setup_complete    || false;
-    data.uiState          = meta.ui_state          || {};
+    const uiState         = meta.ui_state          || {};
+    data.dismissedAlerts  = uiState.dismissedAlerts || {};
+    data.uiState          = { ...uiState };
+    delete data.uiState.dismissedAlerts;
     data.dailyPlan        = meta.daily_plan        || null;
-    data.dismissedAlerts  = meta.dismissed_alerts  || {};
     data.updatedAt        = meta.updated_at        || null;
     const pointers        = meta.subject_pointers  || {};
 
