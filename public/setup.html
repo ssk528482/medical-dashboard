@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 20px; max-width: 500px; margin: 0 auto 16px; }
+    .section-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin-bottom: 14px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; font-size: 14px; color: #e2e8f0; margin-bottom: 12px; outline: none; transition: border-color .2s; }
+    input:focus, select:focus, textarea:focus { border-color: #3b82f6; }
+    button { background: #3b82f6; color: white; border: none; padding: 12px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    button:hover { opacity: .88; }
+    button.secondary { background: #334155; }
+    button.success   { background: #16a34a; }
+    button.full      { width: 100%; }
+    .steps { display: flex; align-items: center; justify-content: center; gap: 0; margin: 20px auto 28px; max-width: 320px; }
+    .step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: #1e293b; border: 2px solid #334155; color: #64748b; transition: all .3s; position: relative; z-index: 1; }
+    .step-dot.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+    .step-dot.done   { background: #16a34a; border-color: #16a34a; color: white; }
+    .step-line { flex: 1; height: 2px; background: #334155; transition: background .3s; }
+    .step-line.done { background: #16a34a; }
+    .step-panel { display: none; max-width: 500px; margin: 0 auto; }
+    .step-panel.active { display: block; }
+    .preview-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #1e293b; font-size: 13px; }
+    .preview-item:last-child { border-bottom: none; }
+    .badge { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; color: white; }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .summary-box { background: #0f172a; border-radius: 10px; padding: 12px; text-align: center; }
+    .summary-big { font-size: 28px; font-weight: 800; color: #3b82f6; }
+    .tip { background: #0f2d4a; border: 1px solid #1d4ed8; border-radius: 10px; padding: 12px; font-size: 12px; color: #93c5fd; margin-top: 12px; line-height: 1.5; }
+    .nav-row { display: flex; gap: 10px; max-width: 500px; margin: 0 auto; }
+    h1 { text-align: center; padding: 24px 0 4px; font-size: 22px; font-weight: 800; color: #f1f5f9; }
+    h1 + p { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+
+<h1>🩺 Setup Your Study Plan</h1>
+<p>This takes about 2 minutes</p>
+
+<div class="steps">
+  <div class="step-dot active" id="dot1">1</div>
+  <div class="step-line" id="line1"></div>
+  <div class="step-dot" id="dot2">2</div>
+  <div class="step-line" id="line2"></div>
+  <div class="step-dot" id="dot3">3</div>
+</div>
+
+<!-- Step 1: Profile -->
+<div class="step-panel active" id="step1">
+  <div class="card">
+    <div class="section-title">👤 Your Profile</div>
+    <label>Your Name</label>
+    <input type="text" id="userName" placeholder="Dr. ..." autocomplete="name">
+    <label>Exam / Target Date</label>
+    <input type="date" id="examDate" value="2026-12-01">
+    <label>Default Daily Study Hours</label>
+    <input type="number" id="defaultHours" placeholder="e.g. 8" min="1" max="18">
+    <div class="tip">💡 You can change these anytime from your Profile page.</div>
+  </div>
+  <div class="nav-row">
+    <button class="full" onclick="goStep2()">Next: Add Subjects →</button>
+  </div>
+</div>
+
+<!-- Step 2: Add Subjects -->
+<div class="step-panel" id="step2">
+  <div class="card">
+    <div class="section-title">📚 Add Subjects</div>
+
+    <label>Subject Name</label>
+    <input type="text" id="subjectName" placeholder="e.g. Anatomy">
+
+    <label>Subject Size</label>
+    <select id="subjectSize">
+      <option value="large">Large (many units, heavy weight)</option>
+      <option value="medium">Medium</option>
+      <option value="small">Small</option>
+    </select>
+
+    <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:12px;">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">📋 Units &amp; Topics</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.7;">
+        Format per line:<br>
+        <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit [Qs] | Chapter(start-end), Chapter(start-end)</code><br>
+        <span style="color:#8b5cf6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">[180]</code> = total Qs in unit (optional)</span><br>
+        <span style="color:#3b82f6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">(1-42)</code> = page range (optional)</span><br>
+        <span style="color:#64748b;">• Plain name with no pages/Qs also works</span>
+      </div>
+      <textarea id="topicsInput" rows="7" placeholder="Upper Limb [180] | Bones(1-42), Muscles(43-67), Nerves(68-95)&#10;Lower Limb [160] | Hip Joint(1-30), Knee(31-55)&#10;Head &amp; Neck&#10;Thorax | Heart, Lungs&#10;Abdomen" style="font-family:monospace;font-size:12px;margin-bottom:0;"></textarea>
+    </div>
+
+    <button onclick="addSubjectFromSetup()" style="width:100%;background:#8b5cf6;">+ Add Subject</button>
+
+    <div id="subjectPreview" style="display:none;margin-top:14px;">
+      <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">SUBJECTS TO ADD</div>
+      <div id="subjectList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:220px;overflow-y:auto;"></div>
+    </div>
+  </div>
+  <div class="nav-row">
+    <button class="secondary" onclick="goStep(1)" style="width:40%;">← Back</button>
+    <button onclick="goStep3()" style="width:60%;">Review & Finish →</button>
+  </div>
+</div>
+
+<!-- Step 3: Review -->
+<div class="step-panel" id="step3">
+  <div class="card">
+    <div class="section-title">✅ Review Your Setup</div>
+    <div class="summary-grid">
+      <div class="summary-box"><div class="summary-big" id="summarySubjects">0</div><div style="font-size:11px;color:#64748b;">Subjects</div></div>
+      <div class="summary-box"><div class="summary-big" id="summaryTopics" style="color:#8b5cf6;">0</div><div style="font-size:11px;color:#64748b;">Units</div></div>
+      <div class="summary-box"><div class="summary-big" id="summaryExam" style="font-size:16px;color:#f59e0b;">—</div><div style="font-size:11px;color:#64748b;">Exam Date</div></div>
+      <div class="summary-box"><div class="summary-big" id="summaryDays" style="color:#10b981;">—</div><div style="font-size:11px;color:#64748b;">Days Left</div></div>
+    </div>
+    <div id="summarySubjectList" style="background:#0f172a;border-radius:10px;padding:12px;"></div>
+    <div class="tip">🎯 Topics you added via the <code>Unit | Topic</code> format are already in your syllabus. You can add more chapters to any unit in the Syllabus editor.</div>
+  </div>
+  <div class="nav-row">
+    <button class="secondary" onclick="goStep(2)" style="width:40%;">← Back</button>
+    <button class="success" onclick="finishSetup()" style="width:60%;">🚀 Start Studying!</button>
+  </div>
+</div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="supabase.js"></script>
+<script>
+
+let _setupSubjects = {};
+
+function goStep(n) {
+  document.querySelectorAll(".step-panel").forEach(p => p.classList.remove("active"));
+  document.getElementById("step" + n).classList.add("active");
+  for (let i = 1; i <= 3; i++) {
+    let dot = document.getElementById("dot" + i);
+    dot.classList.remove("active", "done");
+    if (i < n) { dot.classList.add("done"); dot.textContent = "✓"; }
+    else if (i === n) { dot.classList.add("active"); dot.textContent = i; }
+    else dot.textContent = i;
+  }
+  for (let i = 1; i <= 2; i++) {
+    document.getElementById("line" + i).classList.toggle("done", i < n);
+  }
+  window.scrollTo(0, 0);
+}
+
+function goStep2() {
+  if (!document.getElementById("userName").value.trim()) { alert("Enter your name."); return; }
+  if (!document.getElementById("examDate").value) { alert("Select your exam date."); return; }
+  goStep(2);
+}
+
+function goStep3() {
+  if (!Object.keys(_setupSubjects).length) { alert("Add at least one subject."); return; }
+  renderSummary();
+  goStep(3);
+}
+
+function addSubjectFromSetup() {
+  let name     = document.getElementById("subjectName").value.trim();
+  let size     = document.getElementById("subjectSize").value;
+  let rawUnits = document.getElementById("topicsInput").value.trim();
+  if (!name)     { alert("Enter subject name."); return; }
+  if (!rawUnits) { alert("Enter at least one unit."); return; }
+
+  // Use smart parser: supports "Unit [Qs] | Chapter(start-end), ..."
+  let units = parseUnitsText(rawUnits);
+  if (!units.length) { alert("Could not parse any units."); return; }
+
+  _setupSubjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
+  document.getElementById("subjectName").value = "";
+  document.getElementById("topicsInput").value = "";
+  renderSetupPreview();
+}
+
+function renderSetupPreview() {
+  let keys    = Object.keys(_setupSubjects);
+  let preview = document.getElementById("subjectPreview");
+  let list    = document.getElementById("subjectList");
+  if (!keys.length) { preview.style.display = "none"; return; }
+  preview.style.display = "block";
+
+  let sizeColors = { large: "#3b82f6", medium: "#8b5cf6", small: "#64748b" };
+  list.innerHTML = keys.map(name => {
+    let s = _setupSubjects[name];
+    let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
+    let totalPages  = s.units.reduce((acc, u) => acc + u.chapters.reduce((a, ch) => a + (ch.pageCount||0), 0), 0);
+    let totalQs     = s.units.reduce((acc, u) => acc + (u.questionCount||0), 0);
+    let meta = `${s.units.length} units${totalTopics ? ", " + totalTopics + " chapters" : ""}`;
+    if (totalPages > 0) meta += `, ${totalPages}p`;
+    if (totalQs > 0)    meta += `, ${totalQs}Q`;
+    return `
+      <div class="preview-item">
+        <span>${name} <span style="color:#64748b;font-size:11px;">(${meta})</span></span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="badge" style="background:${sizeColors[s.size]}">${s.size}</span>
+          <span onclick="removeSetupSubject('${name}')" style="cursor:pointer;color:#ef4444;font-size:18px;line-height:1;">×</span>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function removeSetupSubject(name) {
+  delete _setupSubjects[name];
+  renderSetupPreview();
+}
+
+function renderSummary() {
+  let exam = document.getElementById("examDate").value;
+  let totalUnits = Object.values(_setupSubjects).reduce((a, s) => a + s.units.length, 0);
+  let daysLeft = Math.ceil((new Date(exam) - new Date()) / (1000*60*60*24));
+  document.getElementById("summarySubjects").textContent = Object.keys(_setupSubjects).length;
+  document.getElementById("summaryTopics").textContent   = totalUnits;
+  document.getElementById("summaryExam").textContent     = exam;
+  document.getElementById("summaryDays").textContent     = daysLeft > 0 ? daysLeft : "—";
+
+  document.getElementById("summarySubjectList").innerHTML = Object.keys(_setupSubjects).map(name => {
+    let s = _setupSubjects[name];
+    let totalTopics = s.units.reduce((acc, u) => acc + u.chapters.length, 0);
+    return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1e293b;font-size:13px;">
+      <span>${name}</span>
+      <span style="color:#64748b;">${s.units.length} units${totalTopics ? " · " + totalTopics + " topics" : ""} · ${s.size}</span>
+    </div>`;
+  }).join("");
+}
+
+async function finishSetup() {
+  let name  = document.getElementById("userName").value.trim();
+  let exam  = document.getElementById("examDate").value;
+  let hours = parseFloat(document.getElementById("defaultHours").value) || 8;
+
+  studyData.userName     = name;
+  studyData.examDate     = exam;
+  studyData.startDate    = today();
+  studyData.defaultHours = hours;
+  studyData.setupComplete = true;
+  studyData.version      = 4;
+
+  Object.keys(_setupSubjects).forEach(n => { studyData.subjects[n] = _setupSubjects[n]; });
+  await saveData();
+  window.location.href = "index.html";
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { window.location.href = "login.html"; return; }
+  if (studyData.setupComplete) { window.location.href = "index.html"; }
+});
+</script>
+
+</body>
+</html>

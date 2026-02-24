@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cards — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    .browse-page { padding: 16px; padding-bottom: 100px; }
+
+    /* ── Header ── */
+    .browse-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; gap: 10px; flex-wrap: wrap;
+    }
+    .browse-title { font-size: 20px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .browse-header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    /* ── Buttons ── */
+    .btn-sm {
+      padding: 7px 13px; font-size: 12px; font-weight: 600;
+      border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--border);
+      background: var(--card); color: var(--text-muted);
+      min-height: unset; margin: 0; white-space: nowrap;
+      transition: background 0.15s, color 0.15s; line-height: 1;
+    }
+    .btn-sm:hover { background: var(--surface); color: var(--text); opacity: 1; box-shadow: none; }
+    .btn-sm.active { background: rgba(239,68,68,0.12); color: var(--red); border-color: rgba(239,68,68,0.3); }
+    .btn-create { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .btn-create:hover { opacity: 0.88; color: #fff; }
+
+    /* ── Sub-tabs ── */
+    .browse-subtabs {
+      display: flex; gap: 4px; background: var(--card);
+      border-radius: var(--radius-sm); padding: 4px; margin-bottom: 12px;
+    }
+    .browse-subtab {
+      flex: 1; padding: 8px 12px; border-radius: 6px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--text-muted);
+      border: none; min-height: unset; margin: 0;
+      transition: background 0.15s, color 0.15s; white-space: nowrap;
+    }
+    .browse-subtab:hover { background: var(--surface); color: var(--text); opacity: 1; box-shadow: none; }
+    .browse-subtab.active { background: var(--blue); color: #fff; }
+
+    /* ── Search ── */
+    .browse-search-wrap { margin-bottom: 12px; position: relative; }
+    .browse-search-wrap input {
+      width: 100%; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 14px 10px 36px; font-size: 13px; min-height: unset; margin: 0;
+    }
+    .browse-search-wrap input:focus { border-color: var(--blue); outline: none; }
+    .browse-search-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--text-dim); font-size: 14px; pointer-events: none;
+    }
+
+    /* ── Collapse btn (▸/▾) ── */
+    .fc-acc-collapse-btn {
+      background: transparent; border: none; color: var(--text-dim);
+      font-size: 10px; cursor: pointer; padding: 2px 4px; margin: 0;
+      min-height: unset; flex-shrink: 0; line-height: 1; border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .fc-acc-collapse-btn:hover { color: var(--text); background: rgba(255,255,255,0.07); opacity: 1; box-shadow: none; }
+
+    /* ── Subject accordion ── */
+    .fc-acc-subject {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 8px; overflow: hidden;   /* KEY: clips all children */
+      border-left: 3px solid transparent;
+    }
+    .fc-acc-subject.open { border-left-color: var(--blue); }
+    .fc-acc-subject-head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 10px 10px 10px; cursor: pointer; user-select: none;
+      background: var(--card);
+      min-height: 0;
+    }
+    .fc-acc-subject-head:hover { background: rgba(255,255,255,0.03); }
+    .fc-acc-subject-name { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fc-acc-subject-count {
+      font-size: 11px; color: var(--text-dim); background: rgba(255,255,255,0.06);
+      border-radius: 20px; padding: 2px 8px; font-weight: 600; flex-shrink: 0;
+    }
+    .fc-acc-subject-count.has-due { background: rgba(59,130,246,0.18); color: var(--blue); }
+    .fc-acc-units { display: none; border-top: 1px solid var(--border); }
+    .fc-acc-subject.open .fc-acc-units { display: block; }
+
+    /* ── Unit ── */
+    .fc-acc-unit { background: rgba(0,0,0,0.12); }
+    .fc-acc-unit + .fc-acc-unit { border-top: 1px solid var(--border); }
+    .fc-acc-unit-head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 10px 8px 14px; user-select: none; min-height: 0;
+    }
+    .fc-acc-unit-head:hover { background: rgba(255,255,255,0.025); cursor: pointer; }
+    .fc-acc-unit-name { font-size: 12px; font-weight: 600; color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fc-acc-unit.open .fc-acc-unit-name { color: var(--text); }
+    .fc-acc-unit-count { font-size: 11px; color: var(--text-dim); background: rgba(255,255,255,0.05); border-radius: 20px; padding: 2px 6px; flex-shrink: 0; }
+    .fc-acc-chapters { display: none; }
+    .fc-acc-unit.open .fc-acc-chapters { display: block; }
+
+    /* ── Chapter ── */
+    .fc-acc-chapter { border-top: 1px solid rgba(30,51,80,0.5); background: rgba(0,0,0,0.1); }
+    .fc-acc-chapter-head {
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 8px 7px 22px; flex-wrap: nowrap; cursor: pointer;
+      user-select: none;
+    }
+    .fc-acc-chapter-head:hover { background: rgba(255,255,255,0.02); }
+    .fc-acc-chapter-name { font-size: 12px; font-weight: 600; color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fc-acc-chapter-count { font-size: 10px; color: var(--text-dim); flex-shrink: 0; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 1px 6px; }
+    /* Chapter cards: hidden by default, shown when open */
+    .fc-acc-chapter-cards { display: none; }
+    .fc-acc-chapter.open .fc-acc-chapter-cards { display: block; }
+
+    /* ── Learn button ── */
+    .fc-learn-btn {
+      font-size: 11px; font-weight: 700; padding: 4px 9px;
+      border-radius: 6px; cursor: pointer; border: none; margin: 0; min-height: unset;
+      background: rgba(59,130,246,0.15); color: var(--blue);
+      transition: background 0.15s; flex-shrink: 0; white-space: nowrap;
+    }
+    .fc-learn-btn:hover { background: rgba(59,130,246,0.3); opacity: 1; box-shadow: none; }
+    .fc-learn-btn.revise { background: rgba(139,92,246,0.15); color: var(--purple); }
+    .fc-learn-btn.revise:hover { background: rgba(139,92,246,0.3); }
+
+    /* ── Quick add btn (+ icon only) ── */
+    .fc-quick-add-btn {
+      font-size: 15px; font-weight: 700; padding: 1px 0; flex-shrink: 0;
+      border-radius: 5px; cursor: pointer; border: 1px dashed var(--border);
+      background: transparent; color: var(--text-dim); min-height: unset; margin: 0;
+      line-height: 1; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+    }
+    .fc-quick-add-btn:hover { border-color: var(--blue); color: var(--blue); opacity: 1; box-shadow: none; }
+
+    /* ── Card row ── */
+    .fc-card-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 10px 7px 22px;
+      border-top: 1px solid rgba(30,51,80,0.4);
+      background: rgba(255,255,255,0.005);
+      width: 100%; box-sizing: border-box;
+    }
+    .fc-card-row:hover { background: rgba(255,255,255,0.02); }
+    .fc-card-checkbox { width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; accent-color: var(--blue); }
+    .fc-card-front { flex: 1; font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .fc-card-stats { font-size: 10px; color: var(--text-dim); background: rgba(255,255,255,0.04); border-radius: 4px; padding: 2px 5px; white-space: nowrap; flex-shrink: 0; display: none; }
+    @media (min-width: 480px) { .fc-card-stats { display: inline-block; } }
+    .fc-card-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .fc-card-btn { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 3px 7px; border-radius: 5px; cursor: pointer; margin: 0; min-height: unset; transition: all 0.1s; }
+    .fc-card-btn:hover { opacity: 1; box-shadow: none; }
+    .fc-card-btn.edit:hover { background: rgba(59,130,246,0.15); border-color: var(--blue); color: var(--blue); }
+    .fc-card-btn.del:hover  { background: rgba(239,68,68,0.15);  border-color: var(--red);  color: var(--red); }
+
+    /* ── 3-dot menu ── */
+    .fc-section-menu { position: relative; display: inline-flex; flex-shrink: 0; }
+    .fc-menu-btn { background: transparent; border: none; color: var(--text-dim); font-size: 16px; padding: 2px 5px; cursor: pointer; margin: 0; min-height: unset; border-radius: 4px; line-height: 1; }
+    .fc-menu-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); opacity: 1; box-shadow: none; }
+    .fc-menu-dropdown {
+      display: none; position: fixed; z-index: 9999;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); min-width: 200px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6); overflow: hidden;
+    }
+    .fc-menu-dropdown.open { display: block; }
+    .fc-menu-item { display: block; width: 100%; text-align: left; padding: 11px 16px; font-size: 13px; color: var(--text-muted); background: transparent; border: none; cursor: pointer; margin: 0; min-height: unset; border-radius: 0; white-space: nowrap; }
+    .fc-menu-item:hover { background: rgba(255,255,255,0.05); color: var(--text); opacity: 1; box-shadow: none; }
+    .fc-menu-item.danger { color: var(--red); }
+    .fc-menu-item.danger:hover { background: rgba(239,68,68,0.08); }
+
+    /* ── Quick-add POPUP MODAL ── */
+    .fc-qa-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+      align-items: flex-end; justify-content: center; padding: 0;
+    }
+    .fc-qa-backdrop.open { display: flex; }
+    .fc-qa-sheet {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 20px; width: 100%; max-width: 560px;
+      animation: slideUp 0.22s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .fc-qa-title {
+      font-size: 13px; font-weight: 700; color: var(--text);
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px;
+    }
+    .fc-qa-close-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+      font-size: 13px; padding: 3px 9px; border-radius: 6px; cursor: pointer; margin: 0; min-height: unset;
+    }
+    .fc-qa-field { margin-bottom: 10px; }
+    .fc-qa-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: .06em; display: block; margin-bottom: 4px; }
+    .fc-qa-textarea {
+      width: 100%; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 10px; font-size: 13px; font-family: inherit;
+      resize: none; min-height: unset; margin: 0;
+    }
+    .fc-qa-textarea:focus { border-color: var(--blue); outline: none; }
+    .fc-qa-select {
+      width: 100%; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 10px; font-size: 13px; margin: 0; min-height: unset;
+    }
+    .fc-qa-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .fc-qa-save-btn {
+      flex: 1; background: var(--blue); color: #fff; border: none;
+      border-radius: var(--radius-sm); padding: 11px; font-size: 14px;
+      font-weight: 700; cursor: pointer; min-height: unset; margin: 0;
+    }
+    .fc-qa-cancel-btn {
+      background: transparent; color: var(--text-dim); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 11px 16px; font-size: 13px;
+      cursor: pointer; min-height: unset; margin: 0;
+    }
+
+    /* ── Bulk bar ── */
+    .bulk-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 2px solid var(--blue);
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px 10px calc(var(--nav-w) + 16px);
+      transform: translateY(110%); transition: transform 0.25s ease;
+      z-index: 400; box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+    }
+    body.nav-collapsed .bulk-bar { padding-left: calc(var(--nav-w-col) + 16px); }
+    @media (max-width: 640px) {
+      .bulk-bar { padding-left: calc(var(--nav-w-col) + 12px); padding-right: 12px; }
+    }
+    .bulk-bar.visible { transform: translateY(0); }
+    .bulk-count { flex: 1; font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; }
+    .bulk-cancel {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-muted); padding: 8px 14px;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
+      cursor: pointer; min-height: unset; margin: 0; white-space: nowrap;
+    }
+    .bulk-cancel:hover { background: rgba(255,255,255,0.05); color: var(--text); opacity: 1; box-shadow: none; }
+    .bulk-delete-btn {
+      background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35);
+      color: var(--red); padding: 8px 14px;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 700;
+      cursor: pointer; min-height: unset; margin: 0; white-space: nowrap;
+    }
+    .bulk-delete-btn:hover { background: rgba(239,68,68,0.28); opacity: 1; box-shadow: none; }
+
+    /* ── Empty / loading ── */
+    .browse-empty { text-align: center; padding: 48px 24px; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
+    .browse-empty-icon { font-size: 40px; margin-bottom: 10px; }
+
+    /* ── CSV Modal ── */
+    .csv-backdrop { display: none; position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 16px; }
+    .csv-backdrop.open { display: flex; }
+    .csv-sheet { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; }
+    .csv-title { font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .csv-close { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 13px; padding: 3px 9px; border-radius: 6px; cursor: pointer; margin: 0; min-height: unset; }
+    .csv-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+    .csv-settings { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .csv-settings > div { display: flex; flex-direction: column; gap: 4px; }
+    .csv-settings label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; }
+    .csv-settings select { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; min-height: unset; margin: 0; }
+    .csv-textarea { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; font-size: 12px; font-family: monospace; resize: vertical; min-height: 100px; margin-bottom: 8px; }
+    .csv-textarea:focus { border-color: var(--blue); outline: none; }
+    .csv-preview-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+    .csv-preview-table th { padding: 5px 8px; text-align: left; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+    .csv-preview-table td { padding: 5px 8px; color: var(--text-muted); border-bottom: 1px solid rgba(30,51,80,0.3); }
+    .csv-import-btn { background: var(--blue); color: #fff; border: none; padding: 9px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 8px; min-height: unset; }
+    .csv-status { font-size: 12px; margin-top: 6px; min-height: 16px; }
+
+    /* ── Edit modal ── */
+    .edit-modal-backdrop { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 16px; }
+    .edit-modal-backdrop.open { display: flex; }
+    .edit-modal-sheet { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; width: 100%; max-width: 480px; }
+    .edit-modal-title { font-size: 15px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .edit-modal-close { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-size: 13px; padding: 3px 9px; border-radius: 6px; cursor: pointer; margin: 0; min-height: unset; }
+    .edit-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: .06em; display: block; margin-bottom: 4px; }
+    .edit-textarea { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; font-size: 13px; font-family: inherit; resize: vertical; margin-bottom: 10px; min-height: unset; }
+    .edit-textarea:focus { border-color: var(--blue); outline: none; }
+    .edit-save-btn { width: 100%; background: var(--blue); color: #fff; border: none; padding: 10px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; cursor: pointer; margin: 0; min-height: unset; }
+
+    /* ── Confirm modal ── */
+    .confirm-backdrop { display: none; position: fixed; inset: 0; z-index: 700; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 16px; }
+    .confirm-backdrop.open { display: flex; }
+    .confirm-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; width: 100%; max-width: 360px; text-align: center; }
+    .confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .confirm-body { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+    .confirm-btns { display: flex; gap: 10px; justify-content: center; }
+    .confirm-cancel { background: var(--card); color: var(--text-muted); border: 1px solid var(--border); padding: 9px 20px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; min-height: unset; margin: 0; }
+    .confirm-ok { background: var(--red); color: #fff; border: none; padding: 9px 20px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 700; min-height: unset; margin: 0; }
+    .confirm-ok:hover { opacity: 0.88; box-shadow: none; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ SIDE NAV ═══ -->
+<nav class="side-nav" id="side-nav">
+  <button class="side-nav-toggle" id="side-nav-toggle" title="Toggle sidebar">❮</button>
+  <div class="side-nav-brand">
+    <span class="side-nav-brand-icon">🩺</span>
+    <span class="side-nav-brand-text">Medical OS</span>
+  </div>
+  <div class="side-nav-items">
+    <a href="index.html"     class="side-nav-item" data-label="Home"><span class="side-nav-icon">🏠</span><span class="side-nav-label">Home</span></a>
+    <a href="planner.html"   class="side-nav-item" data-label="Planner"><span class="side-nav-icon">📅</span><span class="side-nav-label">Planner</span></a>
+    <a href="editor.html"    class="side-nav-item" data-label="Syllabus"><span class="side-nav-icon">📚</span><span class="side-nav-label">Syllabus</span></a>
+    <a href="analytics.html" class="side-nav-item" data-label="Stats"><span class="side-nav-icon">📊</span><span class="side-nav-label">Stats</span></a>
+    <a href="profile.html"   class="side-nav-item" data-label="Profile"><span class="side-nav-icon">👤</span><span class="side-nav-label">Profile</span></a>
+    <a href="review.html"    class="side-nav-item" data-label="Review"><span class="side-nav-icon">🔁</span><span class="side-nav-label">Review</span><span class="side-nav-review-badge" id="nav-review-badge" style="display:none"></span></a>
+    <a href="browse.html"    class="side-nav-item active" data-label="Cards"><span class="side-nav-icon">🃏</span><span class="side-nav-label">Cards</span></a>
+    <a href="notes.html"     class="side-nav-item" data-label="Notes"><span class="side-nav-icon">📝</span><span class="side-nav-label">Notes</span></a>
+  </div>
+  <div class="nav-rotate-btn-wrap">
+    <button class="rotate-screen-btn" onclick="toggleRotation()" title="Switch to Landscape">
+      <span class="rotate-screen-icon">🔄</span>
+      <span class="rotate-screen-label">Landscape</span>
+    </button>
+  </div>
+</nav>
+<script>
+(function(){
+  var nav = document.getElementById('side-nav');
+  var btn = document.getElementById('side-nav-toggle');
+  if (localStorage.getItem('navCollapsed') === '1') {
+    nav.classList.add('collapsed'); document.body.classList.add('nav-collapsed');
+    if (btn) btn.textContent = '❯';
+  }
+  if (btn) btn.addEventListener('click', function() {
+    var c = nav.classList.toggle('collapsed');
+    document.body.classList.toggle('nav-collapsed', c);
+    btn.textContent = c ? '❯' : '❮';
+    localStorage.setItem('navCollapsed', c ? '1' : '0');
+  });
+})();
+</script>
+
+<!-- ═══ MAIN ═══ -->
+<div class="browse-page">
+
+  <div class="browse-header">
+    <div class="browse-title">🃏 Cards</div>
+    <div class="browse-header-actions">
+      <button class="btn-sm" onclick="openCsvModal()">📥 Import</button>
+      <button class="btn-sm" id="select-btn" onclick="toggleSelectMode()">☑ Select</button>
+      <button class="btn-sm btn-create" onclick="window.location.href='create.html'">+ Create Card</button>
+    </div>
+  </div>
+
+  <div class="browse-subtabs">
+    <button class="browse-subtab active" id="tab-new"    onclick="switchTab('new')">🆕 New</button>
+    <button class="browse-subtab"        id="tab-revise" onclick="switchTab('revise')">🔁 Revise</button>
+    <button class="browse-subtab"        id="tab-all"    onclick="switchTab('all')">📋 All</button>
+  </div>
+
+  <div class="browse-search-wrap">
+    <span class="browse-search-icon">🔍</span>
+    <input type="text" id="search-input" placeholder="Search cards…" oninput="onSearch()"/>
+  </div>
+
+  <div id="accordion"><div class="browse-empty"><div class="browse-empty-icon">⏳</div>Loading cards…</div></div>
+
+</div>
+
+<!-- ═══ QUICK-ADD POPUP MODAL ═══ -->
+<div class="fc-qa-backdrop" id="fc-qa-modal" onclick="if(event.target===this)closeQuickAddModal()">
+  <div class="fc-qa-sheet">
+    <div class="fc-qa-title">
+      <span>➕ Quick Add Card</span>
+      <button class="fc-qa-close-btn" onclick="closeQuickAddModal()">✕</button>
+    </div>
+    <div id="fc-qa-chapter-label" style="font-size:11px;color:var(--text-dim);margin-bottom:12px;background:rgba(59,130,246,0.08);border-radius:6px;padding:5px 10px;"></div>
+    <div class="fc-qa-field">
+      <label class="fc-qa-label">Front</label>
+      <textarea class="fc-qa-textarea" id="fc-qa-front" rows="3" placeholder="Front of card…"></textarea>
+    </div>
+    <div class="fc-qa-field">
+      <label class="fc-qa-label">Back</label>
+      <textarea class="fc-qa-textarea" id="fc-qa-back" rows="3" placeholder="Back of card…"></textarea>
+    </div>
+    <div class="fc-qa-field">
+      <label class="fc-qa-label">Card Type</label>
+      <select class="fc-qa-select" id="fc-qa-type">
+        <option value="basic">Basic</option>
+        <option value="cloze">Cloze (use {{word}} syntax)</option>
+      </select>
+    </div>
+    <div class="fc-qa-actions">
+      <button class="fc-qa-cancel-btn" onclick="closeQuickAddModal()">Cancel</button>
+      <button class="fc-qa-save-btn" id="fc-qa-save-btn" onclick="submitQuickAddModal()">+ Add Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BULK BAR ═══ -->
+<div class="bulk-bar" id="bulk-bar">
+  <span class="bulk-count" id="bulk-count">0 selected</span>
+  <button class="bulk-cancel" onclick="toggleSelectMode()">✕ Cancel</button>
+  <button class="bulk-delete-btn" onclick="bulkDelete()">🗑 Delete</button>
+</div>
+
+<!-- ═══ EDIT MODAL ═══ -->
+<div class="edit-modal-backdrop" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
+  <div class="edit-modal-sheet">
+    <div class="edit-modal-title">
+      ✏️ Edit Card
+      <button class="edit-modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <span class="edit-label">Front</span>
+    <textarea class="edit-textarea" id="edit-front" rows="3" placeholder="Front text…"></textarea>
+    <span class="edit-label">Back</span>
+    <textarea class="edit-textarea" id="edit-back"  rows="3" placeholder="Back text…"></textarea>
+    <button class="edit-save-btn" onclick="saveEdit()">💾 Save Changes</button>
+  </div>
+</div>
+
+<!-- ═══ CSV IMPORT MODAL ═══ -->
+<div class="csv-backdrop" id="csv-modal" onclick="if(event.target===this)closeCsvModal()">
+  <div class="csv-sheet">
+    <div class="csv-title">
+      📥 Import Cards from CSV
+      <button class="csv-close" onclick="closeCsvModal()">✕</button>
+    </div>
+    <div class="csv-sub">Paste CSV data or upload a file. Each row = one card.</div>
+    <div class="csv-settings">
+      <div><label>Delimiter</label>
+        <select id="csv-delim" onchange="csvParse()">
+          <option value="comma">Comma ,</option>
+          <option value="tab">Tab ⇥</option>
+          <option value="pipe">Pipe |</option>
+          <option value="semicolon">Semicolon ;</option>
+        </select>
+      </div>
+      <div><label>Subject</label><select id="csv-subject" onchange="csvFillUnits()"></select></div>
+      <div><label>Unit</label><select id="csv-unit" onchange="csvFillChapters()"></select></div>
+      <div><label>Chapter</label><select id="csv-chapter"></select></div>
+      <div><label>Card Type</label>
+        <select id="csv-type">
+          <option value="basic">Basic</option>
+          <option value="cloze">Cloze</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <button class="btn-sm" onclick="document.getElementById('csv-file').click()">📂 Upload file</button>
+      <span style="font-size:11px;color:var(--text-dim)">or paste below</span>
+      <input type="file" id="csv-file" accept=".csv,.tsv,.txt" style="display:none" onchange="csvLoadFile(this)"/>
+    </div>
+    <textarea class="csv-textarea" id="csv-text"
+      placeholder="front text,back text&#10;What is ATP?,Adenosine triphosphate"
+      oninput="csvParse()"></textarea>
+    <button class="btn-sm" onclick="csvParse()">🔍 Preview</button>
+    <div id="csv-preview-wrap" style="display:none;margin-top:10px;overflow-x:auto;">
+      <div id="csv-count" style="font-size:11px;color:var(--text-dim);margin-bottom:4px;"></div>
+      <table class="csv-preview-table" id="csv-table"></table>
+    </div>
+    <div><button class="csv-import-btn" id="csv-import-btn" style="display:none" onclick="csvImport()">📥 Import Cards</button></div>
+    <div class="csv-status" id="csv-status"></div>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM MODAL ═══ -->
+<div class="confirm-backdrop" id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirm-title">Confirm</div>
+    <div class="confirm-body"  id="confirm-body"></div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="confirm-ok" id="confirm-ok" onclick="runConfirm()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="supabase.js"></script>
+<script src="cardSync.js"></script>
+<script src="browse.js"></script>
+<script src="rotateScreen.js"></script>
+</body>
+</html>
