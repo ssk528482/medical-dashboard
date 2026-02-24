@@ -1,6 +1,6 @@
 // supabase.js — Medical Study OS
-// Tasks fixed: #1 (smart merge), #7 (offline detection),
-//              #19 (loading skeleton / no content jump)
+// Architecture: normalized tables (subjects, units, chapters, user_meta, daily_history)
+// Tasks covered: #1 (smart merge), #7 (offline detection), #19 (loading skeleton)
 
 const SUPABASE_URL = "https://alrkpctsjmvspybrgdfy.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFscmtwY3Rzam12c3B5YnJnZGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjAxODcsImV4cCI6MjA4NzA5NjE4N30.TLSmuCaKCnZ99QUcwL9w7yUGJHrMMj-BWXnqNG7OTwU";
@@ -8,9 +8,8 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ─── OFFLINE STATE MANAGEMENT ─────────────────────────────────
-// Task #7: track online/offline, show banner, queue retries.
 let _isOnline = navigator.onLine;
-let _saveQueue = [];          // pending saves when offline
+let _saveQueue = [];
 let _savePending = false;
 
 function _setOnlineStatus(online) {
@@ -38,7 +37,6 @@ function _setOnlineStatus(online) {
       banner.style.background = "#052e16";
       banner.style.borderColor = "#16a34a";
       banner.style.color = "#4ade80";
-      // Flush pending saves
       _flushSaveQueue();
       setTimeout(() => { banner.style.display = "none"; }, 2500);
     }
@@ -47,7 +45,6 @@ function _setOnlineStatus(online) {
 
 async function _flushSaveQueue() {
   if (!_isOnline || !_saveQueue.length) return;
-  // Just do one full save of current state — no need to replay each queued item
   _saveQueue = [];
   await saveToCloud();
 }
@@ -55,79 +52,348 @@ async function _flushSaveQueue() {
 window.addEventListener("online",  () => _setOnlineStatus(true));
 window.addEventListener("offline", () => _setOnlineStatus(false));
 
-// ─── SAVE ────────────────────────────────────────────────────
+// ─── HELPERS ──────────────────────────────────────────────────
+async function _getUser() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  return user;
+}
+
+function _handleSaveError(error) {
+  console.error("Save error:", error);
+  if (error?.message?.includes("fetch") || error?.code === "PGRST000") {
+    _setOnlineStatus(false);
+  }
+}
+
+// ─── SAVE TO CLOUD ────────────────────────────────────────────
+// Writes studyData into the normalized tables:
+//   user_meta  — settings, pointers, daily plan, ui state
+//   subjects   — one row per subject
+//   units      — one row per unit
+//   chapters   — one row per chapter
+//   daily_history — one row per day
 async function saveToCloud() {
   if (!_isOnline) {
-    // Queue a save for when we come back online
     if (!_saveQueue.includes("pending")) _saveQueue.push("pending");
     return;
   }
 
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const user = await _getUser();
   if (!user) return;
 
-  const { error } = await supabaseClient
-    .from("study_data")
-    .upsert(
-      { user_id: user.id, data: studyData, updated_at: new Date().toISOString() },
-      { onConflict: "user_id" }
-    );
+  const uid = user.id;
 
-  if (error) {
-    console.error("Save error:", error);
-    // If save failed due to network, treat as offline
-    if (error.message?.includes("fetch") || error.code === "PGRST000") {
-      _setOnlineStatus(false);
+  try {
+    await Promise.all([
+      _saveUserMeta(uid),
+      _saveSubjectsUnitsChapters(uid),
+      _saveDailyHistory(uid),
+    ]);
+  } catch (err) {
+    _handleSaveError(err);
+  }
+}
+
+// ── user_meta ─────────────────────────────────────────────────
+async function _saveUserMeta(uid) {
+  // Build subject_pointers: { subjectName: { unit, chapter } }
+  const pointers = {};
+  Object.entries(studyData.subjects || {}).forEach(([name, s]) => {
+    pointers[name] = s.pointer || { unit: 0, chapter: 0 };
+  });
+
+  const { error } = await supabaseClient
+    .from("user_meta")
+    .upsert({
+      user_id:           uid,
+      exam_date:         studyData.examDate     || "2026-12-01",
+      start_date:        studyData.startDate    || today(),
+      reading_speed:     studyData.readingSpeed || 25,
+      qbank_speed:       studyData.qbankSpeed   || 30,
+      user_name:         studyData.userName     || null,
+      setup_complete:    studyData.setupComplete || false,
+      subject_pointers:  pointers,
+      ui_state:          studyData.uiState       || {},
+      daily_plan:        studyData.dailyPlan     || null,
+      dismissed_alerts:  studyData.dismissedAlerts || {},
+      updated_at:        new Date().toISOString(),
+    }, { onConflict: "user_id" });
+
+  if (error) throw error;
+}
+
+// ── subjects + units + chapters ────────────────────────────────
+async function _saveSubjectsUnitsChapters(uid) {
+  const subjects = studyData.subjects || {};
+
+  for (const [subjectName, subject] of Object.entries(subjects)) {
+
+    // 1. Upsert subject row
+    let { data: subjRow, error: subjErr } = await supabaseClient
+      .from("subjects")
+      .upsert({
+        user_id:      uid,
+        name:         subjectName,
+        size:         subject.size || "medium",
+        subject_name: subjectName,
+        updated_at:   new Date().toISOString(),
+      }, { onConflict: "user_id,name" })
+      .select("id")
+      .single();
+
+    if (subjErr) { console.error("Subject save error:", subjErr); continue; }
+    const subjectId = subjRow.id;
+
+    // 2. Upsert each unit
+    const units = subject.units || [];
+    for (let ui = 0; ui < units.length; ui++) {
+      const unit = units[ui];
+
+      let { data: unitRow, error: unitErr } = await supabaseClient
+        .from("units")
+        .upsert({
+          user_id:        uid,
+          subject_id:     subjectId,
+          subject_name:   subjectName,
+          name:           unit.name,
+          sort_order:     ui,
+          question_count: unit.questionCount  || 0,
+          qbank_total:    unit.qbankStats?.total   || 0,
+          qbank_correct:  unit.qbankStats?.correct || 0,
+          qbank_done:     unit.qbankDone      || false,
+          collapsed:      unit.collapsed      || false,
+          updated_at:     new Date().toISOString(),
+        }, { onConflict: "subject_id,name" })
+        .select("id")
+        .single();
+
+      if (unitErr) { console.error("Unit save error:", unitErr); continue; }
+      const unitId = unitRow.id;
+
+      // 3. Upsert each chapter
+      const chapters = unit.chapters || [];
+      for (let ci = 0; ci < chapters.length; ci++) {
+        const ch = chapters[ci];
+
+        const { error: chErr } = await supabaseClient
+          .from("chapters")
+          .upsert({
+            user_id:         uid,
+            unit_id:         unitId,
+            subject_name:    subjectName,
+            unit_name:       unit.name,
+            name:            ch.name,
+            sort_order:      ci,
+            status:          ch.status          || "not-started",
+            difficulty:      ch.difficulty      || "medium",
+            difficulty_factor: ch.difficultyFactor ?? 2.5,
+            missed_revisions:  ch.missedRevisions  || 0,
+            start_page:      ch.startPage       || 0,
+            end_page:        ch.endPage         || 0,
+            page_count:      ch.pageCount       || 0,
+            completed_on:    ch.completedOn     || null,
+            last_reviewed_on: ch.lastReviewedOn || null,
+            next_revision:   ch.nextRevision    || null,
+            revision_index:  ch.revisionIndex   || 0,
+            revision_dates:  ch.revisionDates   || [],
+            updated_at:      new Date().toISOString(),
+          }, { onConflict: "unit_id,name" });
+
+        if (chErr) console.error("Chapter save error:", chErr);
+      }
     }
   }
 }
 
-// ─── LOAD (conflict-safe smart merge) ─────────────────────────
-// Task #19: show loading skeleton while cloud data loads, then
-// re-render — prevents jarring content jumps by showing a spinner
-// overlay rather than blank-to-full content flash.
+// ── daily_history ─────────────────────────────────────────────
+async function _saveDailyHistory(uid) {
+  const history = studyData.dailyHistory || {};
+  const entries = Object.entries(history);
+  if (!entries.length) return;
+
+  // Upsert all days in one batch (Supabase supports array upsert)
+  const rows = entries.map(([date, h]) => ({
+    user_id:           uid,
+    date:              date,
+    study:             h.study             || false,
+    qbank:             h.qbank             || false,
+    revision:          h.revision          || false,
+    evening_submitted: h.eveningSubmitted  || false,
+    study_subject:     h.studySubject      || null,
+    study_entries:     h.studyEntries      || [],
+    qbank_entries:     h.qbankEntries      || [],
+    revised_items:     h.revisedItems      || [],
+    time_tracking:     h.timeTracking      || null,
+    submitted_at:      h.submittedAt       || null,
+  }));
+
+  // Batch in chunks of 50 to avoid request size limits
+  for (let i = 0; i < rows.length; i += 50) {
+    const chunk = rows.slice(i, i + 50);
+    const { error } = await supabaseClient
+      .from("daily_history")
+      .upsert(chunk, { onConflict: "user_id,date" });
+    if (error) console.error("Daily history save error:", error);
+  }
+}
+
+// ─── LOAD FROM CLOUD ──────────────────────────────────────────
+// Reads from all normalized tables and reconstructs studyData in memory.
+// Then merges with localStorage using the smart merge (Task #1).
 async function loadFromCloud() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const user = await _getUser();
   if (!user) return;
 
-  // Show loading overlay
   _showLoadingOverlay(true);
 
-  const { data, error } = await supabaseClient
-    .from("study_data")
-    .select("*")
-    .eq("user_id", user.id)
-    .limit(1);
+  try {
+    const uid = user.id;
+    const [meta, subjects, units, chapters, history] = await Promise.all([
+      supabaseClient.from("user_meta").select("*").eq("user_id", uid).maybeSingle(),
+      supabaseClient.from("subjects").select("*").eq("user_id", uid),
+      supabaseClient.from("units").select("*").eq("user_id", uid).order("sort_order"),
+      supabaseClient.from("chapters").select("*").eq("user_id", uid).order("sort_order"),
+      supabaseClient.from("daily_history").select("*").eq("user_id", uid),
+    ]);
 
-  _showLoadingOverlay(false);
+    // Check for errors
+    for (const result of [meta, subjects, units, chapters, history]) {
+      if (result.error) throw result.error;
+    }
 
-  if (error) { console.error("Load error:", error); return; }
+    // If no data exists in new tables yet, fall back gracefully
+    if (!meta.data && (!subjects.data || subjects.data.length === 0)) {
+      _showLoadingOverlay(false);
+      await saveToCloud(); // seed the new tables from localStorage
+      return;
+    }
 
-  if (data && data.length > 0) {
-    let cloudData = data[0].data;
-    if (typeof cloudData === "string") cloudData = JSON.parse(cloudData);
+    // ── Reconstruct studyData from normalized rows ──
+    const cloudData = _reconstructStudyData(
+      meta.data,
+      subjects.data || [],
+      units.data    || [],
+      chapters.data || [],
+      history.data  || []
+    );
 
+    // Task #1: smart merge with localStorage
     let localData = JSON.parse(localStorage.getItem("studyData") || "{}");
-
-    // Task #1: use smart merge instead of last-write-wins
     let merged = mergeData(localData, cloudData);
     merged = migrateData(merged);
 
     studyData = merged;
     localStorage.setItem("studyData", JSON.stringify(studyData));
 
-    // Push local back if it's newer (conflict resolution)
+    // Push local back if it's newer
     if (localData.updatedAt && cloudData.updatedAt &&
         new Date(localData.updatedAt) > new Date(cloudData.updatedAt)) {
       await saveToCloud();
     }
-  } else {
-    await saveToCloud();
+
+  } catch (err) {
+    console.error("Load error:", err);
+  } finally {
+    _showLoadingOverlay(false);
   }
 }
 
-// Loading overlay: shown while cloud data is fetching to prevent
-// the "data appears then jumps" effect (task #19)
+// ── Reconstruct in-memory studyData from normalized DB rows ───
+function _reconstructStudyData(meta, subjectRows, unitRows, chapterRows, historyRows) {
+  const data = {};
+
+  // ── user_meta ──
+  if (meta) {
+    data.examDate         = meta.exam_date        || "2026-12-01";
+    data.startDate        = meta.start_date        || today();
+    data.readingSpeed     = meta.reading_speed     || 25;
+    data.qbankSpeed       = meta.qbank_speed       || 30;
+    data.userName         = meta.user_name         || null;
+    data.setupComplete    = meta.setup_complete    || false;
+    data.uiState          = meta.ui_state          || {};
+    data.dailyPlan        = meta.daily_plan        || null;
+    data.dismissedAlerts  = meta.dismissed_alerts  || {};
+    data.updatedAt        = meta.updated_at        || null;
+    const pointers        = meta.subject_pointers  || {};
+
+    // ── subjects ──
+    data.subjects = {};
+
+    // Build lookup maps
+    const unitsBySubjectId  = {};
+    const chaptersByUnitId  = {};
+
+    unitRows.forEach(u => {
+      if (!unitsBySubjectId[u.subject_id]) unitsBySubjectId[u.subject_id] = [];
+      unitsBySubjectId[u.subject_id].push(u);
+    });
+    chapterRows.forEach(ch => {
+      if (!chaptersByUnitId[ch.unit_id]) chaptersByUnitId[ch.unit_id] = [];
+      chaptersByUnitId[ch.unit_id].push(ch);
+    });
+
+    subjectRows.forEach(s => {
+      const subjectUnits = (unitsBySubjectId[s.id] || []).sort((a, b) => a.sort_order - b.sort_order);
+
+      const units = subjectUnits.map(u => {
+        const unitChapters = (chaptersByUnitId[u.id] || []).sort((a, b) => a.sort_order - b.sort_order);
+
+        return {
+          name:          u.name,
+          collapsed:     u.collapsed     || false,
+          questionCount: u.question_count || 0,
+          qbankDone:     u.qbank_done    || false,
+          qbankStats: {
+            total:   u.qbank_total   || 0,
+            correct: u.qbank_correct || 0,
+          },
+          chapters: unitChapters.map(ch => ({
+            name:             ch.name,
+            status:           ch.status             || "not-started",
+            difficulty:       ch.difficulty         || "medium",
+            difficultyFactor: ch.difficulty_factor  ?? 2.5,
+            missedRevisions:  ch.missed_revisions   || 0,
+            startPage:        ch.start_page         || 0,
+            endPage:          ch.end_page           || 0,
+            pageCount:        ch.page_count         || 0,
+            completedOn:      ch.completed_on       || null,
+            lastReviewedOn:   ch.last_reviewed_on   || null,
+            nextRevision:     ch.next_revision      || null,
+            revisionIndex:    ch.revision_index     || 0,
+            revisionDates:    ch.revision_dates     || [],
+          })),
+        };
+      });
+
+      data.subjects[s.name] = {
+        size:    s.size || "medium",
+        units,
+        pointer: pointers[s.name] || { unit: 0, chapter: 0 },
+      };
+    });
+  }
+
+  // ── daily_history ──
+  data.dailyHistory = {};
+  historyRows.forEach(h => {
+    data.dailyHistory[h.date] = {
+      study:             h.study             || false,
+      qbank:             h.qbank             || false,
+      revision:          h.revision          || false,
+      eveningSubmitted:  h.evening_submitted || false,
+      studySubject:      h.study_subject     || null,
+      studyEntries:      h.study_entries     || [],
+      qbankEntries:      h.qbank_entries     || [],
+      revisedItems:      h.revised_items     || [],
+      timeTracking:      h.time_tracking     || null,
+      submittedAt:       h.submitted_at      || null,
+    };
+  });
+
+  return data;
+}
+
+// ─── LOADING OVERLAY ──────────────────────────────────────────
 function _showLoadingOverlay(show) {
   let el = document.getElementById("cloud-loading-overlay");
   if (!el && show) {
@@ -145,7 +411,6 @@ function _showLoadingOverlay(show) {
         <div style="color:#94a3b8;font-size:13px;">Syncing your data...</div>
       </div>
     `;
-    // Add keyframe if not present
     if (!document.getElementById("spin-style")) {
       let s = document.createElement("style");
       s.id = "spin-style";
@@ -180,7 +445,7 @@ async function logout() {
 
 // ─── INIT ─────────────────────────────────────────────────────
 async function checkUser() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const user = await _getUser();
 
   let greetingEl = document.getElementById("userGreeting");
   let statusEl   = document.getElementById("authStatus");
@@ -194,9 +459,7 @@ async function checkUser() {
     }
     if (statusEl) statusEl.textContent = user.email;
 
-    // Initial online status
     _setOnlineStatus(navigator.onLine);
-
     await loadFromCloud();
     await setupRealtime();
   } else {
@@ -208,39 +471,54 @@ async function checkUser() {
 }
 
 function renderAll() {
-  if (typeof renderStatus === "function") renderStatus();
-  if (typeof renderSubjects === "function") renderSubjects();
-  if (typeof renderSavedPlan === "function") renderSavedPlan();
+  if (typeof renderStatus          === "function") renderStatus();
+  if (typeof renderSubjects        === "function") renderSubjects();
+  if (typeof renderSavedPlan       === "function") renderSavedPlan();
   if (typeof populateAllEveningSelectors === "function") populateAllEveningSelectors();
-  if (typeof renderHeatmap === "function") renderHeatmap();
-  if (typeof renderQbank === "function") renderQbank();
-  if (typeof renderAnalytics === "function") renderAnalytics();
-  if (typeof renderEditor === "function") renderEditor();
-  if (typeof renderProfile === "function") renderProfile();
+  if (typeof renderHeatmap         === "function") renderHeatmap();
+  if (typeof renderQbank           === "function") renderQbank();
+  if (typeof renderAnalytics       === "function") renderAnalytics();
+  if (typeof renderEditor          === "function") renderEditor();
+  if (typeof renderProfile         === "function") renderProfile();
 }
 
 // ─── REALTIME ─────────────────────────────────────────────────
+// Listen on chapters table for the most granular real-time changes
 let realtimeChannel = null;
 
 async function setupRealtime() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const user = await _getUser();
   if (!user) return;
   if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
 
   realtimeChannel = supabaseClient
-    .channel("study-data-listener")
+    .channel("normalized-data-listener")
     .on(
       "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "study_data", filter: `user_id=eq.${user.id}` },
-      async (payload) => {
-        let incoming = payload.new.data;
-        if (typeof incoming === "string") incoming = JSON.parse(incoming);
-        // Task #1: use smart merge on realtime updates too
-        if (!studyData.updatedAt || new Date(incoming.updatedAt) > new Date(studyData.updatedAt)) {
-          studyData = mergeData(studyData, migrateData(incoming));
-          localStorage.setItem("studyData", JSON.stringify(studyData));
-          renderAll();
-        }
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "user_meta",
+        filter: `user_id=eq.${user.id}`
+      },
+      async () => {
+        // Reload from cloud on any user_meta change (settings, plan, etc.)
+        await loadFromCloud();
+        renderAll();
+      }
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "chapters",
+        filter: `user_id=eq.${user.id}`
+      },
+      async () => {
+        // Reload when any chapter changes (covers multi-device study)
+        await loadFromCloud();
+        renderAll();
       }
     )
     .subscribe();
