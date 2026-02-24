@@ -1124,51 +1124,8 @@ async function bulkConfirmImport() {
   _showLoadingOverlay(true);
   
   try {
-    for (const name of keys) {
-      const subjectData = _bulkSubjects[name];
-      
-      // Check if subject exists
-      if (studyData.subjects[name]) {
-        // Subject exists - add units to existing subject
-        for (const unit of subjectData.units) {
-          const success = await addUnitDirect(name, unit.name, unit.questionCount || 0);
-          if (!success) {
-            _showLoadingOverlay(false);
-            alert(`Failed to add unit "${unit.name}" to existing subject "${name}"`);
-            return;
-          }
-          
-          // Get the index of the newly added unit
-          const unitIndex = studyData.subjects[name].units.length - 1;
-          
-          // Add chapters to this unit
-          for (const chapter of unit.chapters) {
-            await addChapterDirect(name, unitIndex, chapter.name, chapter.startPage || 0, chapter.endPage || 0);
-          }
-        }
-      } else {
-        // New subject - create it first
-        const success = await addSubjectDirect(name, subjectData.size);
-        if (!success) {
-          _showLoadingOverlay(false);
-          alert(`Failed to create subject "${name}"`);
-          return;
-        }
-        
-        // Add all units
-        for (const unit of subjectData.units) {
-          await addUnitDirect(name, unit.name, unit.questionCount || 0);
-          
-          // Get the index of the newly added unit
-          const unitIndex = studyData.subjects[name].units.length - 1;
-          
-          // Add chapters to this unit
-          for (const chapter of unit.chapters) {
-            await addChapterDirect(name, unitIndex, chapter.name, chapter.startPage || 0, chapter.endPage || 0);
-          }
-        }
-      }
-    }
+    // Use optimized bulk import function (batch inserts instead of individual)
+    await bulkImportSubjectsDirect(_bulkSubjects);
     
     // Reload from Supabase to sync everything
     await loadEditorDataDirect();
@@ -1176,7 +1133,12 @@ async function bulkConfirmImport() {
     _showLoadingOverlay(false);
     closeBulkModal();
     renderEditor();
-    alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
+    
+    const totalUnits = Object.values(_bulkSubjects).reduce((sum, s) => sum + s.units.length, 0);
+    const totalChapters = Object.values(_bulkSubjects).reduce((sum, s) => 
+      sum + s.units.reduce((unitSum, u) => unitSum + u.chapters.length, 0), 0);
+    
+    alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""}, ${totalUnits} units, ${totalChapters} chapters successfully.`);
     
   } catch (err) {
     console.error("Bulk import error:", err);
