@@ -171,18 +171,22 @@
 <script src="utils.js"></script>
 <script src="data.js"></script>
 <script src="revisionEngine.js"></script>
-<script src="editor.js"></script>
 <script src="supabase.js"></script>
+<script src="editorDirect.js"></script>
+<script src="editor.js"></script>
 <script src="cardSync.js"></script>
 <script src="noteSync.js"></script>
 <script>
   // Read URL param to decide which tab to show on load
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
+    // Load editor data directly from Supabase (no localStorage)
+    await loadEditorDataDirect();
+    
     let tab = new URLSearchParams(window.location.search).get("tab") || "editor";
     // Highlight active nav
     if (tab === "qbank") {
-      document.getElementById("navQbank").classList.add("active");
-      document.getElementById("navEditor").classList.remove("active");
+      document.getElementById("navQbank")?.classList.add("active");
+      document.getElementById("navEditor")?.classList.remove("active");
     }
     switchTab(tab);
   });

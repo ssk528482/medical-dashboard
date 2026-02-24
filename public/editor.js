@@ -252,41 +252,50 @@ function toggleUnitCollapse(event, subjectName, ui) {
   saveData(); renderEditor();
 }
 
-function addNewSubject() {
+async function addNewSubject() {
   let name = document.getElementById("newSubjectName")?.value.trim();
   let size = document.getElementById("newSubjectSize")?.value || "medium";
   if (!name) return;
-  if (!studyData.subjects[name]) {
-    studyData.subjects[name] = { size, units: [], pointer: { unit: 0, chapter: 0 } };
+  
+  // Use direct Supabase function
+  const success = await addSubjectDirect(name, size);
+  if (success) {
+    document.getElementById("newSubjectName").value = "";
+    await loadEditorDataDirect(); // Reload from Supabase
+    renderEditor();
   }
-  document.getElementById("newSubjectName").value = "";
-  saveData(); renderEditor();
 }
 
-function deleteSubject(name) {
-  if (!confirm(`Delete "${name}" and all its units/chapters?`)) return;
-  delete studyData.subjects[name];
-  saveData(); renderEditor();
+async function deleteSubject(name) {
+  const success = await deleteSubjectDirect(name);
+  if (success) {
+    await loadEditorDataDirect();
+    renderEditor();
+  }
 }
 
-function addUnit(subjectName) {
+async function addUnit(subjectName) {
   let input = document.getElementById(`addUnit-${subjectName}`);
   let qInput = document.getElementById(`addUnitQ-${subjectName}`);
   let name = input?.value.trim();
   if (!name) return;
   let qCount = parseInt(qInput?.value) || 0;
-  let unit = makeUnitObj(name, qCount);
-  studyData.subjects[subjectName].units.push(unit);
-  input.value = "";
-  if (qInput) qInput.value = "";
-  saveData(); renderEditor();
+  
+  const success = await addUnitDirect(subjectName, name, qCount);
+  if (success) {
+    input.value = "";
+    if (qInput) qInput.value = "";
+    await loadEditorDataDirect();
+    renderEditor();
+  }
 }
 
-function deleteUnit(subjectName, ui) {
-  if (!confirm("Delete this unit and all its chapters?")) return;
-  studyData.subjects[subjectName].units.splice(ui, 1);
-  fixPointer(subjectName);
-  saveData(); renderEditor();
+async function deleteUnit(subjectName, ui) {
+  const success = await deleteUnitDirect(subjectName, ui);
+  if (success) {
+    await loadEditorDataDirect();
+    renderEditor();
+  }
 }
 
 function editUnitQuestionCount(subjectName, ui) {
@@ -434,7 +443,7 @@ function markUnitRevised(subjectName, ui, level) {
 
 // ─── Chapter Actions ──────────────────────────────────────────
 
-function addChapter(subjectName, ui) {
+async function addChapter(subjectName, ui) {
   let input  = document.getElementById(`addCh-${subjectName}-${ui}`);
   let sInput = document.getElementById(`addChS-${subjectName}-${ui}`);
   let eInput = document.getElementById(`addChE-${subjectName}-${ui}`);
@@ -442,17 +451,23 @@ function addChapter(subjectName, ui) {
   if (!name) return;
   let startPage = parseInt(sInput?.value) || 0;
   let endPage   = parseInt(eInput?.value) || 0;
-  studyData.subjects[subjectName].units[ui].chapters.push(makeChapterObj(name, startPage, endPage));
-  input.value = "";
-  if (sInput) sInput.value = "";
-  if (eInput) eInput.value = "";
-  saveData(); renderEditor();
+  
+  const success = await addChapterDirect(subjectName, ui, name, startPage, endPage);
+  if (success) {
+    input.value = "";
+    if (sInput) sInput.value = "";
+    if (eInput) eInput.value = "";
+    await loadEditorDataDirect();
+    renderEditor();
+  }
 }
 
-function deleteChapter(subjectName, ui, ci) {
-  studyData.subjects[subjectName].units[ui].chapters.splice(ci, 1);
-  fixPointer(subjectName);
-  saveData(); renderEditor();
+async function deleteChapter(subjectName, ui, ci) {
+  const success = await deleteChapterDirect(subjectName, ui, ci);
+  if (success) {
+    await loadEditorDataDirect();
+    renderEditor();
+  }
 }
 
 function setChapterDifficulty(subjectName, ui, ci, level) {
