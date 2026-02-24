@@ -549,7 +549,8 @@ function _showLoadingOverlay(show) {
   if (!el && show) {
     // Check if nav is collapsed to adjust left position
     const navCollapsed = document.body.classList.contains('nav-collapsed');
-    const leftOffset = navCollapsed ? '64px' : '220px';
+    const isMobile = window.innerWidth <= 768;
+    const leftOffset = isMobile ? '0' : (navCollapsed ? '64px' : '220px');
     
     el = document.createElement("div");
     el.id = "cloud-loading-overlay";
@@ -582,18 +583,29 @@ function _showLoadingOverlay(show) {
     }
     document.body.appendChild(el);
     
-    // Observe body class changes to update overlay position when nav toggles
+    // Observe body class changes and window resize to update overlay position
     if (!window._navObserver) {
       window._navObserver = new MutationObserver(() => {
         const overlay = document.getElementById("cloud-loading-overlay");
         if (overlay && overlay.style.display !== 'none') {
           const navCollapsed = document.body.classList.contains('nav-collapsed');
-          overlay.style.left = navCollapsed ? '64px' : '220px';
+          const isMobile = window.innerWidth <= 768;
+          overlay.style.left = isMobile ? '0' : (navCollapsed ? '64px' : '220px');
         }
       });
       window._navObserver.observe(document.body, {
         attributes: true,
         attributeFilter: ['class']
+      });
+      
+      // Also handle window resize for mobile
+      window.addEventListener('resize', () => {
+        const overlay = document.getElementById("cloud-loading-overlay");
+        if (overlay && overlay.style.display !== 'none') {
+          const navCollapsed = document.body.classList.contains('nav-collapsed');
+          const isMobile = window.innerWidth <= 768;
+          overlay.style.left = isMobile ? '0' : (navCollapsed ? '64px' : '220px');
+        }
       });
     }
     
@@ -604,7 +616,8 @@ function _showLoadingOverlay(show) {
   } else if (el && show) {
     // Update left position if nav state changed
     const navCollapsed = document.body.classList.contains('nav-collapsed');
-    const leftOffset = navCollapsed ? '64px' : '220px';
+    const isMobile = window.innerWidth <= 768;
+    const leftOffset = isMobile ? '0' : (navCollapsed ? '64px' : '220px');
     el.style.left = leftOffset;
     el.style.display = "flex";
     requestAnimationFrame(() => {
