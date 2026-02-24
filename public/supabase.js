@@ -438,33 +438,19 @@ function _reconstructStudyData(meta, subjectRows, unitRows, chapterRows, history
 // ─── LOADING OVERLAY ──────────────────────────────────────────
 function _showLoadingOverlay(show) {
   let el = document.getElementById("cloud-loading-overlay");
-  
   if (!el && show) {
-    // Check if nav is collapsed to adjust left position
-    const navCollapsed = document.body.classList.contains('nav-collapsed');
-    const leftOffset = navCollapsed ? '64px' : '220px';
-    
     el = document.createElement("div");
     el.id = "cloud-loading-overlay";
     el.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: ${leftOffset};
-      right: 0;
-      bottom: 0;
-      background: rgba(2, 6, 23, 0.95);
-      z-index: 9998;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: opacity 0.3s, left 0.3s;
-      opacity: 0;
+      position:fixed;inset:0;background:rgba(2,6,23,0.75);
+      z-index:9998;display:flex;align-items:center;justify-content:center;
+      transition:opacity 0.3s;
     `;
     el.innerHTML = `
       <div style="text-align:center;">
-        <div style="width:48px;height:48px;border:4px solid #1e3a5f;border-top-color:#3b82f6;
-          border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px;"></div>
-        <div style="color:#e2e8f0;font-size:15px;font-weight:500;">Syncing your data...</div>
+        <div style="width:36px;height:36px;border:3px solid #1e3a5f;border-top-color:#3b82f6;
+          border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
+        <div style="color:#94a3b8;font-size:13px;">Syncing your data...</div>
       </div>
     `;
     if (!document.getElementById("spin-style")) {
@@ -474,42 +460,10 @@ function _showLoadingOverlay(show) {
       document.head.appendChild(s);
     }
     document.body.appendChild(el);
-    
-    // Observe body class changes to update overlay position when nav toggles
-    if (!window._navObserver) {
-      window._navObserver = new MutationObserver(() => {
-        const overlay = document.getElementById("cloud-loading-overlay");
-        if (overlay && overlay.style.display !== 'none') {
-          const navCollapsed = document.body.classList.contains('nav-collapsed');
-          overlay.style.left = navCollapsed ? '64px' : '220px';
-        }
-      });
-      window._navObserver.observe(document.body, {
-        attributes: true,
-        attributeFilter: ['class']
-      });
-    }
-    
-    // Force reflow and fade in immediately
-    requestAnimationFrame(() => {
-      if (el) el.style.opacity = "1";
-    });
-  } else if (el && show) {
-    // Update left position if nav state changed
-    const navCollapsed = document.body.classList.contains('nav-collapsed');
-    const leftOffset = navCollapsed ? '64px' : '220px';
-    el.style.left = leftOffset;
-    el.style.display = "flex";
-    requestAnimationFrame(() => {
-      if (el) el.style.opacity = "1";
-    });
   }
-  
-  if (el && !show) {
-    el.style.opacity = "0";
-    setTimeout(() => {
-      if (el) el.style.display = "none";
-    }, 300);
+  if (el) {
+    el.style.opacity = show ? "1" : "0";
+    if (!show) setTimeout(() => el?.remove(), 300);
   }
 }
 
@@ -613,12 +567,3 @@ async function setupRealtime() {
 }
 
 document.addEventListener("DOMContentLoaded", checkUser);
-
-// Show loading overlay immediately when script loads (before DOMContentLoaded)
-if (document.readyState === 'loading') {
-  // DOM is still loading, show overlay immediately
-  _showLoadingOverlay(true);
-} else {
-  // DOM already loaded (script loaded late), check user immediately
-  checkUser();
-}
