@@ -1071,17 +1071,19 @@ function toggleaddSubjectCollapse(buttonElement, contentId) {
 
 async function _goToReviewChapter(subject, unit, chapter) {
   try {
-    // Fetch all cards
-    let { data } = await fetchCards({ suspended: false });
-    if (!data || !data.length) return;
+    // Fetch due cards using the proper function
+    let { data: dueCards } = await fetchDueCards(today());
+    if (!dueCards || !dueCards.length) {
+      alert('No cards due for review');
+      return;
+    }
 
-    // Filter by subject/unit/chapter and only due cards
-    let filtered = data.filter(c => {
+    // Filter by subject/unit/chapter
+    let filtered = dueCards.filter(c => {
       if (c.subject !== subject) return false;
       if (c.unit !== unit) return false;
       if (c.chapter !== chapter) return false;
-      // Check if card is due
-      return c.interval_days > 0 && c.next_review_date <= today();
+      return true;
     });
 
     if (!filtered.length) {
@@ -1095,6 +1097,7 @@ async function _goToReviewChapter(subject, unit, chapter) {
     window.location.href = 'review.html?mode=filtered';
   } catch (err) {
     console.error('Error navigating to review:', err);
+    alert('Error loading cards. Please try again.');
   }
 }
 
@@ -1102,7 +1105,10 @@ async function _goToBrowseChapter(subject, unit, chapter) {
   try {
     // Fetch all cards
     let { data } = await fetchCards({ suspended: false });
-    if (!data || !data.length) return;
+    if (!data || !data.length) {
+      alert('No cards found');
+      return;
+    }
 
     // Filter by subject/unit/chapter
     let filtered = data.filter(c => {
@@ -1123,6 +1129,7 @@ async function _goToBrowseChapter(subject, unit, chapter) {
     window.location.href = 'review.html?mode=filtered';
   } catch (err) {
     console.error('Error navigating to browse:', err);
+    alert('Error loading cards. Please try again.');
   }
 }
 
