@@ -504,6 +504,173 @@ async function updateUnitQbankStatsDirect(subjectName, unitIndex, qbankStats, qb
   }
 }
 
+// ─── BULK IMPORT (OPTIMIZED) ───────────────────────────────────
+async function bulkImportSubjectsDirect(bulkSubjects) {
+  const user = await _getUser();
+  if (!user) {
+    alert("Not logged in");
+    return false;
+  }
+
+  try {
+    const uid = user.id;
+    const now = new Date().toISOString();
+    
+    // Prepare all data in batches
+    const subjectsToInsert = [];
+    const unitsToInsert = [];
+    const chaptersToInsert = [];
+    
+    for (const [subjectName, subjectData] of Object.entries(bulkSubjects)) {
+      // Check if subject already exists
+      const { data: existingSubject } = await supabaseClient
+        .from("subjects")
+        .select("id")
+        .eq("user_id", uid)
+        .eq("name", subjectName)
+        .single();
+      
+      let subjectId;
+      
+      if (existingSubject) {
+        // Subject exists, use existing ID
+        subjectId = existingSubject.id;
+      } else {
+        // New subject, prepare for batch insert
+        subjectsToInsert.push({
+          user_id: uid,
+          name: subjectName,
+          size: subjectData.size,
+          updated_at: now
+        });
+      }
+    }
+    
+    // Insert all new subjects at once
+    let insertedSubjects = [];
+    if (subjectsToInsert.length > 0) {
+      const { data, error } = await supabaseClient
+        .from("subjects")
+        .insert(subjectsToInsert)
+        .select("id, name");
+      
+      if (error) throw error;
+      insertedSubjects = data;
+    }
+    
+    // Get all subject IDs (existing + newly inserted)
+    const { data: allSubjects } = await supabaseClient
+      .from("subjects")
+      .select("id, name")
+      .eq("user_id", uid)
+      .in("name", Object.keys(bulkSubjects));
+    
+    const subjectIdMap = {};
+    allSubjects.forEach(s => {
+      subjectIdMap[s.name] = s.id;
+    });
+    
+    // Prepare units for batch insert
+    for (const [subjectName, subjectData] of Object.entries(bulkSubjects)) {
+      const subjectId = subjectIdMap[subjectName];
+      
+      // Get current max sort_order for this subject
+      const { data: existingUnits } = await supabaseClient
+        .from("units")
+        .select("sort_order")
+        .eq("subject_id", subjectId)
+        .order("sort_order", { ascending: false })
+        .limit(1);
+      
+      let sortOrder = (existingUnits && existingUnits[0]) ? existingUnits[0].sort_order + 1 : 0;
+      
+      subjectData.units.forEach(unit => {
+        unitsToInsert.push({
+          user_id: uid,
+          subject_id: subjectId,
+          subject_name: subjectName,
+          name: unit.name,
+          sort_order: sortOrder++,
+          question_count: unit.questionCount || 0,
+          qbank_total: 0,
+          qbank_correct: 0,
+          qbank_done: false,
+          collapsed: false,
+          updated_at: now
+        });
+      });
+    }
+    
+    // Insert all units at once
+    const { data: insertedUnits, error: unitsError } = await supabaseClient
+      .from("units")
+      .insert(unitsToInsert)
+      .select("id, subject_name, name");
+    
+    if (unitsError) throw unitsError;
+    
+    // Create unit ID map
+    const unitIdMap = {};
+    insertedUnits.forEach(u => {
+      const key = `${u.subject_name}||${u.name}`;
+      unitIdMap[key] = u.id;
+    });
+    
+    // Prepare chapters for batch insert
+    for (const [subjectName, subjectData] of Object.entries(bulkSubjects)) {
+      subjectData.units.forEach(unit => {
+        const unitKey = `${subjectName}||${unit.name}`;
+        const unitId = unitIdMap[unitKey];
+        
+        let chapterSortOrder = 0;
+        unit.chapters.forEach(chapter => {
+          const sp = parseInt(chapter.startPage) || 0;
+          const ep = parseInt(chapter.endPage) || 0;
+          const pageCount = (sp > 0 && ep >= sp) ? (ep - sp + 1) : 0;
+          
+          chaptersToInsert.push({
+            user_id: uid,
+            unit_id: unitId,
+            subject_name: subjectName,
+            unit_name: unit.name,
+            name: chapter.name,
+            sort_order: chapterSortOrder++,
+            status: "not-started",
+            difficulty: "medium",
+            difficulty_factor: 2.5,
+            missed_revisions: 0,
+            start_page: sp,
+            end_page: ep,
+            page_count: pageCount,
+            completed_on: null,
+            last_reviewed_on: null,
+            next_revision: null,
+            revision_index: 0,
+            revision_dates: [],
+            updated_at: now
+          });
+        });
+      });
+    }
+    
+    // Insert all chapters at once
+    if (chaptersToInsert.length > 0) {
+      const { error: chaptersError } = await supabaseClient
+        .from("chapters")
+        .insert(chaptersToInsert);
+      
+      if (chaptersError) throw chaptersError;
+    }
+    
+    console.log(`[Bulk Import] Inserted ${subjectsToInsert.length} subjects, ${unitsToInsert.length} units, ${chaptersToInsert.length} chapters`);
+    return true;
+    
+  } catch (err) {
+    console.error("Bulk import error:", err);
+    throw err;
+  }
+}
+
 // ─── LOAD DIRECTLY FROM SUPABASE ──────────────────────────────
 async function loadEditorDataDirect() {
   const user = await _getUser();
