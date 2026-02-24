@@ -199,25 +199,23 @@ function _getBadgeHtml(subject, unit, chapter) {
           + 'style="font-size:10px;margin-left:5px;text-decoration:none;opacity:0.35;" title="Create note">📄</a>';
   }
 
-  // Card badge — links to flashcards.html create tab
+  // Card badge — uses sessionStorage approach like browse.js
   if (cards) {
-    let cardHref = "review.html?tab=" + (cards.due > 0 ? "review" : "browse")
-                 + "&subject=" + encodeURIComponent(subject)
-                 + "&unit="    + encodeURIComponent(unit)
-                 + "&chapter=" + encodeURIComponent(chapter);
     let badgeStyle = cards.due > 0
       ? "background:#ef4444;color:#fff;"
       : "background:#1e3a5f;color:#93c5fd;";
-    html += '<a href="' + cardHref + '" onclick="event.stopPropagation()" '
+    let onClick = cards.due > 0
+      ? `_goToReviewChapter('${esc(subject)}','${esc(unit)}','${esc(chapter)}')`
+      : `_goToBrowseChapter('${esc(subject)}','${esc(unit)}','${esc(chapter)}')`;
+    html += '<a href="#" onclick="event.stopPropagation();event.preventDefault();' + onClick + ';return false;" '
           + 'style="font-size:9px;margin-left:3px;padding:1px 5px;border-radius:8px;'
           + badgeStyle + 'text-decoration:none;font-weight:700;" title="'
           + (cards.due > 0 ? cards.due + " due" : cards.total + " cards") + '">'
           + (cards.due > 0 ? cards.due + "🃏" : cards.total + "🃏") + '</a>';
   } else {
-    // No cards yet — quick-add link
-    let createHref = "create.html?tab=create"
-                   + "&subject=" + encodeURIComponent(subject)
-                   + "&unit="    + encodeURIComponent(unit)
+    // No cards yet — link to create page with pre-filled fields
+    let createHref = "create.html?subject=" + encodeURIComponent(subject)
+                   + "&unit=" + encodeURIComponent(unit)
                    + "&chapter=" + encodeURIComponent(chapter);
     html += '<a href="' + createHref + '" onclick="event.stopPropagation()" '
           + 'style="font-size:9px;margin-left:3px;padding:1px 5px;border-radius:8px;'
@@ -1063,6 +1061,68 @@ function toggleaddSubjectCollapse(buttonElement, contentId) {
   } else {
     contentDiv.style.display = "none";
     buttonElement.innerHTML = "▶";
+  }
+}
+
+
+// ─── Flashcard Navigation Helpers ─────────────────────────────────────────
+// These functions filter cards by subject/unit/chapter and navigate to review/browse
+// using the same sessionStorage approach as browse.js
+
+async function _goToReviewChapter(subject, unit, chapter) {
+  try {
+    // Fetch all cards
+    let { data } = await fetchCards({ suspended: false });
+    if (!data || !data.length) return;
+
+    // Filter by subject/unit/chapter and only due cards
+    let filtered = data.filter(c => {
+      if (c.subject !== subject) return false;
+      if (c.unit !== unit) return false;
+      if (c.chapter !== chapter) return false;
+      // Check if card is due
+      return c.interval_days > 0 && c.next_review_date <= today();
+    });
+
+    if (!filtered.length) {
+      alert('No cards due for review in this chapter');
+      return;
+    }
+
+    // Store card IDs in sessionStorage and navigate
+    let cardIds = filtered.map(c => c.id);
+    sessionStorage.setItem('reviewCardIds', JSON.stringify(cardIds));
+    window.location.href = 'review.html?mode=filtered';
+  } catch (err) {
+    console.error('Error navigating to review:', err);
+  }
+}
+
+async function _goToBrowseChapter(subject, unit, chapter) {
+  try {
+    // Fetch all cards
+    let { data } = await fetchCards({ suspended: false });
+    if (!data || !data.length) return;
+
+    // Filter by subject/unit/chapter
+    let filtered = data.filter(c => {
+      if (c.subject !== subject) return false;
+      if (c.unit !== unit) return false;
+      if (c.chapter !== chapter) return false;
+      return true;
+    });
+
+    if (!filtered.length) {
+      alert('No cards found in this chapter');
+      return;
+    }
+
+    // Store card IDs in sessionStorage and navigate
+    let cardIds = filtered.map(c => c.id);
+    sessionStorage.setItem('reviewCardIds', JSON.stringify(cardIds));
+    window.location.href = 'review.html?mode=filtered';
+  } catch (err) {
+    console.error('Error navigating to browse:', err);
   }
 }
 
