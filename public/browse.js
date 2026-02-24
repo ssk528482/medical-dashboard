@@ -6,12 +6,13 @@
 
 // ── State ─────────────────────────────────────────────────────────
 let _all          = [];        // all fetched cards
-let _subTab       = 'new';     // new | revise | all
+let _subTab       = 'all';     // new | revise | all (default to 'all' for filtered mode)
 let _selectMode   = false;
 let _selected     = new Set(); // selected card ids
 let _confirmFn    = null;
 let _editCardId   = null;
 let _csvParsed    = [];
+let _isFiltered   = false;     // true when launched from editor with specific card ids
 
 // ── ID registry: maps short keys to arrays of card IDs ────────────
 // Avoids embedding JSON arrays in onclick attributes (causes SyntaxErrors
@@ -26,7 +27,36 @@ function _getIds(key) { return _idRegistry[key] || []; }
 
 // ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
-  await _load();
+  // Check if launched with filtered card ids from editor page
+  let params = new URLSearchParams(window.location.search);
+  _isFiltered = params.get('mode') === 'filtered';
+
+  if (_isFiltered) {
+    // Load specific cards passed via sessionStorage
+    let ids = [];
+    try { ids = JSON.parse(sessionStorage.getItem('browseCardIds') || '[]'); } catch (_) {}
+    sessionStorage.removeItem('browseCardIds');
+
+    if (ids.length) {
+      // Fetch all cards and filter to only the specified IDs
+      let { data } = await fetchCards({ suspended: false });
+      _all = (data || []).filter(c => ids.includes(c.id));
+      _subTab = 'all'; // Show all filtered cards
+      // Activate the "All" tab
+      document.getElementById('tab-all')?.classList.add('active');
+      document.getElementById('tab-new')?.classList.remove('active');
+      document.getElementById('tab-revise')?.classList.remove('active');
+    } else {
+      _isFiltered = false;
+    }
+  }
+
+  if (!_isFiltered) {
+    await _load();
+  } else {
+    _render();
+  }
+  
   _initNavBadge();
 
   // Close menus on outside click
