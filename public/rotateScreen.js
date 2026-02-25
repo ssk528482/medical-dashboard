@@ -39,34 +39,57 @@
   }
 
   // ── Touch-scroll fix for rotated mode on touch devices ────────────────────
-  // When html is CSS-rotated 90deg clockwise:
-  //   visual "down" swipe = finger moves RIGHT in screen coords (clientX increases, dx > 0)
-  //   → body.scrollTop should INCREASE (scroll down)
-  // Direction fix: scrollTop += dx  (not -dx)
-  // Momentum: track velocity at touchend, decelerate with rAF for natural iOS feel.
-  var _tx = 0, _velX = 0, _lastT = 0, _rafID = null;
+  // When html is CSS-rotated 90deg clockwise every scrollable element — body,
+  // nav, modals, notes panels, etc. — has its axis remapped:
+  //   visual "down" swipe = finger moves RIGHT in screen coords (dx > 0)
+  //   → target.scrollTop should INCREASE
+  //
+  // Strategy:
+  //   touchstart → walk the DOM from the touched element upward to find the
+  //                nearest ancestor (or body) that can actually scroll vertically.
+  //   touchmove  → route dx → that element's scrollTop (with preventDefault so
+  //                the browser doesn't try its own (broken) scroll).
+  //   touchend   → launch momentum / inertia on the same target.
+
+  var _tx = 0, _velX = 0, _lastT = 0, _rafID = null, _scrollTarget = null;
+
+  // Walk up from `el` and return the first element whose content overflows
+  // vertically (scrollHeight > clientHeight) with an overflow-y that allows
+  // scrolling. Falls back to document.body.
+  function _findScrollParent(el) {
+    while (el && el !== document.body) {
+      var style = window.getComputedStyle(el);
+      var oy = style.overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return document.body;
+  }
 
   function _stopMomentum() {
     if (_rafID) { cancelAnimationFrame(_rafID); _rafID = null; }
   }
 
   function _runMomentum() {
-    if (Math.abs(_velX) < 0.5) { _rafID = null; return; }
-    document.body.scrollTop += _velX;
-    _velX *= 0.93;                        // friction coefficient — matches iOS feel
+    if (!_scrollTarget || Math.abs(_velX) < 0.5) { _rafID = null; return; }
+    _scrollTarget.scrollTop += _velX;
+    _velX *= 0.93;                          // iOS-like friction
     _rafID = requestAnimationFrame(_runMomentum);
   }
 
   document.addEventListener('touchstart', function (e) {
     if (!_rotated) return;
     _stopMomentum();
-    _tx   = e.touches[0].clientX;
-    _velX = 0;
+    _scrollTarget = _findScrollParent(e.target);
+    _tx    = e.touches[0].clientX;
+    _velX  = 0;
     _lastT = Date.now();
   }, { passive: true });
 
   document.addEventListener('touchmove', function (e) {
-    if (!_rotated) return;
+    if (!_rotated || !_scrollTarget) return;
     var dx  = e.touches[0].clientX - _tx;
     _tx = e.touches[0].clientX;
 
@@ -74,9 +97,9 @@
     var dt  = Math.max(1, now - _lastT);
     _lastT  = now;
 
-    // dx > 0 (swipe right in screen) = swipe DOWN visually → scrollTop increases
-    document.body.scrollTop += dx;
-    _velX = (dx / dt) * 16;              // velocity → scaled to ~60fps frame
+    // dx > 0 (rightward in screen) = downward visually → scrollTop increases
+    _scrollTarget.scrollTop += dx;
+    _velX = (dx / dt) * 16;               // velocity scaled to ~60 fps frame
 
     e.preventDefault();
   }, { passive: false });
