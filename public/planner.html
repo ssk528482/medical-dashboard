@@ -103,6 +103,15 @@
       <button onclick="resetTodayPlan()" style="background:#ef4444;font-size:12px;padding:8px 10px;margin-top:0;">Reset</button>
     </div>
   </div>
+  <!-- #16 Subject pin override -->
+  <div style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+    <label style="font-size:12px;color:#64748b;">📌 Pin subject:</label>
+    <select id="pinSubjectSelect" style="font-size:12px;padding:5px 8px;flex:1;min-width:120px;max-width:200px;">
+      <option value="">Auto (recommended)</option>
+    </select>
+    <button id="pinBtn" onclick="pinSubjectForToday()" style="font-size:12px;padding:6px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2a4f80;margin:0;">📌 Pin</button>
+    <button onclick="unpinSubject()" style="font-size:12px;padding:6px 8px;background:#1e293b;color:#64748b;margin:0;">✕ Unpin</button>
+  </div>
   <div id="planOutput" style="margin-top:10px;"></div>
 </div>
 
@@ -136,12 +145,47 @@
 <script>
   // Init planner page
   document.addEventListener("DOMContentLoaded", function() {
-    swAutoSaveYesterday();
     if (typeof renderSavedPlan    === "function") renderSavedPlan();
     if (typeof renderHeatmap      === "function") renderHeatmap();
     if (typeof renderEveningUpdate === "function") renderEveningUpdate();
     swInit();
+
+    // Populate pin dropdown with current subjects (#16)
+    let sel = document.getElementById("pinSubjectSelect");
+    if (sel && studyData?.subjects) {
+      Object.keys(studyData.subjects).forEach(name => {
+        let opt = document.createElement("option");
+        opt.value = name; opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    }
+    // Restore pinned state
+    if (studyData?.pinnedSubjectDate === (typeof today==="function"?today():"") && studyData?.pinnedSubject) {
+      if (sel) sel.value = studyData.pinnedSubject;
+      let btn = document.getElementById("pinBtn");
+      if (btn) { btn.textContent = "✓ Pinned"; btn.style.background = "#052e16"; btn.style.color = "#4ade80"; }
+    }
   });
+
+  function pinSubjectForToday() {
+    let sel = document.getElementById("pinSubjectSelect");
+    if (!sel?.value) return;
+    studyData.pinnedSubject     = sel.value;
+    studyData.pinnedSubjectDate = (typeof today==="function") ? today() : new Date().toISOString().split("T")[0];
+    if (typeof saveData==="function") saveData();
+    let btn = document.getElementById("pinBtn");
+    if (btn) { btn.textContent = "✓ Pinned"; btn.style.background = "#052e16"; btn.style.color = "#4ade80"; }
+  }
+
+  function unpinSubject() {
+    delete studyData.pinnedSubject;
+    delete studyData.pinnedSubjectDate;
+    if (typeof saveData==="function") saveData();
+    let btn = document.getElementById("pinBtn");
+    if (btn) { btn.textContent = "📌 Pin"; btn.style.background = "#1e3a5f"; btn.style.color = "#93c5fd"; }
+    let sel = document.getElementById("pinSubjectSelect");
+    if (sel) sel.value = "";
+  }
 </script>
 
 <script src="rotateScreen.js"></script>

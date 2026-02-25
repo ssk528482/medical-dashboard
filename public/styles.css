@@ -515,8 +515,27 @@ label {
 
 @media (max-width: 480px) {
   .chapter-row { align-items: flex-start; }
-  .chapter-row .topic-left { flex-basis: 100%; }
-  .chapter-row .topic-actions { flex-basis: 100%; padding-left: 2px; }
+  .chapter-row .topic-left    { flex-basis: 100%; }
+  .chapter-row .topic-actions { flex-basis: 100%; padding-left: 2px; flex-wrap: wrap; }
+
+  /* Unit header: title row full-width, button row wraps below flush-left */
+  .unit-header > div:last-child { justify-content: flex-start !important; }
+
+  /* Always show edit pencil on touch (no hover) */
+  .edit-name-btn { opacity: 0.75; }
+
+  /* Inline rename: fill available width */
+  .inline-rename-input { min-width: 0 !important; width: 100% !important; max-width: 100%; }
+
+  /* Rev bars: hide % number to save space, keep bars */
+  .rev-bar-pct { display: none; }
+
+  /* Reorder buttons: larger touch target */
+  .reorder-btn { padding: 4px 8px; min-height: 30px; }
+
+  /* Subject header: allow full wrap */
+  .subject-header { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+  .subject-title  { flex: 1 1 100%; gap: 6px; }
 }
 
 /* ─── Qbank Unit Row ──────────────────────────────────────── */
@@ -543,6 +562,92 @@ label {
 .topic-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 /* ─── Pills ───────────────────────────────────────────────── */
+/* ── Editor: revision progress bars ─────────────────────────── */
+.rev-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.rev-bar-label {
+  font-size: 10px;
+  font-weight: 700;
+  width: 22px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.rev-bar-track {
+  flex: 1;
+  height: 5px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rev-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.rev-bar-pct {
+  font-size: 10px;
+  color: #64748b;
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
+/* ── Editor: inline rename input ────────────────────────────── */
+.inline-rename-input {
+  background: #0f172a;
+  color: #f1f5f9;
+  border: 1px solid #3b82f6;
+  border-radius: 5px;
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
+}
+/* ── Editor: edit-name pencil button ────────────────────────── */
+.edit-name-btn {
+  background: transparent;
+  border: none;
+  color: #475569;
+  font-size: 11px;
+  padding: 0 3px;
+  margin: 0;
+  cursor: pointer;
+  line-height: 1;
+  opacity: 0.6;
+}
+.edit-name-btn:hover { opacity: 1; color: #93c5fd; }
+/* ── Editor: reorder up/down arrows ─────────────────────────── */
+.reorder-btn {
+  background: transparent;
+  border: 1px solid #1e293b;
+  color: #475569;
+  font-size: 11px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  margin: 0;
+  cursor: pointer;
+  line-height: 1;
+}
+.reorder-btn:hover { border-color: #334155; color: #94a3b8; }
+/* ── Editor: size badge ──────────────────────────────────────── */
+.size-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+/* ── Editor: overdue chapter row ─────────────────────────────── */
+.chapter-overdue {
+  background: rgba(239,68,68,0.07);
+  border-left: 2px solid #ef4444;
+}
+
 .pill {
   padding: 5px 8px;
   border-radius: 6px;
@@ -741,6 +846,17 @@ label {
   input, select { min-height: 40px; font-size: 13px; padding: 9px 10px; }
 
   .pill    { font-size: 10px; padding: 4px 6px; }
+
+  /* Very small: tighter rev-bar labels */
+  .rev-bar-label { font-size: 9px; width: 16px; }
+
+  /* Shrink add-chapter page inputs so they don't overflow */
+  input[id^="addChS-"], input[id^="addChE-"] { width: 52px !important; }
+
+  /* Smaller reorder + pencil buttons */
+  .reorder-btn    { font-size: 10px; padding: 3px 5px; min-height: 28px; }
+  .edit-name-btn  { font-size: 10px; }
+  .size-badge     { font-size: 8px; padding: 1px 5px; }
 
 }
 

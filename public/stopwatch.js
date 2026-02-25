@@ -141,9 +141,7 @@ function swAutoSaveYesterday() {
   if (!plan.stopwatches) return;
   let key = plan.date;
   if (!studyData.dailyHistory) studyData.dailyHistory = {};
-  if (!studyData.dailyHistory[key]) studyData.dailyHistory[key] = {};
-  let hist = studyData.dailyHistory[key];
-  if (hist.timeTracking) return;
+
   // Freeze any still-running timers
   SW_KEYS.forEach(k => {
     let sw = plan.stopwatches[k]; if (!sw) return;
@@ -152,12 +150,42 @@ function swAutoSaveYesterday() {
       sw.running = false; sw.startedAt = null;
     }
   });
+
+  // Build time-tracking summary
   let tt = {};
+  let anyMeaningful = false;
   SW_KEYS.forEach(type => {
     let sw = plan.stopwatches[type]; if (!sw) return;
     let target = sw.targetSecs||0, elapsed = sw.accumulated||0;
     tt[type] = { targetMins: Math.round(target/60), actualMins: Math.round(elapsed/60), overUnder: Math.round((elapsed-target)/60) };
+    if (tt[type].actualMins > 5) anyMeaningful = true;
   });
+
+  let hist = studyData.dailyHistory[key];
+
+  // ── Purge stale stub: entry exists but has no real data ──────────────────
+  // (created by a previous run of this function with no meaningful time)
+  if (hist && !hist.eveningSubmitted &&
+      !(hist.studyEntries?.length) && !(hist.qbankEntries?.length) && !(hist.revisedItems?.length) &&
+      !anyMeaningful) {
+    delete studyData.dailyHistory[key];
+    if (typeof deleteHistoryRow === "function") deleteHistoryRow(key);
+    saveData();
+    return;
+  }
+
+  // Only attach time tracking if:
+  // (a) an evening report was already submitted for that day, OR
+  // (b) meaningful time (>5 min) was tracked — but DON'T create a new entry from nothing
+  if (!hist) {
+    if (!anyMeaningful) return;
+    studyData.dailyHistory[key] = {};
+    hist = studyData.dailyHistory[key];
+  }
+
+  // Don't overwrite timeTracking that's already there
+  if (hist.timeTracking) return;
+
   hist.timeTracking = tt;
   if (tt.study?.actualMins    > 5) hist.study    = hist.study    || true;
   if (tt.qbank?.actualMins    > 5) hist.qbank    = hist.qbank    || true;

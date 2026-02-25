@@ -32,7 +32,19 @@ async function saveToCloud() {
   }, 1500);
 }
 
-// ─── SAVE — decomposes studyData into 6 tables ─────────────────────────────
+// ─── Delete a single daily_history row from cloud ───────────────────────────
+async function deleteHistoryRow(dateKey) {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return;
+  const { error } = await supabaseClient
+    .from("daily_history")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("date", dateKey);
+  if (error) console.error("deleteHistoryRow error:", error);
+}
+
+// ─── Save — decomposes studyData into 6 tables ─────────────────────────────
 async function _doSaveToCloud() {
   const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) return;
@@ -201,7 +213,11 @@ async function _doSaveToCloud() {
       subjectPointers[name] = s.pointer || { unit: 0, chapter: 0 };
     });
 
-    const histRows = Object.entries(studyData.dailyHistory || {}).map(([date, h]) => ({
+    const histRows = Object.entries(studyData.dailyHistory || {})
+      // Skip empty stubs: must have at least one real field set
+      .filter(([, h]) => h.eveningSubmitted || h.study || h.qbank || h.revision ||
+                         (h.studyEntries?.length > 0) || (h.qbankEntries?.length > 0) || (h.revisedItems?.length > 0))
+      .map(([date, h]) => ({
       user_id:           uid,
       date,
       study:             h.study             || false,
@@ -447,6 +463,8 @@ async function checkUser() {
 }
 
 function renderAll() {
+  // Run after cloud load so studyData is fully populated
+  if (typeof swAutoSaveYesterday === "function") swAutoSaveYesterday();
   if (typeof renderStatus               === "function") renderStatus();
   if (typeof renderSubjects             === "function") renderSubjects();
   if (typeof renderSavedPlan            === "function") renderSavedPlan();

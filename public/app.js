@@ -345,7 +345,7 @@ function renderEveningUpdate() {
         ${timeHtml}
         ${studyLines || '<div style="font-size:12px;color:#475569;padding:7px 0;">No study logged</div>'}
         ${qbankLines || '<div style="font-size:12px;color:#475569;padding:7px 0;">No Qbank logged</div>'}
-        ${revCount > 0 ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;"><span style="font-size:15px;">🔁</span><div style="font-size:13px;">${revCount} revision${revCount>1?"s":""} completed</div></div>` : ""}
+        ${revCount > 0 ? `<div style="padding:4px 0;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;"><span style="font-size:15px;">🔁</span><span style="font-size:13px;font-weight:600;">${revCount} revision${revCount>1?"s":""} completed</span></div>${(hist.revisedItems||[]).map(r=>`<div style="font-size:11px;color:#94a3b8;padding:2px 0 2px 22px;">• ${r.subjectName} → ${r.topicName||''}</div>`).join("")}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
           <div style="flex:1;min-width:70px;background:#0a2b15;border-radius:8px;padding:9px;text-align:center;">
             <div style="font-size:18px;font-weight:700;color:#4ade80;">${topicsCount}</div>
@@ -361,11 +361,14 @@ function renderEveningUpdate() {
           </div>
         </div>
       </div>
-      <button onclick="deleteEveningUpdate()"
-        style="width:100%;background:#1a0a0a;border:1px solid #450a0a;color:#fca5a5;padding:10px;font-size:12px;font-weight:600;border-radius:10px;">
-        🗑 Reset &amp; Resubmit Today's Evening Update
-      </button>
-    `;
+    ${hist.streak >= 3 ? `<div style="background:#1a2e0a;border:1px solid #365314;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:13px;font-weight:700;color:#86efac;text-align:center;">${hist.streak>=30?'🏆':hist.streak>=7?'🔥':'⚡'} ${hist.streak}-day streak${hist.streak>=14?' — incredible!':hist.streak>=7?' — on fire!':'!'}</div>` : ''}
+    ${hist.mood ? `<div style="margin-top:10px;font-size:13px;color:#94a3b8;">Mood: ${{1:'😴',2:'😐',3:'😊',4:'💪',5:'🔥'}[hist.mood]||''}</div>` : ''}
+    ${hist.note ? `<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:9px 12px;margin-top:8px;font-size:12px;color:#94a3b8;"><span style="color:#f1f5f9;font-weight:600;">📝 Note:</span> ${hist.note}</div>` : ''}
+    <button onclick="deleteEveningUpdate()"
+      style="width:100%;background:#1a0a0a;border:1px solid #450a0a;color:#fca5a5;padding:10px;font-size:12px;font-weight:600;border-radius:10px;margin-top:12px;">
+      🗑 Reset &amp; Resubmit Today's Evening Update
+    </button>
+  `;
     return;
   }
 
@@ -400,27 +403,59 @@ function renderEveningUpdate() {
   inner.innerHTML = `
     ${liveTimeHtml}
     <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">📖 Study Log</div>
-      <div id="studyEntries"></div>
-      <button onclick="addStudyEntry()"
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+        <span>📖 Study Log</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button onclick="_fillFromPlan()" style="background:#1e3a2f;color:#86efac;font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid #166534;cursor:pointer;">📋 Fill from plan</button>
+          <label style="font-size:11px;color:#64748b;cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="skipStudy" onchange="document.getElementById('studyEntriesWrap').style.opacity=this.checked?'0.3':'1';document.getElementById('studyEntriesWrap').style.pointerEvents=this.checked?'none':'';document.getElementById('addStudyBtn').style.display=this.checked?'none':''"> Skip
+          </label>
+        </div>
+      </div>
+      <div id="studyEntriesWrap"><div id="studyEntries"></div></div>
+      <button id="addStudyBtn" onclick="addStudyEntry()"
         style="width:100%;background:#1e3a5f;color:#93c5fd;font-size:12px;padding:9px;margin-top:4px;border-radius:8px;">
         + Add Another Subject
       </button>
     </div>
 
     <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">🧪 Qbank Log</div>
-      <div id="qbankEntries"></div>
-      <button onclick="addQbankEntry()"
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+        <span>🧪 Qbank Log</span>
+        <label style="font-size:11px;color:#64748b;cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="skipQbank" onchange="document.getElementById('qbankEntriesWrap').style.opacity=this.checked?'0.3':'1';document.getElementById('qbankEntriesWrap').style.pointerEvents=this.checked?'none':'';document.getElementById('addQbankBtn').style.display=this.checked?'none':''"> Skip
+        </label>
+      </div>
+      <div id="qbankEntriesWrap"><div id="qbankEntries"></div></div>
+      <button id="addQbankBtn" onclick="addQbankEntry()"
         style="width:100%;background:#1a2e1a;color:#86efac;font-size:12px;padding:9px;margin-top:4px;border-radius:8px;">
         + Add Another Subject
       </button>
     </div>
 
-    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:14px;border:1px solid #1e293b;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">🔁 Revision Log</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+        <span>🔁 Revision Log</span>
+        <label style="font-size:11px;color:#64748b;cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="skipRevision" onchange="document.getElementById('revisionCheckboxList').style.opacity=this.checked?'0.3':'1';document.getElementById('revisionCheckboxList').style.pointerEvents=this.checked?'none':'';if(this.checked)document.querySelectorAll('#revisionCheckboxList input[type=checkbox]').forEach(c=>c.checked=false)"> Skip
+        </label>
+      </div>
       <div id="revisionCheckboxList"></div>
     </div>
+
+    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #1e293b;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;">😊 How was today?</div>
+      <div id="eveningMoodRow" style="display:flex;gap:10px;justify-content:center;">
+        ${["😴","😐","😊","💪","🔥"].map((e,i)=>`<button type="button" data-mood="${i+1}" onclick="_selectMood(this)" style="font-size:24px;background:transparent;border:2px solid transparent;border-radius:10px;padding:4px 8px;cursor:pointer;transition:all .15s;">${e}</button>`).join("")}
+      </div>
+    </div>
+
+    <div style="background:#0f172a;border-radius:12px;padding:14px;margin-bottom:14px;border:1px solid #1e293b;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;">📝 Reflection (optional)</div>
+      <textarea id="eveningNote" placeholder="What went well? What to improve tomorrow?" style="width:100%;min-height:72px;background:#0a1628;border:1px solid #1e293b;border-radius:8px;color:#f1f5f9;font-size:13px;padding:9px;resize:vertical;font-family:inherit;"></textarea>
+    </div>
+
+    <div id="eveningSubmitWarn" style="display:none;background:#450a0a;border:1px solid #7f1d1d;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:#fca5a5;">⚠ Please log at least one study topic, Qbank entry, or completed revision before submitting.</div>
 
     <button onclick="submitEvening()"
       style="width:100%;background:linear-gradient(135deg,#16a34a,#15803d);padding:14px;font-size:15px;font-weight:700;border-radius:12px;">
@@ -502,11 +537,13 @@ function _studyFillTopics(id) {
 }
 
 function toggleTopicChip(btn) {
+  // Never allow selecting a chapter that's already completed
+  if (btn.classList.contains("already-done")) return;
   if (btn.classList.contains("selected")) {
     btn.classList.remove("selected");
-    btn.style.background = btn.classList.contains("already-done") ? "#1a3a1a" : "#1e293b";
-    btn.style.color = btn.classList.contains("already-done") ? "#4ade80" : "#94a3b8";
-    btn.style.border = `1px solid ${btn.classList.contains("already-done") ? "#166534" : "#334155"}`;
+    btn.style.background = "#1e293b";
+    btn.style.color = "#94a3b8";
+    btn.style.border = "1px solid #334155";
   } else {
     btn.classList.add("selected");
     btn.style.background = "#1e3a5f";
@@ -536,15 +573,16 @@ function addQbankEntry() {
       <select id="qSub-${id}" style="flex:1;min-width:100px;" onchange="_qbankFillUnits(${id})">${options}</select>
       <select id="qUnit-${id}" style="flex:1;min-width:100px;"></select>
     </div>
-    <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+    <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;align-items:flex-end;">
       <div>
         <label style="font-size:11px;color:#94a3b8;display:block;">Total Qs</label>
-        <input type="number" id="qTotal-${id}" style="width:70px;" min="0" placeholder="0">
+        <input type="number" id="qTotal-${id}" style="width:70px;" min="0" placeholder="0" oninput="_updateQbankAcc(${id})">
       </div>
       <div>
         <label style="font-size:11px;color:#94a3b8;display:block;">Correct</label>
-        <input type="number" id="qCorrect-${id}" style="width:70px;" min="0" placeholder="0">
+        <input type="number" id="qCorrect-${id}" style="width:70px;" min="0" placeholder="0" oninput="_updateQbankAcc(${id})">
       </div>
+      <div id="qAccDisplay-${id}" style="font-size:15px;font-weight:700;color:#64748b;padding-bottom:2px;">—%</div>
     </div>
   `;
   container.appendChild(div);
@@ -574,6 +612,19 @@ function renderRevisionCheckboxList() {
     container.innerHTML = `<span style="color:#9ca3af;font-size:13px;">No revisions due today ✓</span>`;
     return;
   }
+  // Select-all button (improvement #7)
+  let selectAllBtn = document.createElement("button");
+  selectAllBtn.type = "button";
+  selectAllBtn.textContent = "✓ Select All Due";
+  selectAllBtn.style.cssText = "background:#1e3a5f;color:#93c5fd;font-size:11px;padding:5px 12px;border-radius:7px;border:1px solid #1d4ed8;margin-bottom:8px;cursor:pointer;";
+  selectAllBtn.onclick = function() {
+    let all = container.querySelectorAll("input[type='checkbox']");
+    let anyUnchecked = Array.from(all).some(c => !c.checked);
+    all.forEach(c => c.checked = anyUnchecked);
+    selectAllBtn.textContent = anyUnchecked ? "☐ Deselect All" : "✓ Select All Due";
+  };
+  container.appendChild(selectAllBtn);
+
   // Scrollable wrapper after 5 items
   let wrapper = document.createElement("div");
   if (due.length > 5) {
@@ -592,7 +643,7 @@ function renderRevisionCheckboxList() {
   container.appendChild(wrapper);
 }
 
-function deleteEveningUpdate() {
+async function deleteEveningUpdate() {
   if (!confirm("Delete today's evening update and resubmit?")) return;
   let todayKey = today();
   if (studyData.dailyHistory?.[todayKey]) {
@@ -614,6 +665,25 @@ function deleteEveningUpdate() {
       });
       fixPointer(entry.subject);
     });
+    // Reverse revision items — restore full pre-revision snapshot
+    (studyData.dailyHistory[todayKey].revisedItems || []).forEach(item => {
+      let chapter = studyData.subjects[item.subjectName]?.units[item.unitIndex]?.chapters[item.chapterIndex];
+      if (!chapter) return;
+      if (item.prevState) {
+        // Restore exactly what was snapshotted before markRevisionDone
+        chapter.revisionIndex    = item.prevState.revisionIndex;
+        chapter.nextRevision     = item.prevState.nextRevision;
+        chapter.difficultyFactor = item.prevState.difficultyFactor;
+        chapter.missedRevisions  = item.prevState.missedRevisions;
+        chapter.lastReviewedOn   = item.prevState.lastReviewedOn;
+      } else {
+        // Legacy entries without snapshot: best-effort rollback
+        if (chapter.revisionIndex > 0) {
+          chapter.revisionIndex--;
+          chapter.nextRevision = chapter.revisionDates?.[chapter.revisionIndex] || null;
+        }
+      }
+    });
     // Reverse qbank entries
     (studyData.dailyHistory[todayKey].qbankEntries || []).forEach(entry => {
       let subject = studyData.subjects[entry.subject];
@@ -625,10 +695,22 @@ function deleteEveningUpdate() {
       unit.qbankStats.correct = Math.max(0, (unit.qbankStats.correct || 0) - entry.correct);
     });
     delete studyData.dailyHistory[todayKey];
+
+    // ── CRITICAL: await the DB delete so the row is GONE before any reload ──
+    // Non-awaited deletes cause a race: if user refreshes before DELETE completes,
+    // loadFromCloud() re-fetches the still-alive row and restores the submission.
+    if (typeof deleteHistoryRow === "function") await deleteHistoryRow(todayKey);
   }
   _studyEntryCount = 0;
   _qbankEntryCount = 0;
   saveData();
+
+  // ── Force immediate cloud sync (same as submitEvening does) ──
+  // Without this, user_meta.updated_at stays at the submit timestamp.
+  // On reload Supabase server time > local client time → loadFromCloud picks
+  // the cloud path, re-fetches the (now deleted) history row and re-shows it.
+  if (typeof _doSaveToCloud === "function") await _doSaveToCloud();
+
   renderEveningUpdate();
   renderSubjects();
 }
@@ -636,6 +718,105 @@ function deleteEveningUpdate() {
 // Keep backward compatibility: old populateAllEveningSelectors calls now just render the form
 function populateAllEveningSelectors() {
   renderEveningUpdate();
+}
+
+// ── Evening update helpers ──────────────────────────────────────
+
+// Improvement #5: Fill study form from today's generated plan
+function _fillFromPlan() {
+  let plan = studyData.dailyPlan;
+  if (!plan || plan.date !== today() || !plan.study?.subject) {
+    alert("No plan generated for today."); return;
+  }
+  let subject = plan.study.subject;
+  let subjectObj = studyData.subjects[subject];
+  if (!subjectObj) return;
+
+  // planChapters is [{unitIndex, chapterIndex, ...}]
+  let planChapters = plan.study.planChapters || [];
+
+  // Use the FIRST actual planned chapter's unit — NOT plan.study.unitIndex which is
+  // the pointer position BEFORE the loop (may differ if leading chapters were completed)
+  let planUnitIndex = planChapters.length > 0
+    ? Number(planChapters[0].unitIndex)
+    : (typeof plan.study.unitIndex === "number" ? plan.study.unitIndex : 0);
+
+  // Set of chapterIndex values for the planned unit
+  let plannedCIs = new Set(
+    planChapters
+      .filter(pc => Number(pc.unitIndex) === planUnitIndex)
+      .map(pc => Number(pc.chapterIndex))
+  );
+  // Fallback: plan stored a single chapterIndex
+  if (plannedCIs.size === 0 && plan.study.chapterIndex != null) {
+    plannedCIs.add(Number(plan.study.chapterIndex));
+  }
+
+  // ── Set subject dropdown ──
+  let subSel = document.getElementById("sSub-0");
+  if (!subSel) return;
+  subSel.value = subject;
+
+  // ── Rebuild unit select with correct unit pre-selected (no event fires) ──
+  let unitSel = document.getElementById("sUnit-0");
+  if (!unitSel) return;
+  unitSel.innerHTML = subjectObj.units
+    .map((u, i) => `<option value="${i}"${i === planUnitIndex ? " selected" : ""}>${u.name}</option>`)
+    .join("");
+
+  // ── Render chips with planned ones pre-selected in one pass ──
+  let chipsContainer = document.getElementById("sTopicsChips-0");
+  if (!chipsContainer) return;
+  let chapters = subjectObj.units[planUnitIndex]?.chapters || [];
+  if (chapters.length === 0) {
+    chipsContainer.innerHTML = `<span style="color:#64748b;font-size:12px;">No chapters in this unit</span>`;
+    return;
+  }
+  chipsContainer.innerHTML = chapters.map((ch, ci) => {
+    let completed = ch.status === "completed";
+    let selected  = plannedCIs.has(ci) && !completed;
+    return `<button type="button"
+      class="topic-chip${completed ? " already-done" : ""}${selected ? " selected" : ""}"
+      data-ci="${ci}" onclick="toggleTopicChip(this)"
+      style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;
+        background:${selected ? "#1e3a5f" : completed ? "#1a3a1a" : "#1e293b"};
+        color:${selected ? "#93c5fd" : completed ? "#4ade80" : "#94a3b8"};
+        border:1px solid ${selected ? "#3b82f6" : completed ? "#166534" : "#334155"};
+        transition:all 0.15s;white-space:nowrap;">
+      ${completed ? "✓ " : ""}${ch.name}
+    </button>`;
+  }).join("");
+}
+
+// Improvement #6: Live qbank accuracy preview
+function _updateQbankAcc(id) {
+  let total   = parseInt(document.getElementById(`qTotal-${id}`)?.value) || 0;
+  let correct = parseInt(document.getElementById(`qCorrect-${id}`)?.value) || 0;
+  let display = document.getElementById(`qAccDisplay-${id}`);
+  if (!display) return;
+  if (total <= 0) { display.textContent = "—%"; display.style.color = "#64748b"; return; }
+  if (correct > total) {
+    let inp = document.getElementById(`qCorrect-${id}`);
+    if (inp) inp.value = total;
+    correct = total;
+  }
+  let pct = Math.round((correct / total) * 100);
+  display.textContent = pct + "%";
+  display.style.color = pct >= 75 ? "#4ade80" : pct >= 50 ? "#fbbf24" : "#f87171";
+}
+
+// Improvement #10: Mood emoji selector
+function _selectMood(btn) {
+  document.querySelectorAll("#eveningMoodRow [data-mood]").forEach(b => {
+    b.dataset.selected = "0";
+    b.style.border = "2px solid transparent";
+    b.style.background = "transparent";
+    b.style.transform = "scale(1)";
+  });
+  btn.dataset.selected = "1";
+  btn.style.border = "2px solid #16a34a";
+  btn.style.background = "#0f2b1a";
+  btn.style.transform = "scale(1.2)";
 }
 
 function renderSavedPlan() {

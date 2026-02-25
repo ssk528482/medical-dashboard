@@ -15,6 +15,9 @@ async function _loadBadges() {
 
 // ─── Editor Tab ───────────────────────────────────────────────
 
+// ─── Editor Search ───────────────────────────────────────────────────────
+let _editorSearchQuery = "";
+
 function renderEditor() {
   let container = document.getElementById("editorContainer");
   if (!container) return;
@@ -26,30 +29,89 @@ function renderEditor() {
     return;
   }
 
-  names.forEach(subjectName => {
+  // ── #8 Search bar ──
+  let searchWrap = document.createElement("div");
+  searchWrap.style.cssText = "margin-bottom:12px;position:relative;";
+  searchWrap.innerHTML = `
+    <input id="editorSearch" type="search" placeholder="🔍 Search chapters…"
+      value="${_editorSearchQuery.replace(/"/g,'&quot;')}"
+      oninput="_editorSearchQuery=this.value;renderEditor()"
+      style="width:100%;padding:8px 36px 8px 12px;font-size:13px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#f1f5f9;">
+    ${_editorSearchQuery ? `<button onclick="_editorSearchQuery='';renderEditor()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;padding:0;font-size:16px;color:#64748b;margin:0;">✕</button>` : ""}
+  `;
+  container.appendChild(searchWrap);
+
+  let q = _editorSearchQuery.trim().toLowerCase();
+
+  names.forEach((subjectName, subjectIdx) => {
     let subject = studyData.subjects[subjectName];
     let isCollapsed = studyData.uiState?.editorCollapsed?.[subjectName];
-    if (isCollapsed === undefined) isCollapsed = true; // default collapsed
+    if (isCollapsed === undefined) isCollapsed = true;
+    // If searching, force expand all
+    if (q) isCollapsed = false;
 
-    let totalCh = 0, doneCh = 0;
-    subject.units.forEach(u => { totalCh += u.chapters.length; u.chapters.forEach(ch => { if (ch.status === "completed") doneCh++; }); });
-    let pct = totalCh > 0 ? ((doneCh / totalCh) * 100).toFixed(0) : 0;
+    let totalCh = 0, doneCh = 0, r1Ch = 0, r2Ch = 0, r3Ch = 0;
+    subject.units.forEach(u => {
+      totalCh += u.chapters.length;
+      u.chapters.forEach(ch => {
+        if (ch.status === "completed") doneCh++;
+        if (ch.revisionIndex >= 1) r1Ch++;
+        if (ch.revisionIndex >= 2) r2Ch++;
+        if (ch.revisionIndex >= 3) r3Ch++;
+      });
+    });
+    let pct   = totalCh > 0 ? ((doneCh / totalCh) * 100).toFixed(0) : 0;
+    let r1pct = totalCh > 0 ? ((r1Ch  / totalCh) * 100).toFixed(0) : 0;
+    let r2pct = totalCh > 0 ? ((r2Ch  / totalCh) * 100).toFixed(0) : 0;
+    let r3pct = totalCh > 0 ? ((r3Ch  / totalCh) * 100).toFixed(0) : 0;
+
+    // #4 Size badge color
+    let sizeColor = { large: "#3b82f6", medium: "#8b5cf6", small: "#64748b" }[subject.size] || "#64748b";
 
     let subjectEl = document.createElement("div");
     subjectEl.className = "subject-card";
     subjectEl.style.marginBottom = "14px";
 
+    // #7 Summary counts line
+    let summaryLine = `<span style="font-size:10px;color:#64748b;">✓${doneCh} R1:${r1Ch} R2:${r2Ch} R3:${r3Ch} / ${totalCh}ch</span>`;
+
     subjectEl.innerHTML = `
       <div class="subject-header">
-        <div class="subject-title" style="display:flex;align-items:center;gap:8px;cursor:default;">
+        <div class="subject-title" style="display:flex;align-items:center;gap:8px;cursor:default;flex-wrap:wrap;">
           <button class="collapse-btn" onclick="toggleSubjectCollapse(event,'${esc(subjectName)}')">${isCollapsed ? "▶" : "▼"}</button>
-          <span>${subjectName}</span>
-          <span style="font-size:11px;color:#64748b;font-weight:400;">${pct}% (${doneCh}/${totalCh} ch)</span>
+          <span id="subj-label-${esc(subjectName)}" style="cursor:pointer;" ondblclick="startRenameSubject('${esc(subjectName)}')"
+            title="Double-click to rename">${subjectName}</span>
+          <button onclick="startRenameSubject('${esc(subjectName)}')" class="edit-name-btn" title="Rename subject">✏</button>
+          ${summaryLine}
+          <span class="size-badge" style="background:${sizeColor};" onclick="cycleSubjectSize('${esc(subjectName)}')" title="Click to change size">${subject.size}</span>
         </div>
-        <button class="delete-btn" onclick="deleteSubject('${esc(subjectName)}')">Delete</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="moveSubject('${esc(subjectName)}',-1)" class="reorder-btn" title="Move up">↑</button>
+          <button onclick="moveSubject('${esc(subjectName)}',1)"  class="reorder-btn" title="Move down">↓</button>
+          <button class="delete-btn" onclick="deleteSubject('${esc(subjectName)}')">Delete</button>
+        </div>
       </div>
-      <div class="stat-bar" style="margin-top:8px;">
-        <div class="stat-fill ${pct>=75?"green":pct>=40?"yellow":"red"}" style="width:${pct}%"></div>
+      <div style="margin-top:6px;">
+        <div class="rev-bar-row">
+          <span class="rev-bar-label" style="color:#3b82f6;">Done</span>
+          <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${pct}%;background:#3b82f6;"></div></div>
+          <span class="rev-bar-pct">${pct}%</span>
+        </div>
+        <div class="rev-bar-row">
+          <span class="rev-bar-label" style="color:#8b5cf6;">R1</span>
+          <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${r1pct}%;background:#8b5cf6;"></div></div>
+          <span class="rev-bar-pct">${r1pct}%</span>
+        </div>
+        <div class="rev-bar-row">
+          <span class="rev-bar-label" style="color:#f59e0b;">R2</span>
+          <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${r2pct}%;background:#f59e0b;"></div></div>
+          <span class="rev-bar-pct">${r2pct}%</span>
+        </div>
+        <div class="rev-bar-row">
+          <span class="rev-bar-label" style="color:#f97316;">R3</span>
+          <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${r3pct}%;background:#f97316;"></div></div>
+          <span class="rev-bar-pct">${r3pct}%</span>
+        </div>
       </div>
     `;
 
@@ -75,15 +137,32 @@ function renderEditor() {
       // Units
       subject.units.forEach((unit, ui) => {
         let isUnitCollapsed = studyData.uiState?.unitCollapsed?.[subjectName]?.[ui];
-        if (isUnitCollapsed === undefined) isUnitCollapsed = true; // default collapsed
-        let unitDone = unit.chapters.filter(c => c.status === "completed").length;
-        let unitPct  = unit.chapters.length > 0 ? ((unitDone / unit.chapters.length) * 100).toFixed(0) : 0;
+        if (isUnitCollapsed === undefined) isUnitCollapsed = true;
+        if (q) isUnitCollapsed = false; // expand all when searching
 
-        // Unit-level pill states — active only when ALL chapters meet the threshold
-        let unitAllDone = unit.chapters.length > 0 && unit.chapters.every(c => c.status === "completed");
-        let unitAllR1   = unit.chapters.length > 0 && unit.chapters.every(c => c.revisionIndex >= 1);
-        let unitAllR2   = unit.chapters.length > 0 && unit.chapters.every(c => c.revisionIndex >= 2);
-        let unitAllR3   = unit.chapters.length > 0 && unit.chapters.every(c => c.revisionIndex >= 3);
+        let unitDone = unit.chapters.filter(c => c.status === "completed").length;
+        let unitR1   = unit.chapters.filter(c => c.revisionIndex >= 1).length;
+        let unitR2   = unit.chapters.filter(c => c.revisionIndex >= 2).length;
+        let unitR3   = unit.chapters.filter(c => c.revisionIndex >= 3).length;
+        let unitTotal = unit.chapters.length;
+        let unitPct  = unitTotal > 0 ? ((unitDone / unitTotal) * 100).toFixed(0) : 0;
+        let uR1pct   = unitTotal > 0 ? ((unitR1   / unitTotal) * 100).toFixed(0) : 0;
+        let uR2pct   = unitTotal > 0 ? ((unitR2   / unitTotal) * 100).toFixed(0) : 0;
+        let uR3pct   = unitTotal > 0 ? ((unitR3   / unitTotal) * 100).toFixed(0) : 0;
+
+        // Unit-level pill states
+        let unitAllDone = unitTotal > 0 && unit.chapters.every(c => c.status === "completed");
+        let unitAllR1   = unitTotal > 0 && unit.chapters.every(c => c.revisionIndex >= 1);
+        let unitAllR2   = unitTotal > 0 && unit.chapters.every(c => c.revisionIndex >= 2);
+        let unitAllR3   = unitTotal > 0 && unit.chapters.every(c => c.revisionIndex >= 3);
+
+        // #10 Qbank % badge
+        let uQbankBadge = "";
+        if (unit.qbankStats?.total > 0) {
+          let qpct = (unit.qbankStats.correct / unit.qbankStats.total * 100).toFixed(0);
+          let qcol = qpct >= 75 ? "#10b981" : qpct >= 50 ? "#eab308" : "#ef4444";
+          uQbankBadge = `<span style="font-size:10px;color:${qcol};flex-shrink:0;" title="Qbank accuracy">·QB${qpct}%</span>`;
+        }
 
         let unitEl = document.createElement("div");
         unitEl.className = "unit-block";
@@ -92,21 +171,44 @@ function renderEditor() {
           <div class="unit-header" style="flex-wrap:wrap;row-gap:6px;">
             <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
               <button class="collapse-btn" onclick="toggleUnitCollapse(event,'${esc(subjectName)}',${ui})" style="font-size:12px;padding:2px 5px;">${isUnitCollapsed ? "▶" : "▼"}</button>
-              <span class="unit-title">${unit.name}</span>
-              <span style="font-size:10px;color:#475569;flex-shrink:0;">${unitPct}% (${unitDone}/${unit.chapters.length})</span>
-              ${unit.questionCount > 0 ? `<span style="font-size:10px;color:#8b5cf6;flex-shrink:0;">· ${unit.questionCount}Q</span>` : ""}
+              <span id="unit-label-${esc(subjectName)}-${ui}" style="font-weight:600;font-size:13px;cursor:pointer;" ondblclick="startRenameUnit('${esc(subjectName)}',${ui})" title="Double-click to rename">${unit.name}</span>
+              <button onclick="startRenameUnit('${esc(subjectName)}',${ui})" class="edit-name-btn" title="Rename unit">✏</button>
+              <span style="font-size:10px;color:#475569;flex-shrink:0;">${unitPct}% (${unitDone}/${unitTotal})</span>
+              ${unit.questionCount > 0 ? `<span style="font-size:10px;color:#8b5cf6;flex-shrink:0;">·${unit.questionCount}Q</span>` : ""}
+              ${uQbankBadge}
             </div>
-            <div style="display:flex;align-items:center;gap:4px;">
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
               <span class="pill completed ${unitAllDone ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="toggleUnitCompleted('${esc(subjectName)}',${ui})" title="Mark all chapters complete">✓</span>
               <span class="pill rev ${unitAllR1 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},1)" title="Mark all chapters R1">R1</span>
               <span class="pill rev ${unitAllR2 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},2)" title="Mark all chapters R2">R2</span>
               <span class="pill rev ${unitAllR3 ? "active" : ""}" style="font-size:10px;padding:2px 6px;" onclick="markUnitRevised('${esc(subjectName)}',${ui},3)" title="Mark all chapters R3">R3</span>
               <button onclick="editUnitQuestionCount('${esc(subjectName)}',${ui})" style="background:transparent;color:#8b5cf6;padding:3px 7px;font-size:11px;margin:0;border:1px solid #4c1d95;border-radius:6px;" title="Set total questions">Qs</button>
+              <button onclick="moveUnit('${esc(subjectName)}',${ui},-1)" class="reorder-btn" title="Move unit up">↑</button>
+              <button onclick="moveUnit('${esc(subjectName)}',${ui},1)"  class="reorder-btn" title="Move unit down">↓</button>
               <button onclick="deleteUnit('${esc(subjectName)}',${ui})" style="background:transparent;color:#ef4444;padding:3px 7px;font-size:12px;margin:0;border:1px solid #450a0a;border-radius:6px;">✕</button>
             </div>
           </div>
-          <div class="stat-bar" style="margin:5px 0 4px;height:4px;">
-            <div class="stat-fill ${unitPct>=75?"green":unitPct>=40?"yellow":"red"}" style="width:${unitPct}%"></div>
+          <div style="margin:4px 0 2px;">
+            <div class="rev-bar-row" style="margin-bottom:2px;">
+              <span class="rev-bar-label" style="color:#3b82f6;">D</span>
+              <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${unitPct}%;background:#3b82f6;"></div></div>
+              <span class="rev-bar-pct">${unitPct}%</span>
+            </div>
+            <div class="rev-bar-row" style="margin-bottom:2px;">
+              <span class="rev-bar-label" style="color:#8b5cf6;">R1</span>
+              <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${uR1pct}%;background:#8b5cf6;"></div></div>
+              <span class="rev-bar-pct">${uR1pct}%</span>
+            </div>
+            <div class="rev-bar-row" style="margin-bottom:2px;">
+              <span class="rev-bar-label" style="color:#f59e0b;">R2</span>
+              <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${uR2pct}%;background:#f59e0b;"></div></div>
+              <span class="rev-bar-pct">${uR2pct}%</span>
+            </div>
+            <div class="rev-bar-row">
+              <span class="rev-bar-label" style="color:#f97316;">R3</span>
+              <div class="rev-bar-track"><div class="rev-bar-fill" style="width:${uR3pct}%;background:#f97316;"></div></div>
+              <span class="rev-bar-pct">${uR3pct}%</span>
+            </div>
           </div>
         `;
 
@@ -122,6 +224,22 @@ function renderEditor() {
           `;
           unitEl.appendChild(addChRow);
 
+          // ── #9 Bulk chapter paste row ──
+          let bulkRow = document.createElement("div");
+          bulkRow.style.cssText = "margin:4px 0 6px;";
+          bulkRow.innerHTML = `
+            <details style="font-size:12px;">
+              <summary style="cursor:pointer;color:#64748b;padding:2px 0;">📋 Bulk paste chapters</summary>
+              <div style="margin-top:6px;">
+                <textarea id="bulkCh-${esc(subjectName)}-${ui}" placeholder="Chapter Name&#10;Another Chapter | 10-25&#10;Third Chapter | 26-40" rows="4"
+                  style="width:100%;font-size:12px;padding:6px 8px;background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;resize:vertical;"></textarea>
+                <div style="font-size:10px;color:#475569;margin:3px 0 5px;">Format: <code style="color:#64748b;">Chapter Name</code> or <code style="color:#64748b;">Chapter Name | startPg-endPg</code></div>
+                <button onclick="bulkAddChapters('${esc(subjectName)}',${ui})" style="margin-top:4px;padding:5px 14px;font-size:12px;">Add All</button>
+              </div>
+            </details>
+          `;
+          unitEl.appendChild(bulkRow);
+
           // Chapters
           if (!unit.chapters.length) {
             let emptyMsg = document.createElement("div");
@@ -131,14 +249,23 @@ function renderEditor() {
           }
 
           unit.chapters.forEach((ch, ci) => {
+            // #8 Search filter — skip chapters that don't match
+            if (q && !ch.name.toLowerCase().includes(q) &&
+                !unit.name.toLowerCase().includes(q) &&
+                !subjectName.toLowerCase().includes(q)) return;
+
             let chRow = document.createElement("div");
-            chRow.className = "chapter-row";
             let compActive = ch.status === "completed";
             let r1Active   = ch.revisionIndex >= 1;
             let r2Active   = ch.revisionIndex >= 2;
             let r3Active   = ch.revisionIndex >= 3;
             let diff = ch.difficulty || "medium";
             let diffColors = { easy: "#10b981", medium: "#eab308", hard: "#ef4444" };
+
+            // #6 Overdue highlight
+            let isOverdue = ch.nextRevision && ch.nextRevision < today();
+            chRow.className = "chapter-row" + (isOverdue ? " chapter-overdue" : "");
+
             let pageInfo = ch.pageCount > 0
               ? `<span style="font-size:10px;color:#475569;margin-left:4px;">pg ${ch.startPage}–${ch.endPage} (${ch.pageCount}p)</span>`
               : "";
@@ -147,9 +274,23 @@ function renderEditor() {
             else if (r2Active) phaseTag = `<span style="font-size:9px;background:#d97706;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">R2</span>`;
             else if (r1Active) phaseTag = `<span style="font-size:9px;background:#1d4ed8;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">R1</span>`;
             else if (compActive) phaseTag = `<span style="font-size:9px;background:#15803d;color:white;padding:1px 5px;border-radius:4px;margin-left:4px;">Done</span>`;
+
+            // #5 Next revision date
+            let revDateTag = "";
+            if (ch.nextRevision) {
+              let d = new Date(ch.nextRevision + "T12:00:00");
+              let label = d.toLocaleDateString(undefined, { month:"short", day:"numeric" });
+              let overdueStyle = isOverdue ? "color:#ef4444;font-weight:700;" : "color:#475569;";
+              revDateTag = `<span style="font-size:10px;${overdueStyle}margin-left:4px;" title="Next revision">📅${label}</span>`;
+            }
+
+            // #2 Rename button for chapter
+            let chNameHtml = `<span id="ch-label-${esc(subjectName)}-${ui}-${ci}" style="cursor:pointer;" ondblclick="startRenameChapter('${esc(subjectName)}',${ui},${ci})" title="Double-click to rename">${ci + 1}. ${ch.name}</span>
+              <button onclick="startRenameChapter('${esc(subjectName)}',${ui},${ci})" class="edit-name-btn" title="Rename chapter">✏</button>`;
+
             chRow.innerHTML = `
-              <div class="topic-left" style="flex:1;min-width:0;">
-                <span class="topic-name" style="font-size:12px;" title="${ch.name}">${ci + 1}. ${ch.name}</span>${pageInfo}${phaseTag}${_getBadgeHtml(subjectName, unit.name, ch.name)}
+              <div class="topic-left" style="flex:1;min-width:0;flex-wrap:wrap;">
+                <span class="topic-name" style="font-size:12px;display:flex;align-items:center;gap:2px;flex-wrap:wrap;">${chNameHtml}${pageInfo}${phaseTag}${revDateTag}${_getBadgeHtml(subjectName, unit.name, ch.name)}</span>
               </div>
               <div class="topic-actions" style="gap:3px;flex-wrap:wrap;justify-content:flex-end;">
                 <select onchange="setChapterDifficulty('${esc(subjectName)}',${ui},${ci},this.value)"
@@ -162,6 +303,8 @@ function renderEditor() {
                 <span class="pill rev ${r1Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},1)">R1</span>
                 <span class="pill rev ${r2Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},2)">R2</span>
                 <span class="pill rev ${r3Active ? "active" : ""}" onclick="markChapterRevised('${esc(subjectName)}',${ui},${ci},3)">R3</span>
+                <button onclick="moveChapter('${esc(subjectName)}',${ui},${ci},-1)" class="reorder-btn" title="Move up">↑</button>
+                <button onclick="moveChapter('${esc(subjectName)}',${ui},${ci},1)"  class="reorder-btn" title="Move down">↓</button>
                 <button class="icon-btn" onclick="deleteChapter('${esc(subjectName)}',${ui},${ci})">✕</button>
               </div>
             `;
@@ -178,6 +321,144 @@ function renderEditor() {
 }
 
 // ─── Editor Actions ───────────────────────────────────────────
+
+// ── #2 Inline rename ─────────────────────────────────────────
+function startRenameSubject(name) {
+  let span = document.getElementById("subj-label-" + name);
+  if (!span) return;
+  let old = name;
+  span.outerHTML = `<input id="subj-input-${esc(name)}" class="inline-rename-input" value="${old.replace(/"/g,'&quot;')}"
+    onblur="commitRenameSubject('${esc(name)}',this.value)"
+    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value='${esc(old)}';this.blur();}"
+    style="font-size:14px;font-weight:700;min-width:80px;width:${Math.max(old.length,8)}ch;">`;
+  setTimeout(() => { let inp = document.getElementById("subj-input-" + name); if (inp) { inp.focus(); inp.select(); } }, 10);
+}
+
+function commitRenameSubject(oldName, newName) {
+  newName = newName.trim();
+  if (!newName || newName === oldName) { renderEditor(); return; }
+  if (studyData.subjects[newName]) { alert("A subject with that name already exists."); renderEditor(); return; }
+  let obj = studyData.subjects[oldName];
+  studyData.subjects[newName] = obj;
+  delete studyData.subjects[oldName];
+  // Update uiState keys
+  if (studyData.uiState?.editorCollapsed) {
+    studyData.uiState.editorCollapsed[newName] = studyData.uiState.editorCollapsed[oldName];
+    delete studyData.uiState.editorCollapsed[oldName];
+  }
+  if (studyData.uiState?.unitCollapsed?.[oldName]) {
+    studyData.uiState.unitCollapsed[newName] = studyData.uiState.unitCollapsed[oldName];
+    delete studyData.uiState.unitCollapsed[oldName];
+  }
+  saveData(); renderEditor();
+}
+
+function startRenameUnit(subjectName, ui) {
+  let span = document.getElementById(`unit-label-${subjectName}-${ui}`);
+  if (!span) return;
+  let old = studyData.subjects[subjectName].units[ui].name;
+  span.outerHTML = `<input id="unit-input-${esc(subjectName)}-${ui}" class="inline-rename-input" value="${old.replace(/"/g,'&quot;')}"
+    onblur="commitRenameUnit('${esc(subjectName)}',${ui},this.value)"
+    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value='${esc(old)}';this.blur();}"
+    style="font-size:13px;font-weight:600;min-width:60px;width:${Math.max(old.length,6)}ch;">`;
+  setTimeout(() => { let inp = document.getElementById(`unit-input-${subjectName}-${ui}`); if (inp) { inp.focus(); inp.select(); } }, 10);
+}
+
+function commitRenameUnit(subjectName, ui, newName) {
+  newName = newName.trim();
+  if (!newName) { renderEditor(); return; }
+  studyData.subjects[subjectName].units[ui].name = newName;
+  saveData(); renderEditor();
+}
+
+function startRenameChapter(subjectName, ui, ci) {
+  let span = document.getElementById(`ch-label-${subjectName}-${ui}-${ci}`);
+  if (!span) return;
+  let old = studyData.subjects[subjectName].units[ui].chapters[ci].name;
+  span.outerHTML = `<input id="ch-input-${esc(subjectName)}-${ui}-${ci}" class="inline-rename-input" value="${old.replace(/"/g,'&quot;')}"
+    onblur="commitRenameChapter('${esc(subjectName)}',${ui},${ci},this.value)"
+    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value='${esc(old)}';this.blur();}"
+    style="font-size:12px;min-width:60px;width:${Math.max(old.length,6)}ch;">`;
+  setTimeout(() => { let inp = document.getElementById(`ch-input-${subjectName}-${ui}-${ci}`); if (inp) { inp.focus(); inp.select(); } }, 10);
+}
+
+function commitRenameChapter(subjectName, ui, ci, newName) {
+  newName = newName.trim();
+  if (!newName) { renderEditor(); return; }
+  studyData.subjects[subjectName].units[ui].chapters[ci].name = newName;
+  saveData(); renderEditor();
+}
+
+// ── #3 Reorder ────────────────────────────────────────────────
+function moveSubject(name, dir) {
+  let keys = Object.keys(studyData.subjects);
+  let idx = keys.indexOf(name);
+  let target = idx + dir;
+  if (target < 0 || target >= keys.length) return;
+  // Rebuild subjects object in new order
+  let entries = Object.entries(studyData.subjects);
+  let tmp = entries[idx]; entries[idx] = entries[target]; entries[target] = tmp;
+  studyData.subjects = Object.fromEntries(entries);
+  saveData(); renderEditor();
+}
+
+function moveUnit(subjectName, ui, dir) {
+  let units = studyData.subjects[subjectName].units;
+  let target = ui + dir;
+  if (target < 0 || target >= units.length) return;
+  [units[ui], units[target]] = [units[target], units[ui]];
+  fixPointer(subjectName);
+  saveData(); renderEditor();
+}
+
+function moveChapter(subjectName, ui, ci, dir) {
+  let chapters = studyData.subjects[subjectName].units[ui].chapters;
+  let target = ci + dir;
+  if (target < 0 || target >= chapters.length) return;
+  [chapters[ci], chapters[target]] = [chapters[target], chapters[ci]];
+  fixPointer(subjectName);
+  saveData(); renderEditor();
+}
+
+// ── #4 Cycle subject size ─────────────────────────────────────
+function cycleSubjectSize(name) {
+  let sizes = ["small", "medium", "large"];
+  let cur = studyData.subjects[name].size || "medium";
+  let next = sizes[(sizes.indexOf(cur) + 1) % sizes.length];
+  studyData.subjects[name].size = next;
+  saveData(); renderEditor();
+}
+
+// ── #9 Bulk add chapters ──────────────────────────────────────
+function bulkAddChapters(subjectName, ui) {
+  let ta = document.getElementById(`bulkCh-${subjectName}-${ui}`);
+  if (!ta) return;
+  let lines = ta.value.split("\n").map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  lines.forEach(line => {
+    // Parse optional page range: "Chapter Name | 10-25" or "Chapter Name|10-25"
+    let name, startPage = 0, endPage = 0;
+    let pipeIdx = line.lastIndexOf("|");
+    if (pipeIdx !== -1) {
+      name = line.slice(0, pipeIdx).trim();
+      let pagesPart = line.slice(pipeIdx + 1).trim(); // e.g. "10-25"
+      let dashIdx = pagesPart.indexOf("-");
+      if (dashIdx !== -1) {
+        startPage = parseInt(pagesPart.slice(0, dashIdx)) || 0;
+        endPage   = parseInt(pagesPart.slice(dashIdx + 1)) || 0;
+      } else {
+        startPage = parseInt(pagesPart) || 0;
+        endPage   = startPage;
+      }
+    } else {
+      name = line;
+    }
+    if (!name) return;
+    studyData.subjects[subjectName].units[ui].chapters.push(makeChapterObj(name, startPage, endPage));
+  });
+  ta.value = "";
+  saveData(); renderEditor();
+}
 
 
 // ─── Badge Helpers ───────────────────────────────────────────────────────
@@ -343,6 +624,28 @@ function _saveQcount(subjectName, ui) {
 
 // ─── Unit-level Bulk Actions ──────────────────────────────────
 
+// Helper: after manually setting ch.revisionIndex = idx,
+// compute the correct nextRevision from revisionDates or freshly from today.
+function _resolveNextRevision(ch, idx) {
+  if (idx >= BASE_INTERVALS.length) return null; // all revisions complete
+  // Re-use the stored date if it exists and is in the future (or today)
+  if (ch.revisionDates?.[idx] && ch.revisionDates[idx] >= today()) return ch.revisionDates[idx];
+  // Otherwise calculate from today
+  return addDays(today(), computeNextInterval(ch, idx));
+}
+
+// Ensure revisionDates has entries at indices 0 .. level (inclusive).
+// Missing slots are filled by computing forward from today.
+function _ensureRevisionDates(ch, level) {
+  if (!ch.revisionDates) ch.revisionDates = [];
+  for (let i = 0; i <= level; i++) {
+    if (!ch.revisionDates[i]) {
+      let prev = i === 0 ? today() : (ch.revisionDates[i - 1] || today());
+      ch.revisionDates[i] = addDays(prev, computeNextInterval(ch, i));
+    }
+  }
+}
+
 function toggleUnitCompleted(subjectName, ui) {
   let unit = studyData.subjects[subjectName].units[ui];
   if (!unit || !unit.chapters.length) return;
@@ -353,6 +656,7 @@ function toggleUnitCompleted(subjectName, ui) {
     if (allDone) {
       // Toggle OFF — reset all chapters to not-started
       ch.status = "not-started";
+      ch.completedOn = null;   // fix: was never cleared before
       ch.revisionIndex = 0;
       ch.nextRevision = null;
       ch.revisionDates = [];
@@ -422,11 +726,22 @@ function markUnitRevised(subjectName, ui, level) {
   unit.chapters.forEach(ch => {
     if (allAtLevel) {
       // Toggle OFF — drop all chapters back one level
-      if (ch.revisionIndex >= level) ch.revisionIndex = level - 1;
+      if (ch.revisionIndex >= level) {
+        ch.revisionIndex = level - 1;
+        // Update nextRevision to match the rolled-back level
+        ch.nextRevision = level - 1 === 0
+          ? (ch.revisionDates?.[0] || addDays(today(), computeNextInterval(ch, 0)))
+          : _resolveNextRevision(ch, level - 1);
+      }
     } else {
       // Toggle ON — bring all chapters up to this level
-      if (ch.revisionIndex < level) ch.revisionIndex = level;
-      ch.lastReviewedOn = today();
+      if (ch.revisionIndex < level) {
+        _ensureRevisionDates(ch, level);
+        ch.revisionIndex = level;
+        ch.lastReviewedOn = today();
+        // nextRevision = the date AFTER this level (i.e. the next one to do)
+        ch.nextRevision = _resolveNextRevision(ch, level);
+      }
     }
   });
 
@@ -470,7 +785,9 @@ function setChapterDifficulty(subjectName, ui, ci, level) {
 function toggleChapterCompleted(subjectName, ui, ci) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
   if (ch.status === "completed") {
+    // Toggle OFF
     ch.status = "not-started";
+    ch.completedOn = null;     // fix: was never cleared before
     ch.revisionIndex = 0;
     ch.nextRevision = null;
     ch.revisionDates = [];
@@ -493,9 +810,14 @@ function toggleChapterCompleted(subjectName, ui, ci) {
 
 function markChapterRevised(subjectName, ui, ci, level) {
   let ch = studyData.subjects[subjectName].units[ui].chapters[ci];
+  if (!ch) return;
 
-  // Require previous level: R2 needs R1, R3 needs R2
-  if (level === 2 && ch.revisionIndex < 1 && ch.status !== "completed") {
+  // ── Guards ──
+  if (level === 1 && ch.status !== "completed") {
+    alert("Mark chapter as completed (✓) first before marking R1.");
+    return;
+  }
+  if (level === 2 && ch.revisionIndex < 1) {   // fix: removed wrong && condition
     alert("Complete R1 first before marking R2.");
     return;
   }
@@ -503,13 +825,8 @@ function markChapterRevised(subjectName, ui, ci, level) {
     alert("Complete R2 first before marking R3.");
     return;
   }
-  // R1 requires completed
-  if (level === 1 && ch.status !== "completed") {
-    alert("Mark chapter as completed (✓) first before marking R1.");
-    return;
-  }
 
-  // Auto-mark completed when any revision is marked
+  // ── Auto-mark completed when any revision is manually set ──
   if (ch.status !== "completed") {
     ch.status = "completed";
     ch.completedOn = today();
@@ -525,13 +842,24 @@ function markChapterRevised(subjectName, ui, ci, level) {
     fixPointer(subjectName);
   }
 
-  // Toggle off if clicking same level
+  // ── Toggle off if clicking the same level ──
   if (ch.revisionIndex === level) {
     ch.revisionIndex = level - 1;
-  } else {
-    ch.revisionIndex = level;
+    // nextRevision rolls back to the date for the level we just unchecked
+    ch.nextRevision = level - 1 === 0
+      ? (ch.revisionDates?.[0] || addDays(today(), computeNextInterval(ch, 0)))
+      : _resolveNextRevision(ch, level - 1);
+    saveData(); renderEditor();
+    return;
   }
+
+  // ── Set to this level ──
+  _ensureRevisionDates(ch, level);  // fill any missing slots in revisionDates
+  ch.revisionIndex = level;
   ch.lastReviewedOn = today();
+  // nextRevision = the NEXT revision after this level
+  ch.nextRevision = _resolveNextRevision(ch, level);
+
   saveData(); renderEditor();
 }
 
