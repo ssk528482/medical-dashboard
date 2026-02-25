@@ -39,26 +39,52 @@
   }
 
   // ── Touch-scroll fix for rotated mode on touch devices ────────────────────
-  // When html is CSS-rotated 90deg clockwise, the user's "downward swipe" in
-  // visual space is a "leftward swipe" in raw screen coordinates.
-  // iOS/Android deliver scroll only for vertical screen-coordinate movement,
-  // so the body never scrolls. We intercept touch events and remap X-delta
-  // to body.scrollTop manually.
-  var _tx = 0;
+  // When html is CSS-rotated 90deg clockwise:
+  //   visual "down" swipe = finger moves RIGHT in screen coords (clientX increases, dx > 0)
+  //   → body.scrollTop should INCREASE (scroll down)
+  // Direction fix: scrollTop += dx  (not -dx)
+  // Momentum: track velocity at touchend, decelerate with rAF for natural iOS feel.
+  var _tx = 0, _velX = 0, _lastT = 0, _rafID = null;
+
+  function _stopMomentum() {
+    if (_rafID) { cancelAnimationFrame(_rafID); _rafID = null; }
+  }
+
+  function _runMomentum() {
+    if (Math.abs(_velX) < 0.5) { _rafID = null; return; }
+    document.body.scrollTop += _velX;
+    _velX *= 0.93;                        // friction coefficient — matches iOS feel
+    _rafID = requestAnimationFrame(_runMomentum);
+  }
 
   document.addEventListener('touchstart', function (e) {
     if (!_rotated) return;
-    _tx = e.touches[0].clientX;
+    _stopMomentum();
+    _tx   = e.touches[0].clientX;
+    _velX = 0;
+    _lastT = Date.now();
   }, { passive: true });
 
   document.addEventListener('touchmove', function (e) {
     if (!_rotated) return;
-    var dx = e.touches[0].clientX - _tx;
+    var dx  = e.touches[0].clientX - _tx;
     _tx = e.touches[0].clientX;
-    // rotate(90deg) clockwise: visual-down = screen-left (dx < 0) → scrollTop++
-    document.body.scrollTop += -dx;
-    e.preventDefault(); // suppress native (broken) scroll
+
+    var now = Date.now();
+    var dt  = Math.max(1, now - _lastT);
+    _lastT  = now;
+
+    // dx > 0 (swipe right in screen) = swipe DOWN visually → scrollTop increases
+    document.body.scrollTop += dx;
+    _velX = (dx / dt) * 16;              // velocity → scaled to ~60fps frame
+
+    e.preventDefault();
   }, { passive: false });
+
+  document.addEventListener('touchend', function () {
+    if (!_rotated) return;
+    _rafID = requestAnimationFrame(_runMomentum);
+  }, { passive: true });
 
   // Expose globally
   window.toggleRotation = toggleRotation;
