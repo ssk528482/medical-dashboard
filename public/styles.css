@@ -519,7 +519,8 @@ label {
   .chapter-row .topic-actions { flex-basis: 100%; padding-left: 2px; flex-wrap: wrap; }
 
   /* Unit header: title row full-width, button row wraps below flush-left */
-  .unit-header > div:last-child { justify-content: flex-start !important; }
+  .unit-header > div:first-child { flex-basis: 100%; min-width: 0; }
+  .unit-header > div:last-child  { flex-basis: 100%; justify-content: flex-start !important; }
 
   /* Always show edit pencil on touch (no hover) */
   .edit-name-btn { opacity: 0.75; }
