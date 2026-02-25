@@ -18,7 +18,7 @@
     // Update all rotate buttons across page
     document.querySelectorAll('.rotate-screen-btn').forEach(function (btn) {
       btn.setAttribute('title', rotated ? 'Switch to Portrait' : 'Switch to Landscape');
-      btn.querySelector('.rotate-screen-icon').textContent = rotated ? '📱' : '🔄';
+      btn.querySelector('.rotate-screen-icon').textContent = rotated ? '\uD83D\uDCF1' : '\uD83D\uDD04';
       btn.querySelector('.rotate-screen-label').textContent = rotated ? 'Portrait' : 'Landscape';
     });
   }
@@ -37,6 +37,28 @@
   if (document.readyState !== 'loading') {
     applyRotation(_rotated, false);
   }
+
+  // ── Touch-scroll fix for rotated mode on touch devices ────────────────────
+  // When html is CSS-rotated 90deg clockwise, the user's "downward swipe" in
+  // visual space is a "leftward swipe" in raw screen coordinates.
+  // iOS/Android deliver scroll only for vertical screen-coordinate movement,
+  // so the body never scrolls. We intercept touch events and remap X-delta
+  // to body.scrollTop manually.
+  var _tx = 0;
+
+  document.addEventListener('touchstart', function (e) {
+    if (!_rotated) return;
+    _tx = e.touches[0].clientX;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function (e) {
+    if (!_rotated) return;
+    var dx = e.touches[0].clientX - _tx;
+    _tx = e.touches[0].clientX;
+    // rotate(90deg) clockwise: visual-down = screen-left (dx < 0) → scrollTop++
+    document.body.scrollTop += -dx;
+    e.preventDefault(); // suppress native (broken) scroll
+  }, { passive: false });
 
   // Expose globally
   window.toggleRotation = toggleRotation;

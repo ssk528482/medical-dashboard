@@ -825,6 +825,32 @@ label {
 }
 
 /* ════════════════════════════════════════════════════════════
+   PHYSICAL LANDSCAPE on mobile  (phone rotated sideways)
+   ════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Reduce sticky header height so more content shows */
+  h1 { padding: 8px 14px 7px; font-size: 14px; position: sticky; top: 0; z-index: 90; }
+
+  /* Cards tighter vertically */
+  .card { padding: 12px 14px; margin: 6px 10px; }
+
+  /* Give the content area full scroll freedom */
+  html, body {
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Bottom nav: show compact icon-only row */
+  .side-nav-label { display: none; }
+
+  /* Smaller pills and buttons to fit landscape row */
+  .pill { font-size: 9px; padding: 3px 5px; }
+  button { min-height: 36px; }
+}
+
+/* ════════════════════════════════════════════════════════════
    SMALL PHONES  < 380px
    ════════════════════════════════════════════════════════════ */
 @media (max-width: 380px) {
@@ -2759,6 +2785,9 @@ html.screen-rotated body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  /* touch-move scroll is handled via JS remapping in rotateScreen.js */
+  touch-action: none;
+  overscroll-behavior: none;
 }
 /* Keep fixed elements (modals, bulk bars etc.) sane in rotated mode */
 html.screen-rotated .fc-menu-dropdown {
