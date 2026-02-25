@@ -9,6 +9,10 @@
   // Skip guard on public pages
   if (publicPages.includes(currentPage)) return;
 
+  // Hide page until auth check completes — prevents flash of protected content
+  document.documentElement.style.opacity = '0';
+  document.documentElement.style.transition = 'opacity 0.15s';
+
   const SUPABASE_URL = "https://alrkpctsjmvspybrgdfy.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFscmtwY3Rzam12c3B5YnJnZGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjAxODcsImV4cCI6MjA4NzA5NjE4N30.TLSmuCaKCnZ99QUcwL9w7yUGJHrMMj-BWXnqNG7OTwU";
 
@@ -18,20 +22,23 @@
   }
   const _sb = window._supabaseSingleton;
 
+  function showPage() { document.documentElement.style.opacity = '1'; }
+
   try {
     const { data: { session } } = await _sb.auth.getSession();
 
     if (!session) {
-      // Not logged in → go to login
+      // Save intended destination so login.html can redirect back after sign-in
+      sessionStorage.setItem('authReturnTo', currentPage + window.location.search);
       window.location.href = "login.html";
       return;
     }
 
-    // Logged in but check setup complete
+    // Logged in — check setup complete
     let localData = JSON.parse(localStorage.getItem("studyData") || "{}");
 
-    // Also try cloud for setup status
     if (!localData.setupComplete) {
+      // Local doesn't confirm — check cloud (catches cleared-localStorage case)
       const { data } = await _sb
         .from("user_meta")
         .select("setup_complete")
@@ -40,15 +47,20 @@
 
       if (data && data.setup_complete) {
         // Cloud confirms setup is done — allow access
-        // Full data load happens in supabase.js checkUser()
+        showPage();
         return;
       }
 
-      // Setup not done → go to setup wizard
+      // Setup genuinely not done → go to setup wizard
       window.location.href = "setup.html";
+      return;
     }
+
+    // All good — show the page
+    showPage();
   } catch (err) {
     console.error("Router guard error:", err);
-    // On error, allow access (don't break the app)
+    // On error, show the page anyway (don't lock users out)
+    showPage();
   }
 })();

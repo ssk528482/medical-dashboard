@@ -249,9 +249,36 @@ async function finishSetup() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Hide page until auth check completes
+  document.documentElement.style.opacity = '0';
+  document.documentElement.style.transition = 'opacity 0.15s';
+
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) { window.location.href = "login.html"; return; }
-  if (studyData.setupComplete) { window.location.href = "index.html"; }
+
+  // Fast path: local confirms setup is done
+  if (studyData.setupComplete) { window.location.href = "index.html"; return; }
+
+  // Local doesn't say done — check cloud.
+  // Handles: cleared localStorage, new device, page opened directly after reinstall.
+  try {
+    const { data } = await supabaseClient
+      .from("user_meta")
+      .select("setup_complete")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (data && data.setup_complete) {
+      // Already set up — don't force them through setup again
+      window.location.href = "index.html";
+      return;
+    }
+  } catch (e) {
+    console.error("Setup check error:", e);
+  }
+
+  // Setup genuinely needed — show the wizard
+  document.documentElement.style.opacity = '1';
 });
 </script>
 <script src="pwa.js"></script>

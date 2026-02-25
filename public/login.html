@@ -283,16 +283,53 @@
   }
 
   // Handle magic link redirect (Supabase appends token to URL)
+  // Also handles the case where localStorage was cleared but auth session still exists.
   async function checkSession() {
+    // Hide the login card until we know if the user needs to see it
+    document.documentElement.style.opacity = '0';
+    document.documentElement.style.transition = 'opacity 0.15s';
+
     const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      // Already logged in — redirect to app
-      let data = JSON.parse(localStorage.getItem("studyData") || "{}");
-      if (data.setupComplete) {
-        window.location.href = "index.html";
+
+    if (!session) {
+      // Genuinely not logged in — show the login form
+      document.documentElement.style.opacity = '1';
+      return;
+    }
+
+    // Session exists — decide where to go
+    // Check local first (fast, no network)
+    let localData = JSON.parse(localStorage.getItem("studyData") || "{}");
+    if (localData.setupComplete) {
+      let returnTo = sessionStorage.getItem('authReturnTo') || 'index.html';
+      sessionStorage.removeItem('authReturnTo');
+      window.location.href = returnTo;
+      return;
+    }
+
+    // Local doesn't confirm setup — check cloud.
+    // This handles: cleared localStorage, new device, PWA reinstall.
+    try {
+      const { data } = await sb
+        .from("user_meta")
+        .select("setup_complete")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (data && data.setup_complete) {
+        // Cloud confirms setup done → restore intended page (or home)
+        let returnTo = sessionStorage.getItem('authReturnTo') || 'index.html';
+        sessionStorage.removeItem('authReturnTo');
+        window.location.href = returnTo;
       } else {
+        // Setup genuinely not completed yet
         window.location.href = "setup.html";
       }
+    } catch (e) {
+      // On network error: session exists, assume they belong in the app
+      let returnTo = sessionStorage.getItem('authReturnTo') || 'index.html';
+      sessionStorage.removeItem('authReturnTo');
+      window.location.href = returnTo;
     }
   }
 
