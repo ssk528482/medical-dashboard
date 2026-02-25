@@ -1,0 +1,507 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <title>Profile — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<script src="nav.js"></script>
+
+<script src="router.js"></script>
+
+<h1>👤 Profile</h1>
+
+<div id="profileContainer"></div>
+
+<!-- Import Confirmation Modal -->
+<div id="importModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:999;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#1e293b;border:2px solid #7c3aed;border-radius:16px;max-width:400px;width:100%;padding:24px;">
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:36px;">📦</div>
+      <div style="font-size:17px;font-weight:800;color:#c4b5fd;margin-top:8px;">Restore Backup?</div>
+    </div>
+    <div style="background:#1e1b4b;border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:#a5b4fc;">
+      <div style="font-weight:700;margin-bottom:8px;color:#c4b5fd;">📅 Exported: <span id="importSummaryDate"></span></div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 14px;">
+        <span>📚 Subjects</span><span id="importSummarySubjects" style="font-weight:700;color:#e2e8f0;"></span>
+        <span>📅 History</span><span id="importSummaryHistory" style="font-weight:700;color:#e2e8f0;"></span>
+        <span>🃏 Flashcards</span><span id="importSummaryCards" style="font-weight:700;color:#e2e8f0;"></span>
+        <span>🔁 Reviews</span><span id="importSummaryReviews" style="font-weight:700;color:#e2e8f0;"></span>
+        <span>📝 Notes</span><span id="importSummaryNotes" style="font-weight:700;color:#e2e8f0;"></span>
+      </div>
+    </div>
+    <div style="background:#450a0a;border-radius:8px;padding:10px;font-size:12px;color:#fca5a5;margin-bottom:14px;line-height:1.6;">
+      ⚠️ This will <strong>replace all your current data</strong>. This cannot be undone.
+    </div>
+    <div id="importModalStatus" style="font-size:12px;color:#94a3b8;min-height:16px;margin-bottom:12px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button id="importCancelBtn" onclick="closeImportModal()" style="flex:1;background:#334155;margin:0;">Cancel</button>
+      <button id="importConfirmBtn" onclick="confirmImport()" style="flex:1;background:#7c3aed;margin:0;font-weight:700;">⬆️ Restore</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Confirmation Modal -->
+<div id="resetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#1e293b;border:2px solid #ef4444;border-radius:16px;max-width:380px;width:100%;padding:24px;">
+
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;">⚠️</div>
+      <div style="font-size:17px;font-weight:800;color:#fca5a5;margin-top:8px;">Reset Everything?</div>
+    </div>
+
+    <div style="background:#450a0a;border-radius:10px;padding:12px;font-size:13px;color:#fca5a5;margin-bottom:18px;line-height:1.6;">
+      This will permanently erase:<br>
+      • All subjects, units &amp; chapters<br>
+      • All qbank stats<br>
+      • All revision history &amp; analytics<br>
+      • Your exam date &amp; daily plans<br><br>
+      <strong>Your name will be kept.</strong> You'll be taken back to setup.
+    </div>
+
+    <label style="display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+      Type <strong style="color:#ef4444;">RESET</strong> to confirm
+    </label>
+    <input type="text" id="resetConfirmInput" placeholder="Type RESET here"
+      style="width:100%;margin-bottom:6px;border-color:#ef4444;"
+      oninput="document.getElementById('resetError').textContent=''">
+    <div id="resetError" style="color:#ef4444;font-size:12px;min-height:16px;margin-bottom:12px;"></div>
+
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeResetModal()" style="flex:1;background:#334155;margin:0;">Cancel</button>
+      <button onclick="confirmReset()" style="flex:1;background:#dc2626;margin:0;font-weight:700;">🗑️ Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="revisionEngine.js"></script>
+<script src="scheduler.js"></script>
+<script src="intelligence.js"></script>
+<script src="charts.js"></script>
+<script src="supabase.js"></script>
+<script src="cardSync.js"></script>
+<script src="noteSync.js"></script>
+<script>
+
+function renderProfile() {
+  let container = document.getElementById("profileContainer");
+  if (!container) return;
+
+  let phases        = getGlobalPhaseStats();
+  let streak        = calculateStreak();
+  let longestStreak = calculateLongestStreak();
+  let daysLeft      = daysUntilExam();
+  let weekly        = calculateWeeklyConsistency().toFixed(0);
+  let monthly       = calculateMonthlyConsistency().toFixed(0);
+  let burnout       = getBurnoutIndex();
+  let completionPct = phases.total > 0 ? (phases.phase1.count / phases.total * 100).toFixed(1) : 0;
+
+  container.innerHTML = `
+
+    <!-- Identity -->
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+          display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">🩺</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:18px;font-weight:700;">${studyData.userName || "Student"}</div>
+          <div style="font-size:13px;color:#64748b;" id="displayEmail">Loading...</div>
+          <div style="font-size:12px;color:#3b82f6;margin-top:2px;">🎯 Exam: ${studyData.examDate || "Not set"}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Streaks -->
+    <div class="card">
+      <div class="section-title">🔥 Streaks & Consistency</div>
+      <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="stat-box"><div class="stat-big" style="color:#f97316;">${streak}</div><div class="stat-label">Streak</div><div style="font-size:10px;color:#64748b;">days</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#eab308;">${longestStreak}</div><div class="stat-label">Best</div><div style="font-size:10px;color:#64748b;">days</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:${burnout>50?"#ef4444":burnout>25?"#f59e0b":"#10b981"}">${burnout}</div><div class="stat-label">Burnout</div></div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px;">
+          <span>7-Day Consistency</span><span style="color:#3b82f6;">${weekly}%</span>
+        </div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${weekly}%;background:#3b82f6;"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin:8px 0 4px;">
+          <span>30-Day Consistency</span><span style="color:#8b5cf6;">${monthly}%</span>
+        </div>
+        <div class="stat-bar"><div class="stat-fill" style="width:${monthly}%;background:#8b5cf6;"></div></div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card">
+      <div class="section-title">📚 Study Progress</div>
+      <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="stat-box"><div class="stat-big" style="color:#3b82f6;">${completionPct}%</div><div class="stat-label">Completed</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#f59e0b;">${daysLeft}</div><div class="stat-label">Days to Exam</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#8b5cf6;">${phases.r1.pct}%</div><div class="stat-label">R1</div></div>
+      </div>
+      <div class="analytics-grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:8px;">
+        <div class="stat-box"><div class="stat-big" style="color:#f59e0b;">${phases.r2.pct}%</div><div class="stat-label">R2</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#f97316;">${phases.r3.pct}%</div><div class="stat-label">R3</div></div>
+        <div class="stat-box"><div class="stat-big" style="color:#10b981;">${phases.qbank.pct}%</div><div class="stat-label">Qbank</div></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card">
+      <div class="section-title">⚙️ Settings</div>
+      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Your Name</label>
+      <input type="text" id="settingName" value="${studyData.userName || ""}" style="width:100%;margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Exam Date</label>
+      <input type="date" id="settingExamDate" value="${studyData.examDate || "2026-12-01"}" style="width:100%;margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">Default Daily Hours</label>
+      <input type="number" id="settingHours" value="${studyData.defaultHours || 8}" min="1" max="18" style="width:100%;margin-bottom:12px;">
+
+      <div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:16px;border:1px solid #1e293b;">
+        <div style="font-size:12px;font-weight:700;color:#8b5cf6;margin-bottom:10px;">📊 Study Speed Settings</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.5;">
+          Used by Generate Plan to calculate how many chapters/questions to allocate per session.
+        </div>
+        <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">
+          📖 Reading Speed <span style="color:#64748b;font-weight:400;text-transform:none;">(pages / hour)</span>
+        </label>
+        <input type="number" id="settingReadSpeed" value="${studyData.readingSpeed || 25}" min="5" max="100"
+          style="width:100%;margin-bottom:4px;">
+        <div style="font-size:11px;color:#475569;margin-bottom:12px;">Medical students avg 20–30 p/h. Adjust to your pace.</div>
+
+        <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;">
+          🧪 Qbank Speed <span style="color:#64748b;font-weight:400;text-transform:none;">(questions / hour)</span>
+        </label>
+        <input type="number" id="settingQbankSpeed" value="${studyData.qbankSpeed || 30}" min="5" max="120"
+          style="width:100%;margin-bottom:4px;">
+        <div style="font-size:11px;color:#475569;">Typical range: 25–45 Q/h depending on difficulty.</div>
+
+        <label style="font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;margin-top:12px;">
+          📝 Notes Font <span style="color:#64748b;font-weight:400;text-transform:none;">(default for all notes)</span>
+        </label>
+        <select id="settingNotesFont" style="width:100%;margin-bottom:4px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;cursor:pointer;">
+          <option value="patrick-hand" ${(studyData.uiState?.notesFont||'patrick-hand')==='patrick-hand' ?'selected':''}>Patrick Hand (default)</option>
+          <option value="schoolbell"   ${studyData.uiState?.notesFont==='schoolbell'   ?'selected':''}>Schoolbell</option>
+          <option value="system"       ${studyData.uiState?.notesFont==='system'       ?'selected':''}>System</option>
+          <option value="serif"        ${studyData.uiState?.notesFont==='serif'        ?'selected':''}>Serif — Georgia</option>
+          <option value="mono"         ${studyData.uiState?.notesFont==='mono'         ?'selected':''}>Monospace — Fira Code</option>
+          <option value="verdana"      ${studyData.uiState?.notesFont==='verdana'      ?'selected':''}>Verdana</option>
+          <option value="dyslexic"     ${studyData.uiState?.notesFont==='dyslexic'     ?'selected':''}>Dyslexia-friendly</option>
+        </select>
+        <div style="font-size:11px;color:#475569;">Synced across devices. Override per-device from the note view.</div>
+      </div>
+
+      <button onclick="saveSettings()" style="width:100%;background:#16a34a;">Save Settings ✓</button>
+    </div>
+
+    <!-- Backup & Restore -->
+    <div class="card">
+      <div class="section-title">💾 Backup &amp; Restore</div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:14px;line-height:1.6;">
+        Export everything into a single <code style="background:#0f172a;padding:1px 5px;border-radius:4px;font-size:11px;">.json</code> file — subjects, units, chapters, daily history, flashcards, reviews, and notes. Restore it on any account.
+      </div>
+      <button onclick="exportAllData()" id="exportBtn" style="width:100%;background:#0e7490;margin-bottom:10px;">⬇️ Export All Data</button>
+      <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(this.files[0])">
+      <button onclick="document.getElementById('importFileInput').click()" style="width:100%;background:#7c3aed;margin-bottom:0;">⬆️ Import / Restore Backup</button>
+      <div id="exportImportStatus" style="margin-top:8px;font-size:12px;min-height:18px;"></div>
+    </div>
+
+    <!-- Logout -->
+    <div class="card" style="border-color:#334155;">
+      <div class="section-title">⚠️ Account</div>
+      <button onclick="doLogout()" style="width:100%;background:#ef4444;margin-bottom:0;">Logout</button>
+    </div>
+
+    <!-- Reset Everything -->
+    <div class="card" style="border-color:#7f1d1d;border-width:2px;">
+      <div class="section-title" style="color:#fca5a5;">🗑️ Reset Everything</div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:12px;line-height:1.5;">
+        Erase all study data, subjects, qbank, analytics, and history. Keeps your name. Takes you back to setup.
+      </div>
+      <button onclick="openResetModal()" style="width:100%;background:#dc2626;font-weight:700;">
+        Reset Everything
+      </button>
+    </div>
+  `;
+
+  // Load email
+  supabaseClient.auth.getUser().then(({ data: { user } }) => {
+    let el = document.getElementById("displayEmail");
+    if (el && user) el.textContent = user.email;
+  });
+}
+
+function saveSettings() {
+  studyData.userName     = document.getElementById("settingName").value.trim();
+  studyData.examDate     = document.getElementById("settingExamDate").value;
+  studyData.defaultHours = parseFloat(document.getElementById("settingHours").value) || 8;
+  studyData.readingSpeed = parseInt(document.getElementById("settingReadSpeed").value) || 25;
+  studyData.qbankSpeed   = parseInt(document.getElementById("settingQbankSpeed").value) || 30;
+  studyData.uiState      = studyData.uiState || {};
+  studyData.uiState.notesFont = document.getElementById("settingNotesFont")?.value || 'patrick-hand';
+  saveData();
+  alert("Settings saved ✓");
+  renderProfile();
+}
+
+async function doLogout() {
+  await supabaseClient.auth.signOut();
+  localStorage.removeItem("studyData");
+  window.location.href = "login.html";
+}
+
+// ── Reset Modal ───────────────────────────────────────────────
+
+function openResetModal() {
+  document.getElementById("resetModal").style.display = "flex";
+  document.getElementById("resetConfirmInput").value = "";
+  document.getElementById("resetError").textContent = "";
+}
+
+function closeResetModal() {
+  document.getElementById("resetModal").style.display = "none";
+}
+
+async function confirmReset() {
+  let input = document.getElementById("resetConfirmInput").value.trim();
+  if (input !== "RESET") {
+    document.getElementById("resetError").textContent = '✕ Type the word RESET exactly (all caps).';
+    return;
+  }
+
+  let name = studyData.userName || "";
+
+  // Wipe everything — keep only name and start fresh
+  studyData = {
+    version: 5,
+    setupComplete: false,
+    userName: name,
+    subjects: {},
+    dailyHistory: {},
+    dailyPlan: null,
+    uiState: { editorCollapsed: {}, unitCollapsed: {} },
+    startDate: today(),
+    examDate: null,
+    defaultHours: 8,
+    readingSpeed: 25,
+    qbankSpeed: 30,
+    updatedAt: new Date().toISOString()
+  };
+
+  localStorage.setItem("studyData", JSON.stringify(studyData));
+
+  // Sync wipe to cloud
+  if (typeof saveToCloud === "function") await saveToCloud();
+
+  window.location.href = "setup.html";
+}
+
+// ── Export ───────────────────────────────────────────────────────────────
+
+async function exportAllData() {
+  const btn    = document.getElementById('exportBtn');
+  const status = document.getElementById('exportImportStatus');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting…'; }
+  if (status) status.innerHTML = '';
+
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) throw new Error('Not logged in');
+    const uid = user.id;
+
+    const [cardsRes, reviewsRes, notesRes] = await Promise.all([
+      supabaseClient.from('flashcards').select('*').eq('user_id', uid),
+      supabaseClient.from('card_reviews').select('*').eq('user_id', uid),
+      supabaseClient.from('notes').select('*').eq('user_id', uid),
+    ]);
+    if (cardsRes.error)   console.error('Export cards:', cardsRes.error);
+    if (reviewsRes.error) console.error('Export reviews:', reviewsRes.error);
+    if (notesRes.error)   console.error('Export notes:', notesRes.error);
+
+    const bundle = {
+      exportedAt:    new Date().toISOString(),
+      exportVersion: 1,
+      appVersion:    DATA_VERSION,
+      userEmail:     user.email,
+      studyData:     JSON.parse(JSON.stringify(studyData)),
+      flashcards:    cardsRes.data   || [],
+      card_reviews:  reviewsRes.data || [],
+      notes:         notesRes.data   || [],
+    };
+
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `medos-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const subCount = Object.keys(bundle.studyData.subjects || {}).length;
+    if (status) status.innerHTML =
+      `<span style="color:#10b981;">✓ Exported — ${subCount} subjects, ${bundle.flashcards.length} cards, ${bundle.notes.length} notes, ${Object.keys(bundle.studyData.dailyHistory||{}).length} history days</span>`;
+
+  } catch (err) {
+    console.error('Export failed:', err);
+    if (status) status.innerHTML = `<span style="color:#ef4444;">✕ Export failed: ${err.message}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇️ Export All Data'; }
+  }
+}
+
+// ── Import ───────────────────────────────────────────────────────────────
+
+let _importBundle = null;
+
+function handleImportFile(file) {
+  const status = document.getElementById('exportImportStatus');
+  if (!file) return;
+  document.getElementById('importFileInput').value = ''; // allow re-select same file
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const bundle = JSON.parse(e.target.result);
+      if (!bundle.exportVersion || !bundle.studyData)
+        throw new Error('Invalid backup file — not a Medical OS export.');
+
+      _importBundle = bundle;
+
+      const subjectCount = Object.keys(bundle.studyData.subjects      || {}).length;
+      const historyCount = Object.keys(bundle.studyData.dailyHistory  || {}).length;
+      const cardCount    = (bundle.flashcards   || []).length;
+      const reviewCount  = (bundle.card_reviews || []).length;
+      const noteCount    = (bundle.notes        || []).length;
+
+      document.getElementById('importSummaryDate').textContent    = bundle.exportedAt ? new Date(bundle.exportedAt).toLocaleString() : 'Unknown';
+      document.getElementById('importSummarySubjects').textContent = subjectCount;
+      document.getElementById('importSummaryHistory').textContent  = historyCount + ' days';
+      document.getElementById('importSummaryCards').textContent    = cardCount;
+      document.getElementById('importSummaryReviews').textContent  = reviewCount;
+      document.getElementById('importSummaryNotes').textContent    = noteCount;
+
+      document.getElementById('importModalStatus').textContent = '';
+      document.getElementById('importConfirmBtn').disabled = false;
+      document.getElementById('importCancelBtn').disabled  = false;
+      document.getElementById('importModal').style.display = 'flex';
+
+    } catch (err) {
+      if (status) status.innerHTML = `<span style="color:#ef4444;">✕ ${err.message}</span>`;
+      _importBundle = null;
+    }
+  };
+  reader.readAsText(file);
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').style.display = 'none';
+  _importBundle = null;
+}
+
+async function confirmImport() {
+  if (!_importBundle) return;
+  const bundle     = _importBundle;
+  const statusEl   = document.getElementById('importModalStatus');
+  const confirmBtn = document.getElementById('importConfirmBtn');
+  const cancelBtn  = document.getElementById('importCancelBtn');
+
+  confirmBtn.disabled = true;
+  cancelBtn.disabled  = true;
+
+  function setStatus(msg, color) {
+    if (statusEl) statusEl.innerHTML = color
+      ? `<span style="color:${color};">${msg}</span>` : msg;
+  }
+
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) throw new Error('Not logged in');
+    const uid = user.id;
+
+    // ── 1. Wipe existing cloud data ──────────────────────────────────
+    setStatus('⏳ Clearing existing cloud data…');
+    const [d1, d2, d3] = await Promise.all([
+      supabaseClient.from('flashcards').delete().eq('user_id', uid),
+      supabaseClient.from('card_reviews').delete().eq('user_id', uid),
+      supabaseClient.from('notes').delete().eq('user_id', uid),
+    ]);
+    if (d1.error) console.error('Delete cards:', d1.error);
+    if (d2.error) console.error('Delete reviews:', d2.error);
+    if (d3.error) console.error('Delete notes:', d3.error);
+
+    // ── 2. Restore studyData ─────────────────────────────────────────
+    setStatus('⏳ Restoring study data…');
+    const restored = JSON.parse(JSON.stringify(bundle.studyData));
+    if (!restored.userName) restored.userName = studyData.userName;
+    studyData = migrateData(restored);
+    localStorage.setItem('studyData', JSON.stringify(studyData));
+
+    // Clear ID cache so _doSaveToCloud does fresh upserts
+    localStorage.removeItem('_sbIds');
+    await _doSaveToCloud();
+
+    // ── 3. Re-insert flashcards (preserve original UUIDs) ─────────────
+    const cards = (bundle.flashcards || []).map(c => {
+      const r = { ...c, user_id: uid };
+      delete r.created_at; delete r.updated_at;
+      return r;
+    });
+    const totalCards = cards.length;
+    for (let i = 0; i < cards.length; i += 200) {
+      setStatus(`⏳ Restoring flashcards… (${Math.min(i + 200, totalCards)}/${totalCards})`);
+      const { error } = await supabaseClient.from('flashcards').upsert(cards.slice(i, i + 200), { onConflict: 'id' });
+      if (error) console.error('Cards upsert batch:', error);
+    }
+
+    // ── 4. Re-insert card reviews ────────────────────────────────────
+    const reviews = (bundle.card_reviews || []).map(r => ({ ...r, user_id: uid }));
+    const totalReviews = reviews.length;
+    for (let i = 0; i < reviews.length; i += 500) {
+      setStatus(`⏳ Restoring review history… (${Math.min(i + 500, totalReviews)}/${totalReviews})`);
+      const { error } = await supabaseClient.from('card_reviews').upsert(reviews.slice(i, i + 500), { onConflict: 'id' });
+      if (error) console.error('Reviews upsert batch:', error);
+    }
+
+    // ── 5. Re-insert notes ───────────────────────────────────────────
+    const notes = (bundle.notes || []).map(n => {
+      const r = { ...n, user_id: uid };
+      delete r.created_at; delete r.updated_at;
+      return r;
+    });
+    const totalNotes = notes.length;
+    for (let i = 0; i < notes.length; i += 100) {
+      setStatus(`⏳ Restoring notes… (${Math.min(i + 100, totalNotes)}/${totalNotes})`);
+      const { error } = await supabaseClient.from('notes').upsert(notes.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.error('Notes upsert batch:', error);
+    }
+
+    // ── Done ─────────────────────────────────────────────────────────
+    setStatus('✓ Restore complete! Reloading page…', '#10b981');
+    _importBundle = null;
+    setTimeout(() => window.location.reload(), 1400);
+
+  } catch (err) {
+    console.error('Import failed:', err);
+    setStatus(`✕ Restore failed: ${err.message}`, '#ef4444');
+    confirmBtn.disabled = false;
+    cancelBtn.disabled  = false;
+  }
+}
+
+</script>
+
+<script src="rotateScreen.js"></script>
+<script src="search.js"></script>
+<script src="pwa.js"></script>
+</body>
+</html>

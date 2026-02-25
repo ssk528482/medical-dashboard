@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <title>Medical Study OS — Login</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Animated background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: 0;
+    }
+
+    /* Glow blobs */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      z-index: 0;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+    .blob1 { width: 400px; height: 400px; background: rgba(59,130,246,0.12); top: -100px; right: -100px; }
+    .blob2 { width: 300px; height: 300px; background: rgba(139,92,246,0.10); bottom: -80px; left: -80px; animation-delay: -6s; }
+
+    @keyframes drift {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(30px, 20px) scale(1.05); }
+    }
+
+    .login-card {
+      position: relative;
+      z-index: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 20px;
+      padding: 40px 32px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .logo-icon {
+      font-size: 48px;
+      display: block;
+      margin-bottom: 12px;
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .logo h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #f1f5f9;
+      letter-spacing: -0.02em;
+    }
+
+    .logo p {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    input[type="email"] {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 15px;
+      color: #e2e8f0;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+
+    input[type="email"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    .login-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all 0.2s;
+      letter-spacing: 0.02em;
+    }
+
+    .login-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 8px 20px rgba(59,130,246,0.3); }
+    .login-btn:active { transform: translateY(0); }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .divider {
+      text-align: center;
+      color: #475569;
+      font-size: 12px;
+      margin: 20px 0;
+      position: relative;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: #334155;
+    }
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
+
+    .features {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .feature {
+      background: #0f172a;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .feature-icon { font-size: 20px; margin-bottom: 4px; }
+    .feature-label { font-size: 11px; color: #64748b; }
+
+    #statusMsg {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      display: none;
+      text-align: center;
+    }
+
+    .msg-success { background: #052e16; border: 1px solid #16a34a; color: #86efac; }
+    .msg-error { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: #475569;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+
+<div class="login-card">
+  <div class="logo">
+    <span class="logo-icon">🩺</span>
+    <h1>Medical Study OS</h1>
+    <p>Your intelligent exam preparation system</p>
+  </div>
+
+  <div class="form-group">
+    <label>Email Address</label>
+    <input type="email" id="emailInput" placeholder="your@email.com" autocomplete="email">
+  </div>
+
+  <button class="login-btn" id="loginBtn" onclick="handleLogin()">
+    Send Magic Link →
+  </button>
+
+  <div id="statusMsg"></div>
+
+  <div class="divider">what's inside</div>
+
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">🧠</div>
+      <div class="feature-label">Adaptive Revision</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📊</div>
+      <div class="feature-label">Phase Tracking</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎯</div>
+      <div class="feature-label">Smart Scheduling</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">☁️</div>
+      <div class="feature-label">Cloud Sync</div>
+    </div>
+  </div>
+
+  <div class="footer-note">No password needed. Magic link sent to your email.</div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://alrkpctsjmvspybrgdfy.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFscmtwY3Rzam12c3B5YnJnZGZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjAxODcsImV4cCI6MjA4NzA5NjE4N30.TLSmuCaKCnZ99QUcwL9w7yUGJHrMMj-BWXnqNG7OTwU";
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function showMsg(text, type) {
+    let el = document.getElementById("statusMsg");
+    el.textContent = text;
+    el.className = type === "success" ? "msg-success" : "msg-error";
+    el.style.display = "block";
+  }
+
+  async function handleLogin() {
+    let email = document.getElementById("emailInput").value.trim();
+    if (!email) { showMsg("Please enter your email address.", "error"); return; }
+
+    let btn = document.getElementById("loginBtn");
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+
+    const { error } = await sb.auth.signInWithOtp({
+      email: email,
+      options: { emailRedirectTo: "https://medical-dashboard-lac.vercel.app/index.html" }
+    });
+
+    if (error) {
+      showMsg("Failed to send link: " + error.message, "error");
+      btn.disabled = false;
+      btn.textContent = "Send Magic Link →";
+    } else {
+      showMsg("✓ Magic link sent! Check your email and click the link.", "success");
+      btn.textContent = "Link Sent ✓";
+    }
+  }
+
+  // Handle magic link redirect (Supabase appends token to URL)
+  async function checkSession() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      // Already logged in — redirect to app
+      let data = JSON.parse(localStorage.getItem("studyData") || "{}");
+      if (data.setupComplete) {
+        window.location.href = "index.html";
+      } else {
+        window.location.href = "setup.html";
+      }
+    }
+  }
+
+  // Enter key support
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("emailInput").addEventListener("keydown", e => {
+      if (e.key === "Enter") handleLogin();
+    });
+    checkSession();
+  });
+</script>
+<script src="pwa.js"></script>
+</body>
+</html>

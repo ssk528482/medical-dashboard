@@ -1,0 +1,308 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <title>Create Card — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    .create-page { padding: 16px; padding-bottom: 80px; max-width: 640px; margin: 0 auto; }
+
+    /* Header */
+    .create-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+    .create-back-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-muted); font-size: 13px; padding: 6px 12px;
+      border-radius: var(--radius-sm); cursor: pointer; min-height: unset; margin: 0;
+      text-decoration: none; display: inline-flex; align-items: center;
+    }
+    .create-back-btn:hover { background: var(--card); color: var(--text); }
+    .create-title { font-size: 20px; font-weight: 700; }
+
+    /* Card type toggle */
+    .type-toggle {
+      display: flex; background: var(--card); border-radius: var(--radius-sm);
+      padding: 4px; gap: 4px; margin-bottom: 16px;
+    }
+    .type-btn {
+      flex: 1; padding: 9px; border: none; border-radius: 6px; font-size: 13px;
+      font-weight: 600; cursor: pointer; background: transparent; color: var(--text-muted);
+      min-height: unset; margin: 0; transition: background 0.15s, color 0.15s;
+    }
+    .type-btn:hover { opacity: 1; box-shadow: none; background: var(--surface); color: var(--text); }
+    .type-btn.active { background: var(--blue); color: #fff; }
+
+    /* Form */
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin-bottom: 6px; }
+    .form-textarea {
+      width: 100%; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 12px; font-size: 14px; font-family: inherit;
+      min-height: unset; margin: 0; resize: vertical;
+    }
+    .form-textarea:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
+
+    /* Cloze hint */
+    .cloze-hint {
+      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2);
+      border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px;
+      color: var(--text-muted); margin-top: 6px; display: none;
+    }
+
+    /* Link selectors */
+    .link-selectors { display: flex; gap: 8px; flex-wrap: wrap; }
+    .form-select {
+      flex: 1; min-width: 100px; background: var(--card); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 9px 10px; font-size: 13px; font-family: inherit;
+      min-height: unset; margin: 0; cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a90b0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center;
+      padding-right: 28px; -webkit-appearance: none; appearance: none;
+    }
+    .form-select:focus { border-color: var(--blue); outline: none; }
+
+    /* Tag input */
+    .tag-wrap {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 8px 10px; cursor: text; min-height: 42px;
+    }
+    .tag-wrap:focus-within { border-color: var(--blue); }
+    .tag-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(59,130,246,0.15); color: var(--blue);
+      border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 600;
+    }
+    .tag-chip-x { cursor: pointer; font-size: 11px; line-height: 1; }
+    .tag-chip-x:hover { color: var(--red); }
+    .tag-input {
+      border: none; background: transparent; color: var(--text);
+      font-size: 13px; font-family: inherit; outline: none; flex: 1; min-width: 80px;
+      min-height: unset; margin: 0; padding: 2px 0; width: auto;
+    }
+
+    /* Image upload */
+    .img-upload-box {
+      border: 2px dashed var(--border); border-radius: var(--radius-sm);
+      padding: 14px; text-align: center; cursor: pointer;
+      color: var(--text-dim); font-size: 13px; margin-top: 8px;
+      transition: border-color 0.15s;
+    }
+    .img-upload-box:hover { border-color: var(--blue); color: var(--blue); }
+    .img-preview-wrap { display: none; margin-top: 8px; position: relative; }
+    .img-preview { max-width: 100%; max-height: 180px; border-radius: 8px; object-fit: contain; }
+    .img-remove {
+      position: absolute; top: 6px; right: 6px;
+      background: rgba(239,68,68,0.8); color: #fff; border: none;
+      border-radius: 50%; width: 22px; height: 22px; font-size: 12px;
+      cursor: pointer; min-height: unset; margin: 0; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .upload-status { font-size: 12px; color: var(--text-dim); margin-top: 4px; min-height: 16px; }
+
+    /* Action buttons */
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+    .btn-primary {
+      flex: 1; background: var(--blue); color: #fff; border: none;
+      padding: 13px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 700;
+      cursor: pointer; min-height: unset; margin: 0;
+    }
+    .btn-primary:hover { opacity: 0.88; box-shadow: none; }
+    .btn-secondary {
+      background: var(--card); color: var(--text-muted); border: 1px solid var(--border);
+      padding: 12px 18px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600;
+      cursor: pointer; min-height: unset; margin: 0;
+    }
+    .btn-secondary:hover { background: var(--surface); color: var(--text); opacity: 1; box-shadow: none; }
+
+    .form-status { font-size: 13px; margin-top: 10px; min-height: 18px; color: var(--blue); }
+    .form-status.error { color: var(--red); }
+
+    /* Image Occlusion */
+    .occlusion-section { display: none; }
+    .occlusion-section.active { display: block; }
+    .occlusion-upload-box {
+      border: 2px dashed var(--border); border-radius: var(--radius-sm);
+      padding: 20px; text-align: center; cursor: pointer;
+      color: var(--text-dim); font-size: 13px; margin-bottom: 8px;
+      transition: border-color 0.15s;
+    }
+    .occlusion-upload-box:hover { border-color: var(--blue); color: var(--blue); }
+    #occlusion-canvas {
+      display: none; border-radius: var(--radius-sm); cursor: crosshair;
+      max-width: 100%; margin-bottom: 8px;
+    }
+    .occlusion-hint {
+      display: none; font-size: 12px; color: var(--text-muted);
+      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2);
+      border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 8px;
+    }
+    .occlusion-box-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+    .occlusion-box-actions button {
+      font-size: 12px; padding: 5px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--text-muted); cursor: pointer; min-height: unset; margin: 0;
+    }
+    .occlusion-box-actions button:hover { color: var(--text); background: var(--surface); opacity: 1; box-shadow: none; }
+
+    /* AI Generate Modal */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+      align-items: flex-end; justify-content: center; padding: 0;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-sheet {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 20px; width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto;
+    }
+    .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+    .ai-card-preview {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px;
+    }
+    .ai-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: var(--text-dim); }
+    .ai-card-header button { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 0; margin: 0; min-height: unset; }
+    .ai-textarea {
+      width: 100%; background: transparent; border: none; color: var(--text);
+      font-size: 13px; font-family: inherit; resize: none; outline: none;
+      min-height: unset; padding: 0; margin: 0;
+    }
+    .ai-field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ SIDE NAV ═══ -->
+<script src="nav.js"></script>
+
+<div class="create-page">
+
+  <!-- Header -->
+  <div class="create-header">
+    <a href="browse.html" class="create-back-btn">← Cards</a>
+    <div class="create-title">✨ Create Card</div>
+  </div>
+
+  <!-- Card Type -->
+  <div class="type-toggle">
+    <button class="type-btn active" data-type="basic"           onclick="setType('basic')">Basic</button>
+    <button class="type-btn"        data-type="cloze"           onclick="setType('cloze')">Cloze</button>
+    <button class="type-btn"        data-type="image_occlusion" onclick="setType('image_occlusion')">🖼 Occlusion</button>
+  </div>
+
+  <!-- Front -->
+  <div class="form-group">
+    <label class="form-label">Front</label>
+    <textarea class="form-textarea" id="front" rows="3" placeholder="Question or prompt…" oninput="onFrontInput()"></textarea>
+    <div class="cloze-hint" id="cloze-hint">
+      💡 Wrap the answer in <strong>{{double braces}}</strong>. E.g. <em>The {{mitochondria}} is the powerhouse of the cell.</em>
+    </div>
+    <div class="img-upload-box" id="front-upload" onclick="document.getElementById('front-file').click()">📷 Add image to front</div>
+    <input type="file" id="front-file" accept="image/*" style="display:none" onchange="uploadImg('front',this)"/>
+    <div class="img-preview-wrap" id="front-preview-wrap">
+      <img class="img-preview" id="front-preview-img" src=""/>
+      <button class="img-remove" onclick="removeImg('front')">✕</button>
+    </div>
+    <div class="upload-status" id="front-upload-status"></div>
+  </div>
+
+  <!-- Back -->
+  <div class="form-group" id="back-group">
+    <label class="form-label">Back</label>
+    <textarea class="form-textarea" id="back" rows="3" placeholder="Answer or explanation…"></textarea>
+    <div class="img-upload-box" id="back-upload" onclick="document.getElementById('back-file').click()">📷 Add image to back</div>
+    <input type="file" id="back-file" accept="image/*" style="display:none" onchange="uploadImg('back',this)"/>
+    <div class="img-preview-wrap" id="back-preview-wrap">
+      <img class="img-preview" id="back-preview-img" src=""/>
+      <button class="img-remove" onclick="removeImg('back')">✕</button>
+    </div>
+    <div class="upload-status" id="back-upload-status"></div>
+  </div>
+
+  <!-- Image Occlusion Section -->
+  <div class="occlusion-section form-group" id="occlusion-section">
+    <label class="form-label">📷 Diagram Image</label>
+    <div class="occlusion-upload-box" id="occlusion-upload-box"
+         onclick="document.getElementById('occlusion-file').click()">
+      📷 Upload diagram for occlusion
+    </div>
+    <input type="file" id="occlusion-file" accept="image/*" style="display:none"
+           onchange="initOcclusionCanvas(this)"/>
+    <canvas id="occlusion-canvas"></canvas>
+    <div class="occlusion-hint" id="occlusion-hint">
+      💡 Drag to draw boxes over areas to hide. Click a box to rename it.
+    </div>
+    <div class="occlusion-box-actions" id="occlusion-box-actions" style="display:none">
+      <button onclick="deleteSelectedBox()">🗑 Delete selected box</button>
+      <button onclick="resetOcclusionCanvas()">↺ Reset all</button>
+    </div>
+  </div>
+
+  <!-- Link To -->
+  <div class="form-group">
+    <label class="form-label">Link To</label>
+    <div class="link-selectors">
+      <select class="form-select" id="sel-subject" onchange="fillUnits()"><option value="">Subject</option></select>
+      <select class="form-select" id="sel-unit"    onchange="fillChapters()"><option value="">Unit</option></select>
+      <select class="form-select" id="sel-chapter"><option value="">Chapter</option></select>
+    </div>
+  </div>
+
+  <!-- Tags -->
+  <div class="form-group">
+    <label class="form-label">Tags</label>
+    <div class="tag-wrap" id="tag-wrap" onclick="document.getElementById('tag-input').focus()">
+      <input type="text" id="tag-input" class="tag-input" placeholder="Type tag, press Enter"
+             onkeydown="tagKey(event)"/>
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="openAiModal()">✨ AI Generate</button>
+    <button class="btn-primary"   onclick="submit()">Save Card</button>
+  </div>
+  <div class="form-status" id="form-status"></div>
+
+</div><!-- /create-page -->
+
+
+<!-- ═══ AI GENERATE MODAL ═══ -->
+<div class="modal-backdrop" id="ai-modal" onclick="if(event.target===this)closeAiModal()">
+  <div class="modal-sheet">
+    <div class="modal-title">✨ AI Card Generator</div>
+    <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px">Paste text and Claude will generate flashcards.</p>
+    <textarea class="form-textarea" id="ai-source" rows="6" placeholder="Paste chapter text here…"></textarea>
+    <button class="btn-primary" id="ai-run-btn" onclick="runAi()" style="margin-top:10px;width:100%">Generate Cards</button>
+    <div class="form-status" id="ai-status"></div>
+    <div id="ai-preview"></div>
+    <div id="ai-save-row" style="display:none;margin-top:10px;gap:10px;display:none">
+      <button class="btn-secondary" onclick="closeAiModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveAiCards()" style="flex:1">Save All Cards</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ SCRIPTS ═══ -->
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="supabase.js"></script>
+<script src="cloudinary.js"></script>
+<script src="cardSync.js"></script>
+<script src="imageOcclusion.js"></script>
+<script src="create.js"></script>
+<script src="rotateScreen.js"></script>
+<script src="search.js"></script>
+<script src="pwa.js"></script>
+</body>
+</html>
