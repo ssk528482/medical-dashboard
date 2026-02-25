@@ -1,0 +1,226 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <title>Notes — Medical Study OS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Google Fonts for notes -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Schoolbell&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<script src="nav.js"></script>
+
+<!-- ══ NOTES DRILL-DOWN LAYOUT ═══════════════════════════════ -->
+<div class="notes-page" id="notes-page">
+
+  <!-- Breadcrumb bar (always visible) -->
+  <div class="notes-breadcrumb-bar" id="notes-breadcrumb-bar">
+    <button class="notes-bc-back" id="notes-bc-back" onclick="notesBreadcrumbBack()" style="display:none;">← Back</button>
+    <div class="notes-bc-path" id="notes-bc-path">
+      <span class="notes-bc-crumb current">📝 Notes</span>
+    </div>
+    <span id="notes-save-status"></span>
+  </div>
+
+  <!-- Search bar -->
+  <div class="notes-search-bar" id="notes-search-bar">
+    <input type="text" id="notes-search-input" placeholder="🔍 Search notes, subjects, topics…"
+           oninput="handleNotesSearch(this.value)" />
+  </div>
+
+  <!-- Progress bar (shown on subjects view) -->
+  <div class="notes-progress-bar" id="notes-progress-bar" style="display:none;">
+    <span class="notes-progress-label">Notes Progress</span>
+    <div class="notes-progress-track"><div class="notes-progress-fill" id="notes-progress-fill" style="width:0%"></div></div>
+    <span class="notes-progress-pct" id="notes-progress-pct">0%</span>
+  </div>
+
+  <!-- ── VIEW: Subjects grid ── -->
+  <div id="view-subjects" class="notes-view">
+    <div class="notes-grid" id="subjects-grid"></div>
+  </div>
+
+  <!-- ── VIEW: Units grid ── -->
+  <div id="view-units" class="notes-view" style="display:none;">
+    <div class="notes-grid" id="units-grid"></div>
+  </div>
+
+  <!-- ── VIEW: Chapters grid ── -->
+  <div id="view-chapters" class="notes-view" style="display:none;">
+    <div id="chapters-list" style="padding:8px 16px 20px;display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+
+  <!-- ── VIEW: Note reader/editor ── -->
+  <div id="view-note" class="notes-view" style="display:none;">
+    <div class="notes-note-view" id="notes-note-view">
+
+      <!-- Topbar: title + font picker + edit button + actions -->
+      <div class="notes-note-topbar" id="notes-note-topbar">
+        <div class="notes-note-topbar-title" id="notes-note-topbar-title">Chapter</div>
+        <button class="note-to-cards-btn" id="btn-note-to-cards" onclick="openNoteToCardsModal()" style="display:none;" title="Generate flashcards from this note">⚡ Cards</button>
+        <select id="note-font-picker" class="note-font-select" onchange="applyNotesFont(this.value)" title="Change note font"></select>
+        <button class="notes-edit-btn" id="btn-toggle-edit" onclick="toggleNoteEditMode()">✏️ Edit</button>
+        <button class="notes-edit-btn" id="btn-save-note" onclick="saveCurrentNote()" style="display:none;background:rgba(59,130,246,0.12);color:var(--blue);border-color:rgba(59,130,246,0.4);">💾 Save</button>
+        <button class="notes-edit-btn" id="btn-cancel-edit" onclick="cancelEdit()" style="display:none;">✕ Cancel</button>
+      </div>
+
+      <!-- READ MODE: rendered markdown -->
+      <div class="notes-read-body" id="notes-read-body" style="display:none;">
+        <!-- Filled by renderNoteReadView() -->
+      </div>
+
+      <!-- EMPTY STATE: no note yet -->
+      <div class="notes-empty" id="notes-note-empty" style="display:none;">
+        <div class="notes-empty-icon">📄</div>
+        <div class="notes-empty-text">No note yet for this chapter</div>
+        <div class="notes-empty-sub">Start writing your revision notes below</div>
+        <button class="notes-empty-cta" onclick="toggleNoteEditMode()">✏️ Write First Note</button>
+      </div>
+
+      <!-- EDIT MODE: full editor -->
+      <div class="notes-edit-wrap" id="notes-edit-wrap" style="display:none;">
+        <div class="notes-editor-toolbar">
+          <input type="text" id="note-title-input" placeholder="Note title…" oninput="markDirty()" />
+          <div class="note-color-picker" title="Color label">
+            <div class="note-color-swatch sw-default active" data-color="default" onclick="setNoteColor('default', this)" title="Default"></div>
+            <div class="note-color-swatch sw-red"    data-color="red"    onclick="setNoteColor('red',    this)" title="🔴 High yield"></div>
+            <div class="note-color-swatch sw-yellow" data-color="yellow" onclick="setNoteColor('yellow', this)" title="🟡 Needs review"></div>
+            <div class="note-color-swatch sw-green"  data-color="green"  onclick="setNoteColor('green',  this)" title="🟢 Confident"></div>
+            <div class="note-color-swatch sw-blue"   data-color="blue"   onclick="setNoteColor('blue',   this)" title="🔵 Extra"></div>
+          </div>
+          <button class="toolbar-tool-btn" onclick="triggerImageUpload()" title="Upload image">
+            📷 Image
+          </button>
+          <button class="toolbar-tool-btn ai" onclick="openAiNoteModal()" title="Generate with AI">
+            ✨ AI
+          </button>
+          <input type="file" id="note-img-file" accept="image/*" style="display:none"
+                 onchange="handleNoteImageUpload(this)" />
+        </div>
+        <div class="notes-editor-area">
+          <textarea class="notes-md-editor" id="note-content-editor"
+            placeholder="Write your notes in Markdown…&#10;&#10;**Bold**, *italic*, ## Heading, - bullet, `code`&#10;&#10;Paste images with Ctrl+V"
+            oninput="markDirty()"></textarea>
+        </div>
+        <div class="notes-editor-footer">
+          <div class="notes-tag-wrap" id="notes-tag-wrap"
+               onclick="document.getElementById('notes-tag-input').focus()">
+            <input type="text" id="notes-tag-input" class="notes-tag-input"
+                   placeholder="Add tag…" onkeydown="handleNoteTagInput(event)" />
+          </div>
+          <span id="note-word-count" style="font-size:10px;color:var(--text-dim);white-space:nowrap;flex-shrink:0;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── VIEW: Search results ── -->
+  <div id="view-search" class="notes-view" style="display:none;">
+    <div class="notes-search-results" id="notes-search-results"></div>
+  </div>
+
+  <!-- ── VIEW: Unit stacked ── -->
+  <div id="view-unit-stack" class="notes-view" style="display:none;">
+    <div class="notes-unit-view" id="notes-unit-view">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:14px;font-weight:700;" id="unit-view-title"></div>
+        <button onclick="exportUnitPdf()"
+          style="font-size:11px;padding:5px 10px;margin:0;min-height:unset;background:var(--card);color:var(--text-muted);border:1px solid var(--border);">
+          Export PDF
+        </button>
+      </div>
+      <div id="unit-cards-container"></div>
+    </div>
+  </div>
+
+</div><!-- /notes-page -->
+
+
+<!-- ══ AI NOTE MODAL ════════════════════════════════════════════ -->
+<div class="fc-modal-backdrop" id="ai-note-modal" onclick="closeAiNoteModalOnBackdrop(event)">
+  <div class="fc-modal-sheet">
+    <div class="fc-modal-title">✨ AI Note Generator</div>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">
+      Paste textbook or lecture text — Claude will create a structured revision note.
+    </p>
+    <textarea id="ai-note-source" style="min-height:130px;font-size:13px;"
+      placeholder="Paste chapter text here…"></textarea>
+    <button id="btn-run-ai-note" onclick="runAiNote()"
+      style="width:100%;margin-top:8px;">Generate Note</button>
+    <div id="ai-note-status" style="font-size:12px;color:var(--blue);margin-top:6px;min-height:14px;"></div>
+    <div id="ai-note-preview"
+      style="display:none;margin-top:10px;background:var(--card);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--text);max-height:260px;overflow-y:auto;"></div>
+    <div id="ai-note-actions" style="display:none;margin-top:10px;display:none;gap:8px;flex-direction:row;">
+      <button onclick="closeAiNoteModal()"
+        style="background:var(--card);color:var(--text);border:1px solid var(--border);flex:1;margin:0;">Cancel</button>
+      <button onclick="applyAiNote()" style="flex:1;margin:0;">Use This Note</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ NOTE → CARDS MODAL ════════════════════════════════════ -->
+<div class="n2c-modal-backdrop" id="n2c-modal" onclick="closeN2CModalOnBackdrop(event)">
+  <div class="n2c-modal-sheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:15px;font-weight:800;color:var(--text);">⚡ Generate Cards from Note</div>
+      <button onclick="closeN2CModal()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);font-size:13px;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;margin:0;min-height:unset;">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px;">This will open the Flashcards page and pre-load your note content into the AI Card Generator.</p>
+    <div id="n2c-preview" style="background:var(--card);border-radius:var(--radius-sm);padding:10px 12px;font-size:11px;color:var(--text-muted);max-height:120px;overflow:hidden;margin-bottom:14px;border:1px solid var(--border);font-family:monospace;white-space:pre-wrap;"></div>
+    <button onclick="goToCardsWithNote()" style="width:100%;background:rgba(139,92,246,0.85);color:#fff;border:none;padding:13px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;margin:0;min-height:unset;">⚡ Open AI Card Generator →</button>
+  </div>
+</div>
+
+<!-- ── Bottom Nav ─────────────────────────────────────────── -->
+
+
+<script src="utils.js"></script>
+<script src="data.js"></script>
+<script src="supabase.js"></script>
+<script src="cloudinary.js"></script>
+<script src="cardSync.js"></script>
+<script src="noteSync.js"></script>
+<script src="notes.js"></script>
+
+<script>
+// ── Notes page boot ───────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", async function () {
+  if (typeof initNotes === "function") await initNotes();
+
+  // Cards badge
+  if (typeof getDueCardCount === "function") {
+    let count = await getDueCardCount();
+    let badge = document.getElementById("nav-review-badge");
+    if (badge && count > 0) {
+      badge.textContent = count > 99 ? "99+" : count;
+      badge.style.display = "inline-block";
+    }
+  }
+
+  // Deep-link: ?subject=&unit=&chapter= opens note directly
+  let params  = new URLSearchParams(window.location.search);
+  let subject = params.get("subject");
+  let unit    = params.get("unit");
+  let chapter = params.get("chapter");
+  if (subject && unit && chapter && typeof openNote === "function") {
+    openNote(subject, unit, chapter);
+  } else if (subject && unit && !chapter && typeof openUnitView === "function") {
+    openUnitView(subject, unit);
+  }
+});
+</script>
+
+<script src="rotateScreen.js"></script>
+<script src="pomodoro.js"></script>
+<script src="search.js"></script>
+<script src="pwa.js"></script>
+</body>
+</html>
