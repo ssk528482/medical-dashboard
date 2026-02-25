@@ -44,6 +44,8 @@
 
   <!-- ── VIEW: Subjects grid ── -->
   <div id="view-subjects" class="notes-view">
+    <!-- Recently edited panel -->
+    <div class="notes-recent-panel" id="notes-recent-panel" style="display:none;"></div>
     <div class="notes-grid" id="subjects-grid"></div>
   </div>
 
@@ -54,7 +56,16 @@
 
   <!-- ── VIEW: Chapters grid ── -->
   <div id="view-chapters" class="notes-view" style="display:none;">
+    <div id="chapters-tag-filter" class="notes-tag-filter-bar" style="display:none;"></div>
     <div id="chapters-list" style="padding:8px 16px 20px;display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+
+  <!-- ── VIEW: Note Types (level 4) ── -->
+  <div id="view-note-types" class="notes-view" style="display:none;">
+    <div style="padding:8px 16px 20px;">
+      <div class="notes-section-head" id="note-types-heading">Select Note Type</div>
+      <div class="notes-type-grid" id="note-types-grid"></div>
+    </div>
   </div>
 
   <!-- ── VIEW: Note reader/editor ── -->
@@ -63,12 +74,26 @@
 
       <!-- Topbar: title + font picker + edit button + actions -->
       <div class="notes-note-topbar" id="notes-note-topbar">
+        <span class="notes-note-type-badge" id="notes-note-type-label" style="display:none;">📝</span>
         <div class="notes-note-topbar-title" id="notes-note-topbar-title">Chapter</div>
         <button class="note-to-cards-btn" id="btn-note-to-cards" onclick="openNoteToCardsModal()" style="display:none;" title="Generate flashcards from this note">⚡ Cards</button>
         <select id="note-font-picker" class="note-font-select" onchange="applyNotesFont(this.value)" title="Change note font"></select>
         <button class="notes-edit-btn" id="btn-toggle-edit" onclick="toggleNoteEditMode()">✏️ Edit</button>
         <button class="notes-edit-btn" id="btn-save-note" onclick="saveCurrentNote()" style="display:none;background:rgba(59,130,246,0.12);color:var(--blue);border-color:rgba(59,130,246,0.4);">💾 Save</button>
         <button class="notes-edit-btn" id="btn-cancel-edit" onclick="cancelEdit()" style="display:none;">✕ Cancel</button>
+        <button class="notes-edit-btn" id="btn-focus-mode" onclick="toggleFocusMode()" title="Focus / fullscreen mode">⛶ Focus</button>
+        <button class="notes-edit-btn" id="btn-find-note" onclick="toggleFindInNote()" title="Find in note">🔍 Find</button>
+        <button class="notes-edit-btn" id="btn-export-note-pdf" onclick="exportCurrentNotePdf()" title="Export this note to PDF">📄 PDF</button>
+      </div>
+
+      <!-- Find-in-note bar -->
+      <div class="notes-find-bar" id="notes-find-bar" style="display:none;">
+        <input type="text" id="notes-find-input" class="notes-find-input"
+               placeholder="Find in note… (type to highlight)"
+               oninput="_findInNote(this.value)"
+               onkeydown="if(event.key==='Escape'){toggleFindInNote();}" />
+        <span id="notes-find-count" class="notes-find-count"></span>
+        <button class="notes-edit-btn" onclick="toggleFindInNote()" style="flex-shrink:0;">✕</button>
       </div>
 
       <!-- READ MODE: rendered markdown -->
@@ -86,6 +111,7 @@
 
       <!-- EDIT MODE: full editor -->
       <div class="notes-edit-wrap" id="notes-edit-wrap" style="display:none;">
+        <!-- Row 1: title + color + image + AI -->
         <div class="notes-editor-toolbar">
           <input type="text" id="note-title-input" placeholder="Note title…" oninput="markDirty()" />
           <div class="note-color-picker" title="Color label">
@@ -95,19 +121,34 @@
             <div class="note-color-swatch sw-green"  data-color="green"  onclick="setNoteColor('green',  this)" title="🟢 Confident"></div>
             <div class="note-color-swatch sw-blue"   data-color="blue"   onclick="setNoteColor('blue',   this)" title="🔵 Extra"></div>
           </div>
-          <button class="toolbar-tool-btn" onclick="triggerImageUpload()" title="Upload image">
-            📷 Image
-          </button>
-          <button class="toolbar-tool-btn ai" onclick="openAiNoteModal()" title="Generate with AI">
-            ✨ AI
-          </button>
+          <button class="toolbar-tool-btn" onclick="triggerImageUpload()" title="Upload image">📷 Image</button>
+          <button class="toolbar-tool-btn ai" onclick="openAiNoteModal()" title="Generate with AI">✨ AI</button>
           <input type="file" id="note-img-file" accept="image/*" style="display:none"
                  onchange="handleNoteImageUpload(this)" />
+        </div>
+        <!-- Row 2: Markdown toolbar -->
+        <div class="notes-md-toolbar" id="notes-md-toolbar">
+          <button class="md-btn" onclick="_mdInsert('**','**','bold')" title="Bold"><b>B</b></button>
+          <button class="md-btn" onclick="_mdInsert('*','*','italic')" title="Italic"><i>I</i></button>
+          <button class="md-btn" onclick="_mdInsertLine('## ')" title="Heading 2">H2</button>
+          <button class="md-btn" onclick="_mdInsertLine('### ')" title="Heading 3">H3</button>
+          <button class="md-btn" onclick="_mdInsertLine('> ')" title="Blockquote">›</button>
+          <button class="md-btn" onclick="_mdInsertLine('- ')" title="Bullet list">•</button>
+          <button class="md-btn" onclick="_mdInsertLine('1. ')" title="Numbered list">#.</button>
+          <button class="md-btn" onclick="_mdInsert('`','`','code')" title="Inline code">&#96;&#96;</button>
+          <button class="md-btn" onclick="_mdInsertLine('---')" title="Divider">—</button>
+          <button class="md-btn" onclick="_mdInsert('[','](url)','link')" title="Link">🔗</button>
+          <span class="md-divider"></span>
+          <button class="md-btn tmpl" onclick="_applyTemplate('high_yield')" title="High-Yield template">⭐ HY</button>
+          <button class="md-btn tmpl" onclick="_applyTemplate('summary')" title="Summary template">📋 Sum</button>
+          <button class="md-btn tmpl" onclick="_applyTemplate('mnemonic')" title="Mnemonic template">🧠 Mnemo</button>
+          <button class="md-btn tmpl" onclick="_applyTemplate('quick')" title="Quick notes template">⚡ Quick</button>
         </div>
         <div class="notes-editor-area">
           <textarea class="notes-md-editor" id="note-content-editor"
             placeholder="Write your notes in Markdown…&#10;&#10;**Bold**, *italic*, ## Heading, - bullet, `code`&#10;&#10;Paste images with Ctrl+V"
-            oninput="markDirty()"></textarea>
+            oninput="markDirty()"
+            onkeydown="_handleEditorKeydown(event)"></textarea>
         </div>
         <div class="notes-editor-footer">
           <div class="notes-tag-wrap" id="notes-tag-wrap"
@@ -181,11 +222,25 @@
 
 <!-- ── Bottom Nav ─────────────────────────────────────────── -->
 
+<!-- ══ NOTES RIGHT SIDEBAR — Quick chapter/unit switcher ════ -->
+<button id="notes-rn-toggle" onclick="toggleNotesRightNav()" title="Quick navigation">❮</button>
+
+<div id="notes-right-nav">
+  <div class="notes-rn-header">
+    <button class="notes-rn-subject-btn" id="notes-rn-subject-btn" onclick="_rnGoSubjects()">📚 Notes</button>
+    <button class="notes-rn-close-btn" onclick="closeNotesRightNav()">✕</button>
+  </div>
+  <div class="notes-rn-body" id="notes-rn-body">
+    <!-- populated by _buildNotesTree() -->
+  </div>
+</div>
+
 
 <script src="utils.js"></script>
 <script src="data.js"></script>
 <script src="supabase.js"></script>
 <script src="cloudinary.js"></script>
+<script src="revisionEngine.js"></script>
 <script src="cardSync.js"></script>
 <script src="noteSync.js"></script>
 <script src="notes.js"></script>
@@ -205,16 +260,37 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
   }
 
-  // Deep-link: ?subject=&unit=&chapter= opens note directly
-  let params  = new URLSearchParams(window.location.search);
-  let subject = params.get("subject");
-  let unit    = params.get("unit");
-  let chapter = params.get("chapter");
-  if (subject && unit && chapter && typeof openNote === "function") {
-    openNote(subject, unit, chapter);
-  } else if (subject && unit && !chapter && typeof openUnitView === "function") {
-    openUnitView(subject, unit);
+  // Deep-link: restore from URL params or open directly
+  let params   = new URLSearchParams(window.location.search);
+  let subject  = params.get("subject");
+  let unit     = params.get("unit");
+  let chapter  = params.get("chapter");
+  let noteType = params.get("noteType") || 'general';
+  let view     = params.get("view");
+  if (view === 'note' && subject && unit && chapter) {
+    openNote(subject, unit, chapter, noteType, true);
+  } else if (view === 'note-types' && subject && unit && chapter) {
+    showNoteTypesView(subject, unit, chapter, true);
+  } else if (view === 'chapters' && subject && unit) {
+    showChaptersView(subject, unit, true);
+  } else if (view === 'units' && subject) {
+    showUnitsView(subject, true);
+  } else if (subject && unit && chapter) {
+    openNote(subject, unit, chapter, noteType, true);
+  } else if (subject && unit && !chapter) {
+    showChaptersView(subject, unit, true);
   }
+
+  // Browser back/forward support
+  window.addEventListener('popstate', function(e) {
+    let s = e.state;
+    if (!s) { showSubjectsView(true); return; }
+    if (s.view === 'subjects')   showSubjectsView(true);
+    else if (s.view === 'units') showUnitsView(s.subject, true);
+    else if (s.view === 'chapters') showChaptersView(s.subject, s.unit, true);
+    else if (s.view === 'note-types') showNoteTypesView(s.subject, s.unit, s.chapter, true);
+    else if (s.view === 'note') openNote(s.subject, s.unit, s.chapter, s.noteType || 'general', true);
+  });
 });
 </script>
 

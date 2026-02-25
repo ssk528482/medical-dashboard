@@ -400,24 +400,43 @@ function generatePlan() {
     qbankLines.push(`🧪 <strong>${qSubject}</strong> — <span style="color:#94a3b8;">~${qTotal} questions (${qbankTime}h)</span>`);
   }
 
-  // ── REVISION BLOCK (#3: show up to 10, show overdue days) ────
+  // ── REVISION BLOCK — urgency-aware, quality-score buttons ────
   let revLines = [];
   if (revisionDue.length === 0) {
     revLines.push(`🔁 No revisions due today`);
   } else {
-    let showCount = Math.min(revisionDue.length, 10); // was 6
+    let showCount = Math.min(revisionDue.length, 10);
     revisionDue.slice(0, showCount).forEach(r => {
       let ch = studyData.subjects[r.subjectName]?.units[r.unitIndex]?.chapters[r.chapterIndex];
       if (!ch) return;
-      let nextR      = `R${(ch.revisionIndex || 0) + 1}`;
+      let nextR     = `R${(ch.revisionIndex || 0) + 1}`;
+      let urgency   = r.urgency || (r.isOverdue ? 'moderate' : 'due');
+      let urgColor  = urgency === 'critical' ? '#ef4444'
+                    : urgency === 'high'     ? '#f97316'
+                    : urgency === 'moderate' ? '#eab308'
+                    : '#3b82f6';
+      let urgBg     = urgency === 'critical' ? '#450a0a'
+                    : urgency === 'high'     ? '#431407'
+                    : urgency === 'moderate' ? '#422006'
+                    : '#1e3a5f';
       let overdueTag = r.isOverdue
-        ? ` <span style="color:#ef4444;font-size:11px;">${r.overdueDays}d overdue</span>` : "";
-      let pageTag    = ch.pageCount > 0 ? ` <span style="color:#64748b;font-size:11px;">(${ch.pageCount}p)</span>` : "";
+        ? ` <span style="background:${urgBg};color:${urgColor};font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;">${r.overdueDays}d overdue</span>` : "";
+      let pageTag   = ch.pageCount > 0 ? ` <span style="color:#64748b;font-size:11px;">(${ch.pageCount}p)</span>` : "";
+      let diffTag   = ch.difficulty ? ` <span style="font-size:10px;color:${ch.difficulty==='hard'?'#ef4444':ch.difficulty==='easy'?'#10b981':'#64748b'};">${ch.difficulty}</span>` : "";
+      // Inline quality-score buttons to record recall right from the plan
+      let qualBtns  = `<span style="display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle;">` +
+        [['1','#450a0a','#fca5a5','✗'],['2','#3b1515','#f87171','△'],['3','#422006','#fb923c','~'],['4','#0f3a1a','#4ade80','✓'],['5','#0f2a3a','#60a5fa','★']]
+        .map(([q, bg, fc, lbl]) =>
+          `<button onclick="markRevisionDone('${r.subjectName.replace(/'/g,"\\'")}',${r.unitIndex},${r.chapterIndex},${q});this.closest('.rev-row').style.opacity='.35';this.closest('.rev-row').style.pointerEvents='none';"
+            style="background:${bg};color:${fc};border:1px solid ${fc}33;border-radius:4px;font-size:10px;padding:2px 5px;cursor:pointer;min-height:unset;line-height:1;" title="Quality ${q}">${lbl}</button>`
+        ).join('') + `</span>`;
       revLines.push(
-        `🔁 <strong>${r.subjectName}</strong> → ${studyData.subjects[r.subjectName].units[r.unitIndex]?.name} → <em>${ch.name}</em>` +
+        `<div class="rev-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 0;border-bottom:1px solid #0f172a;">` +
+        `<span>🔁 <strong>${r.subjectName}</strong> → ${studyData.subjects[r.subjectName].units[r.unitIndex]?.name} → <em>${ch.name}</em></span>` +
         ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${nextR}</span>` +
-        pageTag + overdueTag +
-        ` <span class="rev-meta" data-key="${r.subjectName}||${studyData.subjects[r.subjectName].units[r.unitIndex]?.name}||${ch.name}"></span>`
+        pageTag + diffTag + overdueTag + qualBtns +
+        ` <span class="rev-meta" data-key="${r.subjectName}||${studyData.subjects[r.subjectName].units[r.unitIndex]?.name}||${ch.name}"></span>` +
+        `</div>`
       );
     });
     if (revisionDue.length > showCount) {

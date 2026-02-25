@@ -9,15 +9,25 @@
   var activePage = activeMap[page] || page;
 
   // ── Nav items ─────────────────────────────────────────────────────────────
+  var SVG = {
+    home:    '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10L10 3l7 7"/><path d="M5 8.5V17h4v-4h2v4h4V8.5"/></svg>',
+    cal:     '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="14" rx="2"/><line x1="2" y1="9" x2="18" y2="9"/><line x1="6" y1="2" x2="6" y2="6"/><line x1="14" y1="2" x2="14" y2="6"/></svg>',
+    book:    '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h9l4 4v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><polyline points="13 2 13 6 17 6"/><line x1="7" y1="9" x2="13" y2="9"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="15" x2="10" y2="15"/></svg>',
+    chart:   '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="3.5" height="6" rx="1"/><rect x="8.25" y="7" width="3.5" height="11" rx="1"/><rect x="14.5" y="3" width="3.5" height="15" rx="1"/></svg>',
+    user:    '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6.5" r="3.5"/><path d="M2.5 18c0-4.14 3.36-7.5 7.5-7.5s7.5 3.36 7.5 7.5"/></svg>',
+    refresh: '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.8A7 7 0 1 1 4.5 10"/><polyline points="2 7 4.5 10 7 7"/></svg>',
+    cards:   '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="10" rx="2"/><rect x="1" y="5" width="14" height="10" rx="2" stroke-opacity="0.4"/><rect x="3" y="8" width="14" height="10" rx="2"/><line x1="8" y1="13" x2="12" y2="13"/></svg>',
+    notes:   '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/><line x1="7" y1="8" x2="13" y2="8"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="14" x2="10" y2="14"/></svg>',
+  };
   var items = [
-    { href: 'index.html',     icon: '🏠', label: 'Home' },
-    { href: 'planner.html',   icon: '📅', label: 'Planner' },
-    { href: 'editor.html',    icon: '📚', label: 'Syllabus' },
-    { href: 'analytics.html', icon: '📊', label: 'Stats' },
-    { href: 'profile.html',   icon: '👤', label: 'Profile' },
-    { href: 'review.html',    icon: '🔁', label: 'Review', badge: true },
-    { href: 'browse.html',    icon: '🃏', label: 'Cards' },
-    { href: 'notes.html',     icon: '📝', label: 'Notes' },
+    { href: 'index.html',     icon: SVG.home,    label: 'Home' },
+    { href: 'planner.html',   icon: SVG.cal,     label: 'Planner' },
+    { href: 'editor.html',    icon: SVG.book,    label: 'Syllabus' },
+    { href: 'analytics.html', icon: SVG.chart,   label: 'Stats' },
+    { href: 'profile.html',   icon: SVG.user,    label: 'Profile' },
+    { href: 'review.html',    icon: SVG.refresh, label: 'Review', badge: true },
+    { href: 'browse.html',    icon: SVG.cards,   label: 'Cards' },
+    { href: 'notes.html',     icon: SVG.notes,   label: 'Notes' },
   ];
 
   var itemsHtml = items.map(function (item) {

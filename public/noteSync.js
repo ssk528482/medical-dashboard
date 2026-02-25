@@ -26,9 +26,40 @@ async function _noteUserId() {
  * @param {string} chapter
  * @returns {Promise<{ data: Object|null, error: any }>}
  */
-async function fetchNote(subject, unit, chapter) {
+async function fetchNote(subject, unit, chapter, noteType) {
   const userId = await _noteUserId();
   if (!userId) return { data: null, error: 'No user id' };
+
+  let q = supabaseClient
+    .from('notes')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('subject', subject)
+    .eq('unit',    unit)
+    .eq('chapter', chapter);
+
+  if (noteType) q = q.eq('note_type', noteType);
+
+  const { data, error } = await q
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return { data, error };
+}
+
+/**
+ * Fetch all notes for a chapter (all note types).
+ * Used by the note-types picker view.
+ *
+ * @param {string} subject
+ * @param {string} unit
+ * @param {string} chapter
+ * @returns {Promise<{ data: Array, error: any }>}
+ */
+async function fetchChapterNotes(subject, unit, chapter) {
+  const userId = await _noteUserId();
+  if (!userId) return { data: [], error: 'No user id' };
 
   const { data, error } = await supabaseClient
     .from('notes')
@@ -37,11 +68,9 @@ async function fetchNote(subject, unit, chapter) {
     .eq('subject', subject)
     .eq('unit',    unit)
     .eq('chapter', chapter)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();          // returns null (not error) when no row found
+    .order('note_type', { ascending: true });
 
-  return { data, error };
+  return { data: data ?? [], error };
 }
 
 /**
@@ -101,19 +130,20 @@ async function fetchAllNotesMeta() {
 
   const { data, error } = await supabaseClient
     .from('notes')
-    .select('id, subject, unit, chapter, title, color, tags, updated_at')
+    .select('id, subject, unit, chapter, note_type, title, color, tags, updated_at')
     .eq('user_id', userId)
-    .order('subject', { ascending: true })
-    .order('unit',    { ascending: true })
-    .order('chapter', { ascending: true })
+    .order('subject',   { ascending: true })
+    .order('unit',      { ascending: true })
+    .order('chapter',   { ascending: true })
+    .order('note_type', { ascending: true })
     .order('updated_at', { ascending: false }); // newest first for dedup
 
   if (error || !data) return { data: [], error };
 
-  // Deduplicate: keep only the most recently updated note per subject+unit+chapter
+  // Deduplicate: keep only the most recently updated note per subject+unit+chapter+note_type
   const seen = new Set();
   const unique = data.filter(n => {
-    const key = `${n.subject}||${n.unit}||${n.chapter}`;
+    const key = `${n.subject}||${n.unit}||${n.chapter}||${n.note_type || 'general'}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -240,15 +270,16 @@ async function saveNote(noteObj) {
   if (!userId) return { data: null, error: 'No user id' };
 
   const payload = {
-    user_id: userId,
-    subject: noteObj.subject || '',
-    unit:    noteObj.unit    || '',
-    chapter: noteObj.chapter || '',
-    title:   noteObj.title   || null,
-    content: noteObj.content || null,
-    images:  noteObj.images  || [],
-    color:   noteObj.color   || 'default',
-    tags:    noteObj.tags    || [],
+    user_id:   userId,
+    subject:   noteObj.subject   || '',
+    unit:      noteObj.unit      || '',
+    chapter:   noteObj.chapter   || '',
+    note_type: noteObj.note_type || 'general',
+    title:     noteObj.title     || null,
+    content:   noteObj.content   || null,
+    images:    noteObj.images    || [],
+    color:     noteObj.color     || 'default',
+    tags:      noteObj.tags      || [],
   };
 
   if (noteObj.id) {
@@ -267,10 +298,11 @@ async function saveNote(noteObj) {
     const { data: existing } = await supabaseClient
       .from('notes')
       .select('id')
-      .eq('user_id', userId)
-      .eq('subject', payload.subject)
-      .eq('unit',    payload.unit)
-      .eq('chapter', payload.chapter)
+      .eq('user_id',   userId)
+      .eq('subject',   payload.subject)
+      .eq('unit',      payload.unit)
+      .eq('chapter',   payload.chapter)
+      .eq('note_type', payload.note_type)
       .limit(1)
       .maybeSingle();
 
@@ -316,7 +348,8 @@ async function deleteNote(noteId) {
 
 // ── Exports (globals, matching existing codebase pattern) ─────────
 // Available everywhere after this script loads:
-//   fetchNote(subject, unit, chapter)
+//   fetchNote(subject, unit, chapter, noteType?)
+//   fetchChapterNotes(subject, unit, chapter)
 //   fetchUnitNotes(subject, unit)
 //   fetchSubjectNotes(subject)
 //   fetchAllNotesMeta()

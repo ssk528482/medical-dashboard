@@ -213,19 +213,26 @@ function renderRevisionSection() {
   due.forEach((item, i) => {
     let row = document.createElement("div");
     row.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:8px;border-top:${i===0?'none':'1px solid #1e3350'};${item.isOverdue ? 'background:rgba(239,68,68,0.04);' : ''}`;
+    let urgency   = item.urgency || (item.isOverdue ? 'moderate' : 'due');
+    let urgColor  = urgency === 'critical' ? '#ef4444' : urgency === 'high' ? '#f97316' : urgency === 'moderate' ? '#eab308' : '#3b82f6';
+    let urgBg     = urgency === 'critical' ? 'rgba(239,68,68,0.15)' : urgency === 'high' ? 'rgba(249,115,22,0.15)' : urgency === 'moderate' ? 'rgba(234,179,8,0.15)' : 'rgba(59,130,246,0.10)';
     let overdueTag = item.isOverdue
-      ? `<span style="color:#ef4444;font-size:10px;font-weight:700;background:rgba(239,68,68,0.12);padding:1px 5px;border-radius:4px;">${item.overdueDays}d overdue</span>`
+      ? `<span style="color:${urgColor};font-size:10px;font-weight:700;background:${urgBg};padding:1px 5px;border-radius:4px;">${item.overdueDays}d overdue</span>`
       : "";
+    let sn = item.subjectName.replace(/'/g, "\\'");
     row.innerHTML = `
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.subjectName}</div>
-        <div style="font-size:11px;color:#7a90b0;display:flex;align-items:center;gap:6px;margin-top:1px;">
+        <div style="font-size:11px;color:#7a90b0;display:flex;align-items:center;gap:6px;margin-top:1px;flex-wrap:wrap;">
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.unitName} → ${item.topicName}</span>
           ${overdueTag}
         </div>
       </div>
-      <button style="font-size:11px;padding:4px 10px;margin:0;flex-shrink:0;background:#1e3a5f;color:#93c5fd;border:1px solid #2a4f80;border-radius:6px;min-height:unset;"
-        onclick="markRevisionDone('${item.subjectName}',${item.unitIndex},${item.chapterIndex}); renderSubjects();">Done</button>
+      <div style="display:flex;gap:3px;flex-shrink:0;">
+        ${[['1','#fca5a5','✗'],['2','#f87171','△'],['3','#fb923c','~'],['4','#4ade80','✓'],['5','#60a5fa','★']]
+          .map(([q,fc,lbl]) => `<button onclick="markRevisionDone('${sn}',${item.unitIndex},${item.chapterIndex},${q});this.closest('div[style*=\"border-top\"]').style.opacity='.35';this.closest('div[style*=\"border-top\"]').style.pointerEvents='none';renderSubjects();"
+            style="font-size:10px;padding:3px 5px;margin:0;background:#0f172a;color:${fc};border:1px solid ${fc}44;border-radius:4px;cursor:pointer;min-height:unset;line-height:1;" title="Quality ${q}: ${['','Blackout','Wrong','Hard','Good','Easy'][q]}">${lbl}</button>`).join('')}
+      </div>
     `;
     listWrap.appendChild(row);
   });

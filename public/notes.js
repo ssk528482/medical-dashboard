@@ -1,4 +1,4 @@
-// notes.js — Medical Study OS
+﻿// notes.js — Medical Study OS
 // Full logic for notes.html — DRILL-DOWN CARD NAVIGATION
 // Depends on: data.js, utils.js, supabase.js, cloudinary.js,
 //             noteSync.js, cardSync.js
@@ -10,14 +10,18 @@ let _currentNote     = null;
 let _currentSubject  = null;
 let _currentUnit     = null;
 let _currentChapter  = null;
+let _currentNoteType = 'general';
 let _noteTags        = [];
-let _noteColor       = "default";
+let _noteColor       = 'default';
 let _isDirty         = false;
 let _isSaving        = false;
 let _autoSaveTimer   = null;
-let _aiNoteResult    = "";
+let _aiNoteResult    = '';
 let _editMode        = false;    // read vs edit mode in note view
-let _navStack        = [];       // ["subjects"] → ["subjects","units","chapters","note"]
+let _navStack        = [];       // track navigation level
+let _focusMode       = false;    // fullscreen focus mode
+let _activeTagFilter = null;     // tag filter in chapters view
+let _findActive      = false;    // find-in-note overlay
 
 // ─────────────────────────────────────────────────────────────────
 // INIT
@@ -25,7 +29,7 @@ let _navStack        = [];       // ["subjects"] → ["subjects","units","chapte
 
 async function initNotes() {
   await _loadNotesMeta();
-  showSubjectsView();
+  showSubjectsView(true); // don't push initial state
 }
 
 async function _loadNotesMeta() {
@@ -39,11 +43,23 @@ async function _loadNotesMeta() {
 
 // Helper: switch visible view
 function _showView(id) {
-  ["view-subjects","view-units","view-chapters","view-note","view-search","view-unit-stack"]
+  ["view-subjects","view-units","view-chapters","view-note-types","view-note","view-search","view-unit-stack"]
     .forEach(v => {
       let el = document.getElementById(v);
       if (el) el.style.display = v === id ? "" : "none";
     });
+}
+
+// Feature 11 — push URL state so browser back/forward works
+function _pushState(view, subject, unit, chapter, noteType) {
+  let p = new URLSearchParams();
+  p.set('view', view);
+  if (subject)  p.set('subject',  subject);
+  if (unit)     p.set('unit',     unit);
+  if (chapter)  p.set('chapter',  chapter);
+  if (noteType && noteType !== 'general') p.set('noteType', noteType);
+  history.pushState({ view, subject, unit, chapter, noteType }, '',
+    'notes.html?' + p.toString());
 }
 
 // Helper: build breadcrumb bar
@@ -60,8 +76,10 @@ function _setBreadcrumb(crumbs, showBack) {
 }
 
 // ── Level 1: Subjects ──────────────────────────────────────────
-function showSubjectsView() {
+function showSubjectsView(skipPush) {
   _navStack = ["subjects"];
+  _activeTagFilter = null;
+  if (!skipPush) _pushState('subjects');
   _setBreadcrumb(["📝 Notes"], false);
   _showView("view-subjects");
   document.getElementById("notes-search-bar").style.display = "";
@@ -92,6 +110,29 @@ function showSubjectsView() {
     return;
   }
 
+  if (_focusMode) toggleFocusMode();
+
+  // Feature 5 — recently edited panel (top 5)
+  let recentPanel = document.getElementById('notes-recent-panel');
+  if (recentPanel) {
+    let recent = [..._notesMeta]
+      .filter(n => n.updated_at)
+      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+      .slice(0, 5);
+    if (recent.length > 0) {
+      recentPanel.style.display = '';
+      const TI = { general: '\ud83d\udcdd', mnemonic: '\ud83e\udde0', high_yield: '\u2b50', summary: '\ud83d\udccb' };
+      recentPanel.innerHTML =
+        '<div class="notes-recent-label">\ud83d\udd52 Recently Edited</div><div class="notes-recent-chips">' +
+        recent.map(n => {
+          let icon = TI[n.note_type || 'general'] || '\ud83d\udcdd';
+          return `<button class="notes-recent-chip" onclick="openNote('${_esc(n.subject)}','${_esc(n.unit)}','${_esc(n.chapter)}','${n.note_type||'general'}')">${icon} <span class="notes-recent-chip-name">${_esc(n.chapter)}</span><span class="notes-recent-chip-sub">${_esc(n.subject)}</span></button>`;
+        }).join('') + '</div>';
+    } else {
+      recentPanel.style.display = 'none';
+    }
+  }
+
   // Accent colors cycle
   const ACCENTS = ["#3b82f6","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4","#ec4899","#84cc16"];
 
@@ -112,9 +153,10 @@ function showSubjectsView() {
 }
 
 // ── Level 2: Units ─────────────────────────────────────────────
-function showUnitsView(subject) {
+function showUnitsView(subject, skipPush) {
   _currentSubject = subject;
   _navStack = ["subjects", "units"];
+  if (!skipPush) _pushState('units', subject);
   _setBreadcrumb(["📝 Notes", subject], true);
   _showView("view-units");
   document.getElementById("notes-progress-bar").style.display = "none";
@@ -143,10 +185,11 @@ function showUnitsView(subject) {
 }
 
 // ── Level 3: Chapters ──────────────────────────────────────────
-function showChaptersView(subject, unit) {
+function showChaptersView(subject, unit, skipPush) {
   _currentSubject = subject;
   _currentUnit    = unit;
   _navStack = ["subjects","units","chapters"];
+  if (!skipPush) _pushState('chapters', subject, unit);
   _setBreadcrumb(["📝 Notes", subject, unit], true);
   _showView("view-chapters");
   document.getElementById("notes-progress-bar").style.display = "none";
@@ -157,84 +200,135 @@ function showChaptersView(subject, unit) {
   let list        = document.getElementById("chapters-list");
   if (!list) return;
 
-  // Build coverage map
+  // Feature 4 - tag filter bar
+  _renderTagFilter(subject, unit);
+
+  // Build note coverage map (first note per chapter for icon/meta)
   let coverMap = {};
   _notesMeta.filter(n => n.subject === subject && n.unit === unit)
-    .forEach(n => { coverMap[n.chapter] = n; });
+    .forEach(n => { if (!coverMap[n.chapter]) coverMap[n.chapter] = n; });
+
+  // Count distinct note entries per chapter (any type)
+  let countMap = {};
+  _notesMeta.filter(n => n.subject === subject && n.unit === unit)
+    .forEach(n => { countMap[n.chapter] = (countMap[n.chapter] || 0) + 1; });
 
   if (!chapters.length) {
-    list.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">📂</div><div class="notes-empty-text">No chapters in this unit</div></div>`;
+    list.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">📂</div><div class="notes-empty-text">No chapters in this unit</div></div>';
     return;
   }
 
-  list.innerHTML = chapters.map(ch => {
-    let note      = coverMap[ch.name];
-    let color     = note?.color || "default";
-    let hasNote   = !!note;
+  // Feature 4 - filter by active tag
+  let displayChapters = _activeTagFilter
+    ? chapters.filter(ch => coverMap[ch.name]?.tags?.includes(_activeTagFilter))
+    : chapters;
 
-    // Study status badge from studyData
-    let statusCls = 'ns', statusTxt = 'New';
-    if (ch.status === 'completed') {
-      if (ch.revisionIndex >= 1) {
-        statusCls = 'rv';
-        statusTxt = 'R' + ch.revisionIndex;
-      } else {
-        statusCls = 'cp';
-        statusTxt = '✓';
-      }
+  if (!displayChapters.length) {
+    list.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">🏷️</div><div class="notes-empty-text">No chapters match tag "' + _esc(_activeTagFilter) + '"</div></div>';
+    return;
+  }
+
+  let ui = subjectData?.units.findIndex(u => u.name === unit) ?? -1;
+
+  list.innerHTML = displayChapters.map(ch => {
+    let ci        = chapters.indexOf(ch);
+    let note      = coverMap[ch.name];
+    let color     = note?.color || 'default';
+    let hasNote   = !!note;
+    let noteCount = countMap[ch.name] || 0;
+
+    // Study status
+    let compActive = ch.status === 'completed';
+    let r1Active   = ch.revisionIndex >= 1;
+    let r2Active   = ch.revisionIndex >= 2;
+    let r3Active   = ch.revisionIndex >= 3;
+
+    // Feature 3 - revision date
+    let revDateHtml = '';
+    if (ch.nextRevision) {
+      let isOverdue = ch.nextRevision < today();
+      let d = new Date(ch.nextRevision + 'T12:00:00');
+      let label = d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+      let sty = isOverdue
+        ? 'color:#ef4444;font-weight:700;background:rgba(239,68,68,0.1);padding:1px 5px;border-radius:4px;'
+        : 'color:var(--text-dim);';
+      revDateHtml = '<span style="font-size:10px;' + sty + 'margin-left:4px;">' + (isOverdue ? '⚠️' : '📅') + label + '</span>';
     }
 
-    return `<div class="notes-chap-card${hasNote ? " has-note" : ""}"
-      onclick="openNote('${_esc(subject)}','${_esc(unit)}','${_esc(ch.name)}')">
-      <span class="notes-chap-icon">${hasNote ? "📝" : "📄"}</span>
-      <div style="flex:1;min-width:0;">
-        <div class="notes-chap-name">${_esc(ch.name)}</div>
-        ${note ? `<div class="notes-chap-meta">Updated ${_formatDate(note.updated_at)}</div>` : `<div class="notes-chap-meta" style="color:var(--text-dim)">No note yet</div>`}
-      </div>
-      <div class="notes-chap-right">
-        <span class="notes-chap-status ${statusCls}">${statusTxt}</span>
-        <span class="note-color-dot ${color}" style="margin-top:2px;"></span>
-        ${note?.tags?.length ? `<span style="font-size:9px;color:var(--text-dim);text-align:right;">${note.tags.slice(0,2).map(_esc).join(", ")}</span>` : ""}
-      </div>
-    </div>`;
-  }).join("");
-}
+    let noteCountBadge = noteCount > 0
+      ? '<span style="font-size:9px;background:rgba(59,130,246,0.12);color:var(--blue);padding:1px 5px;border-radius:20px;margin-left:4px;">' + noteCount + '</span>'
+      : '';
 
-// ── Back navigation ────────────────────────────────────────────
+    // Feature 10 - status/revision action pills
+    let pillsHtml = ui >= 0 ? (
+      '<div class="notes-chap-pills">' +
+      '<span class="notes-chap-pill comp' + (compActive ? ' active' : '') + '" title="Toggle complete" onclick="notesToggleChapterCompleted(\'' + _esc(subject) + '\',' + ui + ',' + ci + ');event.stopPropagation();">✓</span>' +
+      '<span class="notes-chap-pill r1' + (r1Active ? ' active' : '') + '" title="Mark R1" onclick="notesMarkChapterRevised(\'' + _esc(subject) + '\',' + ui + ',' + ci + ',1);event.stopPropagation();">R1</span>' +
+      '<span class="notes-chap-pill r2' + (r2Active ? ' active' : '') + '" title="Mark R2" onclick="notesMarkChapterRevised(\'' + _esc(subject) + '\',' + ui + ',' + ci + ',2);event.stopPropagation();">R2</span>' +
+      '<span class="notes-chap-pill r3' + (r3Active ? ' active' : '') + '" title="Mark R3" onclick="notesMarkChapterRevised(\'' + _esc(subject) + '\',' + ui + ',' + ci + ',3);event.stopPropagation();">R3</span>' +
+      '</div>'
+    ) : '';
+
+    return (
+      '<div class="notes-chap-card' + (hasNote ? ' has-note' : '') + '" onclick="showNoteTypesView(\'' + _esc(subject) + '\',\'' + _esc(unit) + '\',\'' + _esc(ch.name) + '\')">' +
+      '<span class="notes-chap-icon">' + (hasNote ? '📝' : '📄') + '</span>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;">' +
+          '<span class="notes-chap-name">' + _esc(ch.name) + '</span>' + noteCountBadge + revDateHtml +
+        '</div>' +
+        (note
+          ? '<div class="notes-chap-meta">Updated ' + _formatDate(note.updated_at) + '</div>'
+          : '<div class="notes-chap-meta" style="color:var(--text-dim)">No note — tap to create</div>') +
+      '</div>' +
+      '<div class="notes-chap-right">' +
+        pillsHtml +
+        '<span class="note-color-dot ' + color + '"></span>' +
+      '</div>' +
+      '</div>'
+    );
+  }).join('');
+}
 function notesBreadcrumbBack() {
-  let cur = _navStack[_navStack.length - 1];
-  if (cur === "units")    { showSubjectsView(); return; }
-  if (cur === "chapters") { showUnitsView(_currentSubject); return; }
-  if (cur === "note")     { showChaptersView(_currentSubject, _currentUnit); return; }
-  if (cur === "search")   { showSubjectsView(); return; }
-  showSubjectsView();
+  history.back();
 }
 
 // ─────────────────────────────────────────────────────────────────
 // OPEN NOTE
 // ─────────────────────────────────────────────────────────────────
 
-async function openNote(subject, unit, chapter) {
+async function openNote(subject, unit, chapter, noteType, skipPush) {
+  noteType = noteType || 'general';
   if (_isDirty) {
     let ok = confirm("You have unsaved changes. Discard them?");
     if (!ok) return;
     _isDirty = false;
   }
 
-  _currentSubject = subject;
-  _currentUnit    = unit;
-  _currentChapter = chapter;
-  _editMode       = false;
-  _navStack       = ["subjects","units","chapters","note"];
+  _currentSubject  = subject;
+  _currentUnit      = unit;
+  _currentChapter   = chapter;
+  _currentNoteType  = noteType;
+  _editMode         = false;
+  _navStack         = ["subjects","units","chapters","note-types","note"];
 
-  _setBreadcrumb(["📝 Notes", subject, unit, chapter], true);
+  const TYPE_LABELS = { general: 'General', mnemonic: 'Mnemonic', high_yield: 'High Yield', summary: 'Summary' };
+  _setBreadcrumb(["Notes", subject, unit, chapter, TYPE_LABELS[noteType] || noteType], true);
   _showView("view-note");
   document.getElementById("notes-progress-bar").style.display = "none";
   document.getElementById("notes-note-topbar-title").textContent = chapter;
 
+  // Note-type badge in topbar
+  let typeLabel = document.getElementById('notes-note-type-label');
+  if (typeLabel) {
+    const TI = { general: '\ud83d\udcdd', mnemonic: '\ud83e\udde0', high_yield: '\u2b50', summary: '\ud83d\udccb' };
+    typeLabel.textContent = TI[noteType] || '\ud83d\udcdd';
+    typeLabel.style.display = '';
+  }
+  if (!skipPush) _pushState('note', subject, unit, chapter, noteType);
+
   // Load from Supabase
-  setSaveStatus("Loading…");
-  let { data: note } = await fetchNote(subject, unit, chapter);
+  setSaveStatus("Loading\u2026");
+  let { data: note } = await fetchNote(subject, unit, chapter, noteType);
   _currentNote = note || null;
 
   // Populate fields
@@ -401,7 +495,8 @@ async function saveCurrentNote() {
         .eq('user_id', userId)
         .eq('subject', _currentSubject)
         .eq('unit', _currentUnit)
-        .eq('chapter', _currentChapter);
+        .eq('chapter', _currentChapter)
+        .eq('note_type', _currentNoteType || 'general');
     } else {
       await deleteNote(_currentNote.id);
     }
@@ -425,15 +520,16 @@ async function saveCurrentNote() {
   }
 
   let payload = {
-    id:      _currentNote?.id || undefined,
-    subject: _currentSubject,
-    unit:    _currentUnit,
-    chapter: _currentChapter,
-    title:   title || _currentChapter,
+    id:        _currentNote?.id || undefined,
+    subject:   _currentSubject,
+    unit:      _currentUnit,
+    chapter:   _currentChapter,
+    note_type: _currentNoteType || 'general',
+    title:     title || _currentChapter,
     content,
-    images:  _currentNote?.images || [],
-    color:   _noteColor,
-    tags:    _noteTags,
+    images:    _currentNote?.images || [],
+    color:     _noteColor,
+    tags:      _noteTags,
   };
 
   let { data, error } = await saveNote(payload);
@@ -937,6 +1033,453 @@ function _formatDate(isoStr) {
   try {
     return new Date(isoStr).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   } catch { return ""; }
+}
+
+// =================================================================
+// ── FEATURE 9: Note Types View (level 4) ─────────────────────────
+// =================================================================
+
+async function showNoteTypesView(subject, unit, chapter, skipPush) {
+  if (_isDirty) {
+    let ok = confirm("You have unsaved changes. Discard them?");
+    if (!ok) return;
+    _isDirty = false;
+  }
+
+  _currentSubject = subject;
+  _currentUnit    = unit;
+  _currentChapter = chapter;
+  _navStack = ["subjects","units","chapters","note-types"];
+  if (!skipPush) _pushState('note-types', subject, unit, chapter);
+  _setBreadcrumb(["Notes", subject, unit, chapter], true);
+  _showView("view-note-types");
+  document.getElementById("notes-progress-bar").style.display = "none";
+
+  let heading = document.getElementById('note-types-heading');
+  if (heading) heading.textContent = chapter;
+
+  let grid = document.getElementById('note-types-grid');
+  if (!grid) return;
+
+  grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">Loading...</div>';
+
+  let { data: chapterNotes } = await fetchChapterNotes(subject, unit, chapter);
+  let noteMap = {};
+  (chapterNotes || []).forEach(n => { noteMap[n.note_type || 'general'] = n; });
+
+  const NOTE_TYPES = [
+    { type: 'general',    icon: '📝', label: 'General Notes',  desc: 'Full study notes & explanations' },
+    { type: 'mnemonic',   icon: '🧠', label: 'Mnemonics',       desc: 'Memory aids & tricks' },
+    { type: 'high_yield', icon: '⭐', label: 'High Yield',      desc: 'Exam-critical key points' },
+    { type: 'summary',    icon: '📋', label: 'Summary',         desc: 'Quick overview & recap' },
+  ];
+
+  grid.innerHTML = NOTE_TYPES.map(({ type, icon, label, desc }) => {
+    let note    = noteMap[type];
+    let preview = note ? (note.content || '').substring(0, 70).replace(/[#*`\n]/g, ' ').trim() : '';
+    return `<div class="notes-type-card${note ? ' has-note' : ''}" onclick="openNote('${_esc(subject)}','${_esc(unit)}','${_esc(chapter)}','${type}')">
+      <div class="notes-type-card-icon">${icon}</div>
+      <div class="notes-type-card-body">
+        <div class="notes-type-card-label">${label}</div>
+        <div class="notes-type-card-desc">${note ? _esc(preview) + (preview.length >= 70 ? '&hellip;' : '') : desc}</div>
+        ${note ? '<div class="notes-type-card-date">Updated ' + _formatDate(note.updated_at) + '</div>' : ''}
+      </div>
+      <span class="notes-type-card-action">${note ? 'Edit ›' : '+ New'}</span>
+    </div>`;
+  }).join('');
+}
+
+// =================================================================
+// ── FEATURE 4: Tag Filter Bar ─────────────────────────────────────
+// =================================================================
+
+function _renderTagFilter(subject, unit) {
+  let container = document.getElementById('chapters-tag-filter');
+  if (!container) return;
+  let tagSet = new Set();
+  _notesMeta.filter(n => n.subject === subject && n.unit === unit)
+    .forEach(n => (n.tags || []).forEach(t => tagSet.add(t)));
+  if (tagSet.size === 0) { container.style.display = 'none'; return; }
+  container.style.display = '';
+  container.innerHTML =
+    '<span class="notes-tag-filter-label">Filter:</span>' +
+    ['__all__', ...[...tagSet]].map(t => {
+      let isAll    = t === '__all__';
+      let isActive = isAll ? _activeTagFilter === null : _activeTagFilter === t;
+      let disp     = isAll ? 'All' : _esc(t);
+      let val      = isAll ? 'null' : "'" + t.replace(/'/g, "\\'") + "'";
+      return `<button class="notes-tag-pill${isActive ? ' active' : ''}" onclick="_setTagFilter(${val})">${disp}</button>`;
+    }).join('');
+}
+
+function _setTagFilter(tag) {
+  _activeTagFilter = tag;
+  showChaptersView(_currentSubject, _currentUnit, true);
+}
+
+// =================================================================
+// ── FEATURE 10: Chapter Status Marking ───────────────────────────
+// =================================================================
+
+function notesToggleChapterCompleted(subjectName, ui, ci) {
+  let ch = studyData.subjects[subjectName]?.units[ui]?.chapters[ci];
+  if (!ch) return;
+  if (ch.status === 'completed') {
+    ch.status        = 'not-started';
+    ch.completedOn   = null;
+    ch.revisionIndex = 0;
+    ch.nextRevision  = null;
+    ch.revisionDates = [];
+  } else {
+    ch.status        = 'completed';
+    ch.completedOn   = today();
+    ch.lastReviewedOn = today();
+    let dates = [], cursor = today();
+    for (let i = 0; i < BASE_INTERVALS.length; i++) {
+      cursor = addDays(cursor, computeNextInterval(ch, i));
+      dates.push(cursor);
+    }
+    ch.revisionDates = dates;
+    ch.nextRevision  = dates[0];
+    ch.revisionIndex = 0;
+  }
+  if (typeof fixPointer === 'function') fixPointer(subjectName);
+  saveData();
+  showChaptersView(_currentSubject, _currentUnit, true);
+}
+
+function notesMarkChapterRevised(subjectName, ui, ci, level) {
+  let ch = studyData.subjects[subjectName]?.units[ui]?.chapters[ci];
+  if (!ch) return;
+
+  if (level === 1 && ch.status !== 'completed') {
+    // Auto-complete first
+    ch.status         = 'completed';
+    ch.completedOn    = today();
+    ch.lastReviewedOn = today();
+    let dates = [], cursor = today();
+    for (let i = 0; i < BASE_INTERVALS.length; i++) {
+      cursor = addDays(cursor, computeNextInterval(ch, i));
+      dates.push(cursor);
+    }
+    ch.revisionDates = dates;
+    ch.nextRevision  = dates[0];
+    ch.revisionIndex = 0;
+    if (typeof fixPointer === 'function') fixPointer(subjectName);
+  }
+  if (level === 2 && ch.revisionIndex < 1) { alert('Complete R1 first before marking R2.'); return; }
+  if (level === 3 && ch.revisionIndex < 2) { alert('Complete R2 first before marking R3.'); return; }
+
+  // Toggle off if clicking same level
+  if (ch.revisionIndex === level) {
+    ch.revisionIndex = level - 1;
+    ch.nextRevision  = (ch.revisionDates?.[level - 1]) || addDays(today(), computeNextInterval(ch, level - 1));
+    saveData(); showChaptersView(_currentSubject, _currentUnit, true); return;
+  }
+
+  // Ensure revisionDates up to level
+  if (!ch.revisionDates) ch.revisionDates = [];
+  for (let i = 0; i <= level; i++) {
+    if (!ch.revisionDates[i]) {
+      let prev = i === 0 ? today() : (ch.revisionDates[i - 1] || today());
+      ch.revisionDates[i] = addDays(prev, computeNextInterval(ch, i));
+    }
+  }
+  ch.revisionIndex  = level;
+  ch.lastReviewedOn = today();
+  ch.nextRevision   = (level < BASE_INTERVALS.length - 1) ? (ch.revisionDates[level] || addDays(today(), computeNextInterval(ch, level))) : null;
+
+  if (typeof fixPointer === 'function') fixPointer(subjectName);
+  saveData();
+  showChaptersView(_currentSubject, _currentUnit, true);
+}
+
+// =================================================================
+// ── FEATURE 1: Markdown Toolbar Helpers ──────────────────────────
+// =================================================================
+
+function _mdInsert(prefix, suffix, placeholder) {
+  let ta = document.getElementById('note-content-editor');
+  if (!ta) return;
+  let start = ta.selectionStart, end = ta.selectionEnd;
+  let sel    = ta.value.substring(start, end) || placeholder || '';
+  ta.value   = ta.value.substring(0, start) + prefix + sel + suffix + ta.value.substring(end);
+  ta.selectionStart = start + prefix.length;
+  ta.selectionEnd   = start + prefix.length + sel.length;
+  ta.focus();
+  markDirty();
+}
+
+function _mdInsertLine(prefix) {
+  let ta = document.getElementById('note-content-editor');
+  if (!ta) return;
+  let pos    = ta.selectionStart;
+  let before = ta.value.substring(0, pos);
+  let after  = ta.value.substring(pos);
+  // Find start of current line
+  let lineStart = before.lastIndexOf('\n') + 1;
+  ta.value = before.substring(0, lineStart) + prefix + before.substring(lineStart) + after;
+  ta.selectionStart = ta.selectionEnd = lineStart + prefix.length + (pos - lineStart);
+  ta.focus();
+  markDirty();
+}
+
+function _handleEditorKeydown(event) {
+  // Tab → insert 2 spaces instead of focusing next element
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    _mdInsert('  ', '', '');
+  }
+  // Ctrl/Cmd+B → bold
+  if ((event.ctrlKey || event.metaKey) && event.key === 'b') { event.preventDefault(); _mdInsert('**', '**', 'bold'); }
+  // Ctrl/Cmd+I → italic
+  if ((event.ctrlKey || event.metaKey) && event.key === 'i') { event.preventDefault(); _mdInsert('*', '*', 'italic'); }
+}
+
+// =================================================================
+// ── FEATURE 2: Note Templates ────────────────────────────────────
+// =================================================================
+
+function _applyTemplate(type) {
+  let ta = document.getElementById('note-content-editor');
+  if (!ta) return;
+  if (ta.value.trim() && !confirm('Replace existing content with this template?')) return;
+  const TEMPLATES = {
+    high_yield: '## ⭐ High-Yield Points\n- \n- \n\n## 🔑 Key Facts\n- \n- \n\n## ⚠️ Don\'t Miss\n- \n\n## 🔗 Clinical Correlation\n- ',
+    summary:    '## Summary\n\n### Pathophysiology\n\n### Clinical Features\n- Symptoms:\n- Signs:\n\n### Diagnosis\n- Gold standard:\n- Investigations:\n\n### Management\n- First line:\n- Second line:\n\n### Prognosis\n',
+    mnemonic:   '## 🧠 Mnemonic\n\n**Mnemonic:** \n\n**Breakdown:**\n- **Letter** = \n- **Letter** = \n\n**Memory Story / Image:**\n\n**Example / Clinical Use:**\n',
+    quick:      '## Quick Notes\n\n- \n- \n- \n- \n\n> Key: \n',
+  };
+  ta.value = TEMPLATES[type] || '';
+  markDirty();
+  ta.focus();
+}
+
+// =================================================================
+// ── FEATURE 6: Focus / Fullscreen Mode ───────────────────────────
+// =================================================================
+
+function toggleFocusMode() {
+  _focusMode = !_focusMode;
+  document.body.classList.toggle('notes-focus-mode', _focusMode);
+  let btn = document.getElementById('btn-focus-mode');
+  if (btn) btn.textContent = _focusMode ? '✕ Exit Focus' : '⛶ Focus';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && _focusMode) toggleFocusMode();
+});
+
+// =================================================================
+// ── FEATURE 7: Find in Note ───────────────────────────────────────
+// =================================================================
+
+function toggleFindInNote() {
+  let bar = document.getElementById('notes-find-bar');
+  if (!bar) return;
+  let isVisible = bar.style.display === 'flex';
+  if (!isVisible) {
+    bar.style.display = 'flex';
+    let inp = document.getElementById('notes-find-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    _findActive = true;
+  } else {
+    _clearFind();
+    bar.style.display = 'none';
+    let inp = document.getElementById('notes-find-input');
+    if (inp) inp.value = '';
+    _findActive = false;
+  }
+}
+
+function _findInNote(query) {
+  let readEl = document.getElementById('notes-read-body');
+  if (!readEl) return;
+  if (!query || !query.trim()) { _clearFind(); return; }
+
+  let content = _currentNote?.content || '';
+  let rendered = typeof marked !== 'undefined' ? marked.parse(content) : content.replace(/\n/g, '<br>');
+  // Highlight all occurrences
+  let escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let regex   = new RegExp('(' + escaped + ')', 'gi');
+  let highlighted = rendered.replace(regex, '<mark class="notes-find-highlight">$1</mark>');
+  readEl.innerHTML = highlighted;
+
+  let matches = readEl.querySelectorAll('.notes-find-highlight');
+  let countEl = document.getElementById('notes-find-count');
+  if (countEl) countEl.textContent = matches.length ? matches.length + ' match' + (matches.length > 1 ? 'es' : '') : 'No matches';
+  if (matches.length) matches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function _clearFind() {
+  let countEl = document.getElementById('notes-find-count');
+  if (countEl) countEl.textContent = '';
+  // Re-render without highlights
+  if (_currentNote?.content) {
+    let readEl = document.getElementById('notes-read-body');
+    if (readEl) {
+      if (typeof marked !== 'undefined') {
+        readEl.innerHTML = marked.parse(_currentNote.content);
+      } else {
+        readEl.innerHTML = _currentNote.content.replace(/\n/g, '<br>');
+      }
+    }
+  }
+}
+
+// =================================================================
+// ── NOTES RIGHT SIDEBAR — Quick chapter/unit switcher ──────────
+// =================================================================
+
+function toggleNotesRightNav() {
+  let nav = document.getElementById('notes-right-nav');
+  if (!nav) return;
+  nav.classList.contains('open') ? closeNotesRightNav() : openNotesRightNav();
+}
+
+function openNotesRightNav() {
+  _buildNotesTree();
+  let nav     = document.getElementById('notes-right-nav');
+  let overlay = document.getElementById('nav-overlay');
+  let btn     = document.getElementById('notes-rn-toggle');
+  if (nav)     nav.classList.add('open');
+  if (btn)     { btn.classList.add('open'); btn.innerHTML = '❯'; }
+  if (overlay) {
+    overlay.classList.add('open');
+    overlay.addEventListener('click', closeNotesRightNav, { once: true });
+  }
+}
+
+function closeNotesRightNav() {
+  let nav     = document.getElementById('notes-right-nav');
+  let overlay = document.getElementById('nav-overlay');
+  let btn     = document.getElementById('notes-rn-toggle');
+  if (nav)     nav.classList.remove('open');
+  if (btn)     { btn.classList.remove('open'); btn.innerHTML = '❮'; }
+  if (overlay) overlay.classList.remove('open');
+}
+
+// Navigate to subjects list from the sidebar header button
+function _rnGoSubjects() {
+  closeNotesRightNav();
+  showSubjectsView();
+}
+
+function _buildNotesTree() {
+  let body    = document.getElementById('notes-rn-body');
+  let subBtn  = document.getElementById('notes-rn-subject-btn');
+  if (!body) return;
+
+  // No subject selected → show all subjects
+  if (!_currentSubject) {
+    if (subBtn) { subBtn.textContent = '📚 All Subjects'; }
+    let subjects = Object.keys(studyData?.subjects || {});
+    if (!subjects.length) {
+      body.innerHTML = '<div style="padding:20px 16px;font-size:12px;color:var(--text-dim);">No subjects yet. Add via Syllabus.</div>';
+      return;
+    }
+    body.innerHTML = subjects.map(s => {
+      let isActive = s === _currentSubject;
+      return (
+        '<div class="notes-rn-subject-row' + (isActive ? ' active' : '') + '" onclick="closeNotesRightNav();showUnitsView(\'' + _esc(s) + '\');">' +
+        '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h5l1.5 2H14v8H2z"/></svg>' +
+        '<span>' + _esc(s) + '</span>' +
+        '</div>'
+      );
+    }).join('');
+    return;
+  }
+
+  if (subBtn) { subBtn.textContent = '📚 ' + _currentSubject; }
+
+  let subjectData = studyData?.subjects?.[_currentSubject];
+  let units = subjectData?.units || [];
+
+  if (!units.length) {
+    body.innerHTML = '<div style="padding:20px 16px;font-size:12px;color:var(--text-dim);">No units in this subject.</div>';
+    return;
+  }
+
+  body.innerHTML = units.map((unit) => {
+    let isCurrentUnit = unit.name === _currentUnit;
+    let chapters      = unit.chapters || [];
+    let noteCount     = _notesMeta.filter(n => n.subject === _currentSubject && n.unit === unit.name).length;
+
+    let chapHtml = chapters.map(ch => {
+      let isCurrent = ch.name === _currentChapter && isCurrentUnit;
+      let hasNote   = _notesMeta.some(n =>
+        n.subject === _currentSubject && n.unit === unit.name && n.chapter === ch.name
+      );
+      return (
+        '<div class="notes-rn-chapter' + (isCurrent ? ' active' : '') + (hasNote ? ' has-note' : '') + '"' +
+        ' onclick="closeNotesRightNav();showNoteTypesView(\'' + _esc(_currentSubject) + '\',\'' + _esc(unit.name) + '\',\'' + _esc(ch.name) + '\');">' +
+        '<span class="notes-rn-chapter-dot"></span>' +
+        '<span class="notes-rn-chapter-name">' + _esc(ch.name) + '</span>' +
+        '</div>'
+      );
+    }).join('');
+
+    return (
+      '<div class="notes-rn-unit">' +
+        '<div class="notes-rn-unit-head' + (isCurrentUnit ? ' active' : '') + '" onclick="_rnToggleUnit(this)">' +
+          '<span class="notes-rn-unit-arrow' + (isCurrentUnit ? ' open' : '') + '">▶</span>' +
+          '<span class="notes-rn-unit-name">' + _esc(unit.name) + '</span>' +
+          (noteCount > 0 ? '<span class="notes-rn-unit-count">' + noteCount + '</span>' : '') +
+        '</div>' +
+        '<div class="notes-rn-chapters" style="' + (isCurrentUnit ? '' : 'display:none;') + '">' +
+          chapHtml +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function _rnToggleUnit(head) {
+  let chapters = head.nextElementSibling;
+  let arrow    = head.querySelector('.notes-rn-unit-arrow');
+  let isOpen   = chapters.style.display !== 'none';
+  chapters.style.display = isOpen ? 'none' : '';
+  if (arrow) arrow.classList.toggle('open', !isOpen);
+}
+
+// =================================================================
+// ── FEATURE 8: Single-Note PDF Export ────────────────────────────
+// =================================================================
+
+function exportCurrentNotePdf() {
+  if (!_currentNote && !(document.getElementById('note-content-editor')?.value)) {
+    alert('Open a note first.'); return;
+  }
+  let content   = _currentNote?.content || document.getElementById('note-content-editor')?.value || '';
+  let title     = _currentNote?.title   || document.getElementById('note-title-input')?.value     || _currentChapter;
+  let rendered  = typeof marked !== 'undefined' ? marked.parse(content) : content.replace(/\n/g, '<br>');
+  let noteTypeLabel = { general: 'General Notes', mnemonic: 'Mnemonics', high_yield: 'High Yield', summary: 'Summary' }[_currentNoteType] || '';
+
+  let win = window.open('', '_blank');
+  if (!win) { alert('Allow pop-ups to export PDF.'); return; }
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>${_esc(title)}</title>
+    <style>
+      body { font-family: -apple-system, Georgia, serif; color: #111; margin: 36px auto; max-width: 680px; line-height: 1.7; }
+      h1 { font-size: 22px; margin-bottom: 2px; border-bottom: 2px solid #333; padding-bottom: 6px; }
+      .subtitle { font-size: 12px; color: #666; margin-bottom: 28px; }
+      h2 { font-size: 17px; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-top: 24px; }
+      h3 { font-size: 15px; margin-top: 18px; }
+      code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 91%; }
+      pre  { background: #f4f4f4; padding: 12px; border-radius: 6px; overflow: auto; }
+      blockquote { border-left: 3px solid #3b82f6; padding: 4px 14px; color: #444; margin: 12px 0; }
+      img  { max-width: 100%; border-radius: 6px; margin: 8px 0; }
+      mark { background: #fef08a; padding: 0 2px; border-radius: 2px; }
+      @media print { body { margin: 18px; } }
+    </style></head><body>
+    <h1>${_esc(title)}</h1>
+    <div class="subtitle">${_esc(_currentSubject)} › ${_esc(_currentUnit)} › ${_esc(_currentChapter)}${noteTypeLabel ? ' · ' + noteTypeLabel : ''}</div>
+    ${rendered}
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 700);
 }
 
 // ─────────────────────────────────────────────────────────────────

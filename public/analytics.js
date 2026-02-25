@@ -68,6 +68,12 @@ function renderAnalytics() {
 
   container.innerHTML = `
 
+    <!-- Today's Priority -->
+    <div class="card">
+      <div class="section-title">🎯 Today's Priority</div>
+      ${buildTodayPriority(reqPace, avgDaily, totalOverdue, remaining, daysLeft)}
+    </div>
+
     <!-- Intelligence Alerts -->
     <div class="card">
       <div class="section-title">🧠 Intelligence Alerts</div>
@@ -168,6 +174,24 @@ function renderAnalytics() {
       ${_phaseRowUnits("Qbank — Units Done",      phases.qbank,     "#10b981")}
     </div>
 
+    <!-- Chapter Completion Velocity -->
+    <div class="card">
+      <div class="section-title">📈 Chapter Completion Velocity (12 Weeks)</div>
+      ${(() => {
+        let vData = buildCompletionVelocity();
+        let hasData = vData.some(w => w.value > 0);
+        if (!hasData) return '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Log study sessions to see weekly velocity.</div>';
+        return buildLineChart(vData, { color: '#10b981', unit: ' ch' });
+      })()}
+      <div style="font-size:11px;color:#475569;margin-top:6px;">Topics/chapters completed per week — rising line means accelerating pace</div>
+    </div>
+
+    <!-- Week-over-week delta -->
+    <div class="card">
+      <div class="section-title">📊 This Week vs Last Week</div>
+      ${buildWeekDeltaPanel()}
+    </div>
+
     <!-- Weekly Report Card -->
     <div class="card">
       <div class="section-title">📋 Weekly Report Card</div>
@@ -264,6 +288,18 @@ function renderAnalytics() {
       }
     </div>
 
+    <!-- Qbank Volume Trend -->
+    <div class="card">
+      <div class="section-title">📊 Qbank Volume — Qs Per Day (30 Days)</div>
+      ${(() => {
+        let volData = buildQbankVolumeTrend(30);
+        let hasData = volData.some(d => d.value > 0);
+        if (!hasData) return '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px;">Log Qbank sessions to see volume trend.</div>';
+        return buildLineChart(volData, { color: '#f59e0b', unit: ' Qs' });
+      })()}
+      <div style="font-size:11px;color:#475569;margin-top:6px;">Questions attempted per day — tracks practice volume independently of accuracy</div>
+    </div>
+
     <!-- Retention Projection -->
     <div class="card">
       <div class="section-title">🧠 Retention Forecast (14 days)</div>
@@ -318,11 +354,24 @@ function renderAnalytics() {
           s.phase.r2        ? `<span style="background:#3b2200;color:#fbbf24;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;">R2✓</span>` : "",
           s.phase.r3        ? `<span style="background:#431407;color:#fb923c;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;">R3✓</span>` : "",
         ].filter(Boolean).join("");
-        let hardCount = 0, easyCount = 0;
+        let hardCount = 0, easyCount = 0, medCount = 0, totalSubjCh = 0;
         studyData.subjects[s.name]?.units.forEach(u => u.chapters.forEach(ch => {
+          totalSubjCh++;
           if (ch.difficulty === "hard") hardCount++;
-          if (ch.difficulty === "easy") easyCount++;
+          else if (ch.difficulty === "easy") easyCount++;
+          else medCount++;
         }));
+        let diffBar = totalSubjCh > 0 ? `
+          <div style="display:flex;height:5px;border-radius:3px;overflow:hidden;margin-top:7px;gap:1px;">
+            ${easyCount > 0 ? `<div style="flex:${easyCount};background:#10b981;" title="${easyCount} easy"></div>` : ''}
+            ${medCount   > 0 ? `<div style="flex:${medCount};background:#64748b;" title="${medCount} medium"></div>` : ''}
+            ${hardCount  > 0 ? `<div style="flex:${hardCount};background:#ef4444;" title="${hardCount} hard"></div>` : ''}
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px;font-size:10px;flex-wrap:wrap;">
+            ${easyCount > 0 ? `<span style="color:#10b981;">● ${easyCount} easy</span>` : ''}
+            ${medCount   > 0 ? `<span style="color:#64748b;">● ${medCount} med</span>` : ''}
+            ${hardCount  > 0 ? `<span style="color:#ef4444;">● ${hardCount} hard</span>` : ''}
+          </div>` : '';
         return `
         <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #1e293b;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
@@ -337,11 +386,9 @@ function renderAnalytics() {
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
             ${phaseChips || `<span style="color:#475569;font-size:11px;">No phases completed</span>`}
-            <span style="margin-left:auto;font-size:10px;color:#475569;">${s.size}
-              ${hardCount > 0 ? `· <span style="color:#ef4444;">${hardCount} hard</span>` : ""}
-              ${easyCount > 0 ? `· <span style="color:#10b981;">${easyCount} easy</span>` : ""}
-            </span>
+            <span style="margin-left:auto;font-size:10px;color:#475569;">${s.size}</span>
           </div>
+          ${diffBar}
         </div>`;
       }).join("")}
     </div>
@@ -424,6 +471,43 @@ function renderAnalytics() {
       })()}
     </div>
 
+    <!-- Upcoming Revision Calendar (7-day) -->
+    <div class="card">
+      <div class="section-title">📅 Revision Load — Next 7 Days</div>
+      ${buildUpcomingRevisionCalendar()}
+    </div>
+
+    <!-- Revision Load Forecast (14-day bar chart) -->
+    <div class="card">
+      <div class="section-title">📆 Revision Forecast — Next 14 Days</div>
+      ${(() => {
+        let fData = buildRevisionLoadForecast();
+        let max   = Math.max(...fData.map(d => d.value), 1);
+        let bars  = fData.map(d => {
+          let h     = d.value > 0 ? Math.max(4, Math.round((d.value / max) * 70)) : 0;
+          let color = d.value > 10 ? '#ef4444' : d.value > 6 ? '#f97316' : d.value > 3 ? '#eab308' : '#10b981';
+          return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;gap:2px;">
+            <div style="font-size:9px;color:#94a3b8;font-weight:600;min-height:12px;">${d.value || ''}</div>
+            <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:72px;">
+              ${d.value > 0 ? `<div style="background:${color};height:${h}px;border-radius:3px 3px 0 0;"></div>` : ''}
+            </div>
+            <div style="font-size:9px;color:${d.label === 'Today' ? '#3b82f6' : '#475569'};text-align:center;overflow:hidden;white-space:nowrap;max-width:100%;font-weight:${d.label==='Today'?700:400};">${d.label}</div>
+          </div>`;
+        }).join('');
+        let totalForecast = fData.reduce((s, d) => s + d.value, 0);
+        return `<div style="display:flex;gap:3px;align-items:flex-end;padding:4px 2px 0;">${bars}</div>
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-top:10px;font-size:11px;color:#475569;">
+            <span>${totalForecast} revisions scheduled over next 14 days</span>
+            <div style="display:flex;gap:10px;">
+              <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:3px;"></span>Light</span>
+              <span><span style="display:inline-block;width:9px;height:9px;background:#eab308;border-radius:2px;margin-right:3px;"></span>Mod</span>
+              <span><span style="display:inline-block;width:9px;height:9px;background:#f97316;border-radius:2px;margin-right:3px;"></span>Heavy</span>
+              <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>Max</span>
+            </div>
+          </div>`;
+      })()}
+    </div>
+
     <!-- Settings -->
     <div class="card">
       <div class="section-title">⚙️ Exam Date</div>
@@ -435,6 +519,12 @@ function renderAnalytics() {
     <div class="card">
       <div class="section-title">⏱ Time Tracking (Last 14 Days)</div>
       <div id="timeTrackingChart"></div>
+    </div>
+
+    <!-- Subject Topics Allocation -->
+    <div class="card">
+      <div class="section-title">📚 Study Allocation by Subject (14 Days)</div>
+      ${buildSubjectTopicsAllocation(14)}
     </div>
   `;
 
@@ -949,6 +1039,201 @@ function renderStudyHeatmap365(container) {
     </div>`;
   wrap.appendChild(legend);
   container.appendChild(wrap);
+}
+
+// ── NEW HELPER FUNCTIONS (improvements 1-8) ─────────────────────────────────
+
+// #2 — Today's Priority Card
+function buildTodayPriority(reqPace, avgDaily, totalOverdue, remaining, daysLeft) {
+  let todayTarget = Math.ceil(reqPace);
+  let hist      = studyData.dailyHistory?.[today()];
+  let todayDone = (hist?.studyEntries || []).reduce((s, e) => s + (e.topics || []).length, 0);
+  let qToday    = (hist?.qbankEntries || []).reduce((s, e) => s + (e.total || 0), 0);
+  let allDayVals = Object.values(studyData.dailyHistory || {});
+  let qDayVals  = allDayVals.filter(h => (h.qbankEntries || []).reduce((s, e) => s + (e.total || 0), 0) > 0);
+  let avgQDay   = qDayVals.length > 0
+    ? Math.round(qDayVals.reduce((s, h) => s + (h.qbankEntries || []).reduce((ss, e) => ss + (e.total || 0), 0), 0) / qDayVals.length)
+    : 20;
+  let overdueColor = totalOverdue > 10 ? '#ef4444' : totalOverdue > 0 ? '#f97316' : '#10b981';
+  let paceOk    = reqPace === 0 || avgDaily >= reqPace;
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;">
+      <div style="background:${totalOverdue > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)'};border:1px solid ${overdueColor}44;border-radius:10px;padding:12px 10px;">
+        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">⏰ Overdue</div>
+        <div style="font-size:26px;font-weight:800;color:${overdueColor};line-height:1;">${totalOverdue}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">${totalOverdue > 0 ? 'Revise first' : 'All clear ✓'}</div>
+      </div>
+      <div style="background:${paceOk ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'};border:1px solid ${paceOk ? '#10b98144' : '#ef444444'};border-radius:10px;padding:12px 10px;">
+        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">📖 Chapters</div>
+        <div style="font-size:26px;font-weight:800;color:${paceOk ? '#10b981' : '#ef4444'};line-height:1;">${todayDone}<span style="font-size:13px;color:#64748b;"> /${todayTarget}</span></div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">${paceOk ? 'On pace ✓' : 'Behind pace'}</div>
+      </div>
+      <div style="background:rgba(139,92,246,0.1);border:1px solid #8b5cf644;border-radius:10px;padding:12px 10px;">
+        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">🧪 Qbank</div>
+        <div style="font-size:26px;font-weight:800;color:#8b5cf6;line-height:1;">${qToday}<span style="font-size:13px;color:#64748b;"> /${avgQDay}</span></div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">target today</div>
+      </div>
+      <div style="background:rgba(245,158,11,0.1);border:1px solid #f59e0b44;border-radius:10px;padding:12px 10px;">
+        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">📚 Left</div>
+        <div style="font-size:26px;font-weight:800;color:#f59e0b;line-height:1;">${remaining}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">${daysLeft} days left</div>
+      </div>
+    </div>`;
+}
+
+// #6 — Week-over-week delta panel
+function buildWeekDeltaPanel() {
+  function weekStats(offsetStart, offsetEnd) {
+    let chapters = 0, qTotal = 0, qCorrect = 0, revDays = 0;
+    for (let i = offsetStart; i < offsetEnd; i++) {
+      let h = studyData.dailyHistory?.[addDays(today(), -i)];
+      if (!h || !h.eveningSubmitted) continue;
+      if (h.revision) revDays++;
+      chapters += (h.studyEntries || []).reduce((s, e) => s + (e.topics || []).length, 0);
+      (h.qbankEntries || []).forEach(e => { qTotal += e.total || 0; qCorrect += e.correct || 0; });
+    }
+    return { chapters, qAcc: qTotal > 0 ? (qCorrect / qTotal) * 100 : null, revDays, qTotal };
+  }
+  let tw = weekStats(0, 7), lw = weekStats(7, 14);
+  function fmtDelta(a, b, decimals) {
+    if (a === null || b === null) return '<span style="color:#64748b;">—</span>';
+    let d = a - b;
+    let color = d > 0 ? '#10b981' : d < 0 ? '#ef4444' : '#64748b';
+    let sign  = d > 0 ? '↑' : d < 0 ? '↓' : '→';
+    return `<span style="font-size:12px;color:${color};font-weight:700;">${sign}${Math.abs(decimals ? +d.toFixed(decimals) : d)}${decimals ? '%' : ''}</span>`;
+  }
+  let rows = [
+    ['📖 Chapters done',  tw.chapters,                        lw.chapters,                        false],
+    ['🧪 Qbank Qs',       tw.qTotal,                          lw.qTotal,                          false],
+    ['🎯 Qbank accuracy', tw.qAcc !== null ? tw.qAcc.toFixed(1) + '%' : '—', lw.qAcc !== null ? lw.qAcc.toFixed(1) + '%' : '—', true],
+    ['🔄 Revision days',  tw.revDays,                         lw.revDays,                         false],
+  ];
+  return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:260px;">
+    <thead><tr>
+      <th style="text-align:left;padding:5px 8px;color:#64748b;font-size:10px;text-transform:uppercase;border-bottom:1px solid #1e293b;">Metric</th>
+      <th style="text-align:center;padding:5px 8px;color:#3b82f6;font-size:10px;text-transform:uppercase;border-bottom:1px solid #1e293b;">This Week</th>
+      <th style="text-align:center;padding:5px 8px;color:#64748b;font-size:10px;text-transform:uppercase;border-bottom:1px solid #1e293b;">Last Week</th>
+      <th style="text-align:center;padding:5px 8px;color:#64748b;font-size:10px;text-transform:uppercase;border-bottom:1px solid #1e293b;">Δ</th>
+    </tr></thead>
+    <tbody>${rows.map(([label, tw_, lw_, isPct]) => `
+      <tr>
+        <td style="padding:7px 8px;color:#94a3b8;border-bottom:1px solid #0f172a;">${label}</td>
+        <td style="padding:7px 8px;text-align:center;color:#e2e8f0;font-weight:700;border-bottom:1px solid #0f172a;">${tw_}</td>
+        <td style="padding:7px 8px;text-align:center;color:#64748b;border-bottom:1px solid #0f172a;">${lw_}</td>
+        <td style="padding:7px 8px;text-align:center;border-bottom:1px solid #0f172a;">${isPct
+          ? fmtDelta(tw_.endsWith('%') ? parseFloat(tw_) : null, lw_.endsWith('%') ? parseFloat(lw_) : null, 1)
+          : fmtDelta(tw_, lw_, 0)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+// #4 — Qbank Volume trend (data builder)
+function buildQbankVolumeTrend(days) {
+  let bars = [];
+  for (let i = days - 1; i >= 0; i--) {
+    let d    = addDays(today(), -i);
+    let hist = studyData.dailyHistory?.[d];
+    let q    = (hist?.qbankEntries || []).reduce((s, e) => s + (e.total || 0), 0);
+    bars.push({ label: d.slice(8), value: q });
+  }
+  return bars;
+}
+
+// #5 — Chapter Completion Velocity (by week)
+function buildCompletionVelocity() {
+  let weeks = [];
+  for (let w = 11; w >= 0; w--) {
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      let hist = studyData.dailyHistory?.[addDays(today(), -(w * 7 + i))];
+      count += (hist?.studyEntries || []).reduce((s, e) => s + (e.topics || []).length, 0);
+    }
+    let startDate = addDays(today(), -(w * 7 + 6));
+    weeks.push({ label: startDate.slice(5), value: count });
+  }
+  return weeks;
+}
+
+// #1 — Revision Load Forecast (next 14 days)
+function buildRevisionLoadForecast() {
+  let days = [];
+  for (let i = 0; i <= 13; i++) {
+    let d = addDays(today(), i);
+    let count = 0;
+    Object.values(studyData.subjects).forEach(s => s.units.forEach(u => u.chapters.forEach(ch => {
+      if (ch.nextRevision === d) count++;
+    })));
+    days.push({ label: i === 0 ? 'Today' : i === 1 ? 'Tmrw' : d.slice(5), value: count, date: d });
+  }
+  return days;
+}
+
+// #8 — Upcoming Revision Calendar (7-day grid)
+function buildUpcomingRevisionCalendar() {
+  let days = [];
+  for (let i = 0; i <= 6; i++) {
+    let d = addDays(today(), i);
+    let due = 0, overdue = 0;
+    Object.values(studyData.subjects).forEach(s => s.units.forEach(u => u.chapters.forEach(ch => {
+      if (i === 0 && ch.nextRevision && ch.nextRevision < d) overdue++;
+      if (ch.nextRevision === d) due++;
+    })));
+    let dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d + 'T00:00:00').getDay()];
+    days.push({ d, due, overdue, label: d.slice(8), dayName, isToday: i === 0 });
+  }
+  let maxLoad = Math.max(...days.map(dy => dy.due + dy.overdue), 1);
+  return `
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
+      ${days.map(dy => {
+        let total  = dy.due + dy.overdue;
+        let fillH  = total > 0 ? Math.max(6, Math.round((total / maxLoad) * 48)) : 0;
+        let color  = dy.overdue > 0 ? '#ef4444' : total > 8 ? '#f97316' : total > 4 ? '#eab308' : '#10b981';
+        return `<div style="text-align:center;">
+          <div style="font-size:9px;color:${dy.isToday ? '#3b82f6' : '#64748b'};font-weight:${dy.isToday ? 700 : 400};margin-bottom:3px;">${dy.dayName}</div>
+          <div style="height:60px;background:#0f172a;border-radius:6px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:3px;
+            border:1px solid ${dy.isToday ? '#3b82f6' : '#1e293b'};">
+            ${total > 0 ? `<div style="width:90%;background:${color};height:${fillH}px;border-radius:3px;margin-bottom:2px;"></div>` : ''}
+            <div style="font-size:11px;font-weight:700;color:${total > 0 ? color : '#334155'};">${total || '·'}</div>
+          </div>
+          <div style="font-size:9px;color:#475569;margin-top:3px;">${dy.label}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:10px;margin-top:9px;font-size:11px;color:#64748b;flex-wrap:wrap;">
+      <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:3px;"></span>Light ≤4</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:#eab308;border-radius:2px;margin-right:3px;"></span>Moderate</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:#f97316;border-radius:2px;margin-right:3px;"></span>Heavy</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>Overdue</span>
+    </div>`;
+}
+
+// #3 — Subject Topics Allocation
+function buildSubjectTopicsAllocation(lookbackDays) {
+  let map = {};
+  for (let i = 0; i < lookbackDays; i++) {
+    let hist = studyData.dailyHistory?.[addDays(today(), -i)];
+    (hist?.studyEntries || []).forEach(e => {
+      let key = e.subject || 'Unknown';
+      map[key] = (map[key] || 0) + (e.topics || []).length;
+    });
+  }
+  let total = Object.values(map).reduce((s, v) => s + v, 0);
+  if (total === 0) return `<div style="color:#475569;font-size:13px;text-align:center;padding:16px;">No study sessions logged in last ${lookbackDays} days.</div>`;
+  let sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  let max    = sorted[0][1];
+  let colors = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#f97316','#06b6d4','#ec4899'];
+  return sorted.map(([subj, cnt], i) => {
+    let pct  = Math.round((cnt / total) * 100);
+    let barW = Math.round((cnt / max) * 100);
+    return `
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">
+          <span style="font-size:12px;color:#cbd5e1;font-weight:600;">${subj}</span>
+          <span style="font-size:12px;color:${colors[i % colors.length]};font-weight:700;">${cnt} topics <span style="color:#64748b;font-weight:400;">(${pct}%)</span></span>
+        </div>
+        <div class="stat-bar" style="height:8px;"><div style="height:100%;border-radius:3px;width:${barW}%;background:${colors[i % colors.length]};transition:width .3s;"></div></div>
+      </div>`;
+  }).join('');
 }
 
 // ─── Boot: run main renderAnalytics then async card/notes sections ────────
