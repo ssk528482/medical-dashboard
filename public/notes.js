@@ -124,7 +124,7 @@ function showSubjectsView(skipPush) {
         '<div class="notes-recent-label">\ud83d\udd52 Recently Edited</div><div class="notes-recent-chips">' +
         recent.map(n => {
           let icon = TI[n.note_type || 'general'] || '\ud83d\udcdd';
-          return `<button class="notes-recent-chip" onclick="openNote('${_esc(n.subject)}','${_esc(n.unit)}','${_esc(n.chapter)}','${n.note_type||'general'}')">${icon} <span class="notes-recent-chip-name">${_esc(n.chapter)}</span><span class="notes-recent-chip-sub">${_esc(n.subject)}</span></button>`;
+          return `<button class="notes-recent-chip" onclick="openNote('${_jesc(n.subject)}','${_jesc(n.unit)}','${_jesc(n.chapter)}','${n.note_type||'general'}')">${icon} <span class="notes-recent-chip-name">${_esc(n.chapter)}</span><span class="notes-recent-chip-sub">${_esc(n.subject)}</span></button>`;
         }).join('') + '</div>';
     } else {
       recentPanel.style.display = 'none';
@@ -139,7 +139,7 @@ function showSubjectsView(skipPush) {
     let topicCount   = subjectData.units.reduce((s, u) => s + u.chapters.length, 0);
     let unitCount    = subjectData.units.length;
     let accent       = ACCENTS[idx % ACCENTS.length];
-    return `<div class="notes-subj-card" onclick="showUnitsView('${_esc(subjectName)}')">
+    return `<div class="notes-subj-card" onclick="showUnitsView('${_jesc(subjectName)}')">
       <div class="notes-subj-card-accent" style="background:${accent};"></div>
       <div class="notes-subj-card-name">${_esc(subjectName)}</div>
       <div class="notes-subj-card-meta">
@@ -169,7 +169,7 @@ function showUnitsView(subject, skipPush) {
     let noteCount  = _notesMeta.filter(n => n.subject === subject && n.unit === unit.name).length;
     let chapCount  = unit.chapters.length;
     let accent     = ACCENTS[idx % ACCENTS.length];
-    return `<div class="notes-unit-grid-card" onclick="showChaptersView('${_esc(subject)}','${_esc(unit.name)}')">
+    return `<div class="notes-unit-grid-card" onclick="showChaptersView('${_jesc(subject)}','${_jesc(unit.name)}')">
       <div class="notes-subj-card-accent" style="background:${accent};border-radius:var(--radius) var(--radius) 0 0;"></div>
       <div class="notes-unit-grid-card-name">${_esc(unit.name)}</div>
       <div class="notes-unit-grid-card-badge">${noteCount} notes · ${chapCount} chapters</div>
@@ -260,15 +260,15 @@ function showChaptersView(subject, unit, skipPush) {
     // Feature 10 - status/revision action pills
     let pillsHtml = ui >= 0 ? (
       '<div class="notes-chap-pills">' +
-      '<span class="notes-chap-pill comp' + (compActive ? ' active' : '') + '" title="Toggle complete" onclick="notesToggleChapterCompleted(\'' + _esc(subject) + '\',' + ui + ',' + ci + ');event.stopPropagation();">✓</span>' +
-      '<span class="notes-chap-pill r1' + (r1Active ? ' active' : '') + '" title="Mark R1" onclick="notesMarkChapterRevised(\'' + _esc(subject) + '\',' + ui + ',' + ci + ',1);event.stopPropagation();">R1</span>' +
-      '<span class="notes-chap-pill r2' + (r2Active ? ' active' : '') + '" title="Mark R2" onclick="notesMarkChapterRevised(\'' + _esc(subject) + '\',' + ui + ',' + ci + ',2);event.stopPropagation();">R2</span>' +
-      '<span class="notes-chap-pill r3' + (r3Active ? ' active' : '') + '" title="Mark R3" onclick="notesMarkChapterRevised(\'' + _esc(subject) + '\',' + ui + ',' + ci + ',3);event.stopPropagation();">R3</span>' +
+      '<span class="notes-chap-pill comp' + (compActive ? ' active' : '') + '" title="Toggle complete" onclick="notesToggleChapterCompleted(\'' + _jesc(subject) + '\',' + ui + ',' + ci + ');event.stopPropagation();">✓</span>' +
+      '<span class="notes-chap-pill r1' + (r1Active ? ' active' : '') + '" title="Mark R1" onclick="notesMarkChapterRevised(\'' + _jesc(subject) + '\',' + ui + ',' + ci + ',1);event.stopPropagation();">R1</span>' +
+      '<span class="notes-chap-pill r2' + (r2Active ? ' active' : '') + '" title="Mark R2" onclick="notesMarkChapterRevised(\'' + _jesc(subject) + '\',' + ui + ',' + ci + ',2);event.stopPropagation();">R2</span>' +
+      '<span class="notes-chap-pill r3' + (r3Active ? ' active' : '') + '" title="Mark R3" onclick="notesMarkChapterRevised(\'' + _jesc(subject) + '\',' + ui + ',' + ci + ',3);event.stopPropagation();">R3</span>' +
       '</div>'
     ) : '';
 
     return (
-      '<div class="notes-chap-card' + (hasNote ? ' has-note' : '') + '" onclick="showNoteTypesView(\'' + _esc(subject) + '\',\'' + _esc(unit) + '\',\'' + _esc(ch.name) + '\')">' +
+      '<div class="notes-chap-card' + (hasNote ? ' has-note' : '') + '" onclick="showNoteTypesView(\'' + _jesc(subject) + '\',\'' + _jesc(unit) + '\',\'' + _jesc(ch.name) + '\')">' +
       '<span class="notes-chap-icon">' + (hasNote ? '📝' : '📄') + '</span>' +
       '<div style="flex:1;min-width:0;">' +
         '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;">' +
@@ -742,7 +742,7 @@ function _renderSearchResults(results, query) {
     results.map(n => {
       let preview = (n.content || "").substring(0, 80).replace(/[#*`\n]/g, " ");
       return `<div class="notes-search-result-item"
-        onclick="openNote('${_esc(n.subject)}','${_esc(n.unit)}','${_esc(n.chapter)}')">
+        onclick="openNote('${_jesc(n.subject)}','${_jesc(n.unit)}','${_jesc(n.chapter)}')">
         <div class="notes-search-result-title">${_esc(n.chapter)}</div>
         <div class="notes-search-result-path">${_esc(n.subject)} › ${_esc(n.unit)}</div>
         ${preview ? `<div class="notes-search-result-preview">${_esc(preview)}…</div>` : ""}
@@ -1025,6 +1025,17 @@ function _esc(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+// _jesc: use when embedding a value inside a JS string literal in an onclick attribute.
+// HTML entities like &#39; get decoded by the HTML parser before JS runs, breaking syntax.
+// Backslash-escaping is the correct approach for JS string contexts.
+function _jesc(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+}
 
 function _formatDate(isoStr) {
   if (!isoStr) return "";
@@ -1075,7 +1086,7 @@ async function showNoteTypesView(subject, unit, chapter, skipPush) {
   grid.innerHTML = NOTE_TYPES.map(({ type, icon, label, desc }) => {
     let note    = noteMap[type];
     let preview = note ? (note.content || '').substring(0, 70).replace(/[#*`\n]/g, ' ').trim() : '';
-    return `<div class="notes-type-card${note ? ' has-note' : ''}" onclick="openNote('${_esc(subject)}','${_esc(unit)}','${_esc(chapter)}','${type}')">
+    return `<div class="notes-type-card${note ? ' has-note' : ''}" onclick="openNote('${_jesc(subject)}','${_jesc(unit)}','${_jesc(chapter)}','${type}')">
       <div class="notes-type-card-icon">${icon}</div>
       <div class="notes-type-card-body">
         <div class="notes-type-card-label">${label}</div>
@@ -1379,7 +1390,7 @@ function _buildNotesTree() {
     body.innerHTML = subjects.map(s => {
       let isActive = s === _currentSubject;
       return (
-        '<div class="notes-rn-subject-row' + (isActive ? ' active' : '') + '" onclick="closeNotesRightNav();showUnitsView(\'' + _esc(s) + '\');">' +
+        '<div class="notes-rn-subject-row' + (isActive ? ' active' : '') + '" onclick="closeNotesRightNav();showUnitsView(\'' + _jesc(s) + '\');">' +
         '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h5l1.5 2H14v8H2z"/></svg>' +
         '<span>' + _esc(s) + '</span>' +
         '</div>'
@@ -1410,7 +1421,7 @@ function _buildNotesTree() {
       );
       return (
         '<div class="notes-rn-chapter' + (isCurrent ? ' active' : '') + (hasNote ? ' has-note' : '') + '"' +
-        ' onclick="closeNotesRightNav();showNoteTypesView(\'' + _esc(_currentSubject) + '\',\'' + _esc(unit.name) + '\',\'' + _esc(ch.name) + '\');">' +
+        ' onclick="closeNotesRightNav();showNoteTypesView(\'' + _jesc(_currentSubject) + '\',\'' + _jesc(unit.name) + '\',\'' + _jesc(ch.name) + '\');">' +
         '<span class="notes-rn-chapter-dot"></span>' +
         '<span class="notes-rn-chapter-name">' + _esc(ch.name) + '</span>' +
         '</div>'

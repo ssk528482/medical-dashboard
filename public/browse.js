@@ -270,12 +270,12 @@ function _render() {
             '<span class="fc-acc-chapter-name">' + _esc(chap) + '</span>' +
             '<span class="fc-acc-chapter-count">' + cCards.length + '</span>' +
             '<button class="fc-learn-btn ' + btnClass + '" onclick="event.stopPropagation();startLearn(\'' + cLearnKey + '\')">' + btnLabel + ' ' + cCards.length + '</button>' +
-            '<button class="fc-quick-add-btn" onclick="event.stopPropagation();openQuickAddModal(\'' + _esc(subj) + '\',\'' + _esc(unit) + '\',\'' + _esc(chap) + '\')">+</button>' +
+            '<button class="fc-quick-add-btn" onclick="event.stopPropagation();openQuickAddModal(\'' + _jesc(subj) + '\',\'' + _jesc(unit) + '\',\'' + _jesc(chap) + '\')">+</button>' +
             '<div class="fc-section-menu">' +
               '<button class="fc-menu-btn" onclick="event.stopPropagation();toggleMenu(\'' + cMenuId + '\',this)">⋮</button>' +
               '<div class="fc-menu-dropdown" id="' + cMenuId + '">' +
                 '<button class="fc-menu-item" onclick="toggleMenu(\'' + cMenuId + '\');selectByKey(\'' + cSelKey + '\')">☑ Select all</button>' +
-                '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + cMenuId + '\');bulkDeleteByKey(\'' + cDelKey + '\',\'' + _esc(chap) + '\')">🗑 Delete all (' + cCards.length + ')</button>' +
+                '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + cMenuId + '\');bulkDeleteByKey(\'' + cDelKey + '\',\'' + _jesc(chap) + '\')">🗑 Delete all (' + cCards.length + ')</button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -295,7 +295,7 @@ function _render() {
             '<button class="fc-menu-btn" onclick="toggleMenu(\'' + uMenuId + '\',this)">⋮</button>' +
             '<div class="fc-menu-dropdown" id="' + uMenuId + '">' +
               '<button class="fc-menu-item" onclick="toggleMenu(\'' + uMenuId + '\');selectByKey(\'' + uSelKey + '\')">☑ Select all in unit</button>' +
-              '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + uMenuId + '\');bulkDeleteByKey(\'' + uDelKey + '\',\'' + _esc(unit) + '\')">🗑 Delete all (' + unitCount + ')</button>' +
+              '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + uMenuId + '\');bulkDeleteByKey(\'' + uDelKey + '\',\'' + _jesc(unit) + '\')">🗑 Delete all (' + unitCount + ')</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -313,7 +313,7 @@ function _render() {
           '<button class="fc-menu-btn" onclick="toggleMenu(\'' + sMenuId + '\',this)">⋮</button>' +
           '<div class="fc-menu-dropdown" id="' + sMenuId + '">' +
             '<button class="fc-menu-item" onclick="toggleMenu(\'' + sMenuId + '\');selectByKey(\'' + sSelKey + '\')">☑ Select all in subject</button>' +
-            '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + sMenuId + '\');bulkDeleteByKey(\'' + sDelKey + '\',\'' + _esc(subj) + '\')">🗑 Delete all (' + subjCount + ')</button>' +
+            '<button class="fc-menu-item danger" onclick="toggleMenu(\'' + sMenuId + '\');bulkDeleteByKey(\'' + sDelKey + '\',\'' + _jesc(subj) + '\')">🗑 Delete all (' + subjCount + ')</button>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -747,6 +747,17 @@ function _esc(str) {
   return String(str)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// _jesc: use when embedding a value inside a JS string literal in an onclick attribute.
+// HTML entities like &#39; get decoded by the HTML parser before JS runs, breaking syntax.
+// Backslash-escaping is the correct approach for JS string contexts.
+function _jesc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
 }
 function _slug(str) {
   return String(str).replace(/[^a-z0-9]/gi, '_').toLowerCase();

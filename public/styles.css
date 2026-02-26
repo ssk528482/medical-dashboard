@@ -873,8 +873,28 @@ label {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Bottom nav: show compact icon-only row */
+  /* Nav toggle button: respect left notch/safe-area in landscape */
+  #nav-toggle-btn {
+    top: max(12px, env(safe-area-inset-top, 12px));
+    left: env(safe-area-inset-left, 0px);
+    border-left: none;
+  }
+  #nav-toggle-btn.open {
+    left: calc(var(--nav-w) + env(safe-area-inset-left, 0px));
+  }
+
+  /* Side nav drawer: account for left safe-area so it isn't hidden behind notch */
+  .side-nav {
+    left: env(safe-area-inset-left, 0px);
+    padding-left: 0;
+  }
+
+  /* Nav labels: hide in collapsed/icon state but ALWAYS show when drawer is open */
   .side-nav-label { display: none; }
+  .side-nav.open .side-nav-label { display: block; }
+
+  /* Brand text must stay visible when drawer is open */
+  .side-nav.open .side-nav-brand-text { display: block; opacity: 1; color: #f0f6ff; }
 
   /* Smaller pills and buttons to fit landscape row */
   .pill { font-size: 9px; padding: 3px 5px; }
