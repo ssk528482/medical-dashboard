@@ -1,6 +1,7 @@
 ﻿<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0f172a">
   <link rel="manifest" href="manifest.json">
@@ -223,9 +224,9 @@
 <!-- ── Bottom Nav ─────────────────────────────────────────── -->
 
 <!-- ══ NOTES RIGHT SIDEBAR — Quick chapter/unit switcher ════ -->
-<button id="notes-rn-toggle" onclick="toggleNotesRightNav()" title="Quick navigation">❮</button>
+<button id="notes-rn-toggle" style="visibility:hidden" onclick="toggleNotesRightNav()" title="Quick navigation"><span class="nrn-arrow">&#10094;</span><span class="nrn-label">INDEX</span></button>
 
-<div id="notes-right-nav">
+<div id="notes-right-nav" style="visibility:hidden">
   <div class="notes-rn-header">
     <button class="notes-rn-subject-btn" id="notes-rn-subject-btn" onclick="_rnGoSubjects()">📚 Notes</button>
     <button class="notes-rn-close-btn" onclick="closeNotesRightNav()">✕</button>

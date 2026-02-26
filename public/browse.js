@@ -421,6 +421,36 @@ function _updateBulkBar() {
 }
 function _hideBulkBar() { document.getElementById('bulk-bar')?.classList.remove('visible'); }
 
+// ── Delete progress overlay ──────────────────────────────────────
+function _showDeleteProgress(label) {
+  let el = document.getElementById('delete-progress-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'delete-progress-overlay';
+    el.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(10,22,40,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML =
+    '<div style="font-size:36px;">🗑️</div>' +
+    '<div style="font-size:15px;font-weight:700;color:#f0f6ff;">' + label + '</div>' +
+    '<div style="width:180px;height:6px;background:rgba(255,255,255,0.1);border-radius:20px;overflow:hidden;">' +
+    '  <div id="del-prog-bar" style="height:100%;background:#ef4444;border-radius:20px;width:0%;transition:width 0.2s;"></div>' +
+    '</div>' +
+    '<div id="del-prog-text" style="font-size:12px;color:#94a3b8;">Preparing…</div>';
+  el.style.display = 'flex';
+}
+function _updateDeleteProgress(done, total) {
+  let bar  = document.getElementById('del-prog-bar');
+  let text = document.getElementById('del-prog-text');
+  let pct  = total > 0 ? Math.round(done / total * 100) : 0;
+  if (bar)  bar.style.width = pct + '%';
+  if (text) text.textContent = done + ' / ' + total + ' deleted';
+}
+function _hideDeleteProgress() {
+  let el = document.getElementById('delete-progress-overlay');
+  if (el) el.remove();
+}
+
 async function bulkDelete() {
   let ids = [..._selected];
   if (!ids.length) return;
@@ -428,14 +458,18 @@ async function bulkDelete() {
     'Delete ' + ids.length + ' card' + (ids.length !== 1 ? 's' : '') + '?',
     'This cannot be undone.',
     async () => {
-      for (let id of ids) {
-        let { error } = await deleteCard(id);
-        if (error) console.error('Delete failed:', id, error);
-      }
-      _selected.clear(); _hideBulkBar(); _selectMode = false;
-      let btn = document.getElementById('select-btn');
-      if (btn) { btn.textContent = '☑ Select'; btn.classList.remove('active'); }
-      await _loadPreserving();
+      _showDeleteProgress('Deleting ' + ids.length + ' cards…');
+      _updateDeleteProgress(0, ids.length);
+      let { error } = await deleteCardsBatch(ids);
+      _updateDeleteProgress(ids.length, ids.length);
+      if (error) { _hideDeleteProgress(); console.error('Bulk delete failed:', error); return; }
+      setTimeout(async () => {
+        _hideDeleteProgress();
+        _selected.clear(); _hideBulkBar(); _selectMode = false;
+        let btn = document.getElementById('select-btn');
+        if (btn) { btn.textContent = '☑ Select'; btn.classList.remove('active'); }
+        await _loadPreserving();
+      }, 400);
     },
     'Delete ' + ids.length
   );
@@ -466,11 +500,15 @@ async function bulkDeleteByKey(registryKey, label) {
     'Delete all in "' + label + '"?',
     ids.length + ' cards will be permanently deleted.',
     async () => {
-      for (let id of ids) {
-        let { error } = await deleteCard(id);
-        if (error) console.error('Delete failed:', id, error);
-      }
-      await _loadPreserving();
+      _showDeleteProgress('Deleting ' + ids.length + ' cards from "' + label + '"…');
+      _updateDeleteProgress(0, ids.length);
+      let { error } = await deleteCardsBatch(ids);
+      _updateDeleteProgress(ids.length, ids.length);
+      if (error) { _hideDeleteProgress(); console.error('Bulk delete failed:', error); return; }
+      setTimeout(async () => {
+        _hideDeleteProgress();
+        await _loadPreserving();
+      }, 400);
     },
     'Delete ' + ids.length
   );

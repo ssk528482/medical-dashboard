@@ -340,7 +340,13 @@ function calculateConsistencyForDays(days) {
     let d = new Date(); d.setDate(d.getDate() - i);
     let key = d.toISOString().split("T")[0];
     let e = studyData.dailyHistory[key];
-    if (e) total += (e.study?1:0) + (e.qbank?1:0) + (e.revision?1:0);
+    if (e) {
+      // Support both new schema (arrays) and old schema (booleans)
+      let hasStudy    = (e.studyEntries?.length > 0)  || !!e.study;
+      let hasQbank    = (e.qbankEntries?.length > 0)  || !!e.qbank;
+      let hasRevision = (e.revisedItems?.length > 0)  || !!e.revision;
+      total += (hasStudy?1:0) + (hasQbank?1:0) + (hasRevision?1:0);
+    }
   }
   return (total / max) * 100;
 }

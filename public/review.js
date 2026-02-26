@@ -9,6 +9,7 @@ let _queue       = [];
 let _index       = 0;
 let _flipped     = false;
 let _active      = false;
+let _ratingInProgress = false;
 let _startedAt   = null;
 let _timerInt    = null;
 let _ratings     = { 1:0, 2:0, 3:0, 4:0 };
@@ -16,9 +17,12 @@ let _streak      = 0;
 let _confirmFn   = null;
 let _editCardId  = null;
 let _isFiltered  = false;  // true when launched from browse with specific card ids
+let _undoStack   = [];     // [{index, card, prevSRS, rating, preRatingStreak, wasRequeued}]
+let _redoStack   = [];     // same shape
 
 // ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
+  try {
   let params = new URLSearchParams(window.location.search);
 
   // ── Mode 1: launched from editor with subject/unit/chapter deep-link ──
@@ -82,6 +86,10 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Nav badge
   let badge = document.getElementById('nav-review-badge');
   if (badge && count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = 'inline-block'; }
+  } catch (err) {
+    console.error('Review boot error:', err);
+    _showScreen('empty');
+  }
 });
 
 function _setupStart(cards, countText, subText) {
@@ -100,6 +108,9 @@ function _startSession(cards) {
   _streak    = 0;
   _startedAt = Date.now();
   _active    = true;
+  _undoStack = [];
+  _redoStack = [];
+  _updateUndoRedoBtns();
 
   _showScreen('session');
   clearInterval(_timerInt);
@@ -167,6 +178,12 @@ function _renderCard() {
     let backHtml = '';
     if (card.card_type === 'cloze') {
       backHtml = _renderClozeBack(card.front_text);
+      if (card.back_text) {
+        backHtml += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">' +
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:6px;">Details</div>' +
+          '<div style="color:#cbd5e1;font-size:14px;">' + _renderText(card.back_text) + '</div>' +
+          '</div>';
+      }
     } else {
       backHtml = card.back_text ? _renderText(card.back_text) : '';
     }
@@ -228,8 +245,26 @@ function _hideRatings() {
 }
 
 async function rateCard(rating) {
-  if (!_active || !_flipped) return;
+  if (!_active || !_flipped || _ratingInProgress) return;
+  _ratingInProgress = true;
   let card = _queue[_index];
+
+  // Snapshot for undo
+  _undoStack.push({
+    index:           _index,
+    card:            card,
+    prevSRS: {
+      ease_factor:      card.ease_factor,
+      interval_days:    card.interval_days,
+      next_review_date: card.next_review_date,
+    },
+    rating:          rating,
+    preRatingStreak: _streak,
+    wasRequeued:     rating === 1,
+  });
+  _redoStack = [];
+  _updateUndoRedoBtns();
+
   _ratings[rating] = (_ratings[rating] || 0) + 1;
 
   if (rating >= 3) _streak++; else _streak = 0;
@@ -243,7 +278,69 @@ async function rateCard(rating) {
   if (rating === 1) _queue.push(Object.assign({}, card, { _requeued: true }));
 
   _index++;
+  _ratingInProgress = false;
   _renderCard();
+}
+
+async function undoRating() {
+  if (!_undoStack.length || !_active) return;
+  let e = _undoStack.pop();
+  _redoStack.push(e);
+  _updateUndoRedoBtns();
+
+  // Remove re-queued duplicate if this rating caused one
+  if (e.wasRequeued) {
+    for (let i = _queue.length - 1; i > e.index; i--) {
+      if (_queue[i]._requeued && _queue[i].id === e.card.id) {
+        _queue.splice(i, 1); break;
+      }
+    }
+  }
+
+  // Restore rating counter
+  _ratings[e.rating] = Math.max(0, (_ratings[e.rating] || 0) - 1);
+
+  // Restore streak & index
+  _streak = e.preRatingStreak;
+  _index  = e.index;
+  _flipped = false;
+  _updateStreak();
+
+  // Restore SRS on card object in queue so UI reflects old state
+  let qc = _queue[e.index];
+  if (qc) Object.assign(qc, e.prevSRS);
+
+  // Reverse DB asynchronously
+  restoreCardSRS(e.card.id, e.prevSRS);
+
+  _renderCard();
+}
+
+async function redoRating() {
+  if (!_redoStack.length || !_active) return;
+  let e = _redoStack.pop();
+  _undoStack.push(e);
+  _updateUndoRedoBtns();
+
+  let card = _queue[e.index];
+  _ratings[e.rating] = (_ratings[e.rating] || 0) + 1;
+  _streak = e.rating >= 3 ? e.preRatingStreak + 1 : 0;
+  _updateStreak();
+
+  // Re-apply DB change
+  saveReview(card.id, e.rating, card);
+  if (e.wasRequeued) _queue.push(Object.assign({}, card, { _requeued: true }));
+
+  _index = e.index + 1;
+  _flipped = false;
+  _renderCard();
+}
+
+function _updateUndoRedoBtns() {
+  let u = document.getElementById('btn-undo');
+  let r = document.getElementById('btn-redo');
+  if (u) u.disabled = _undoStack.length === 0;
+  if (r) r.disabled = _redoStack.length === 0;
 }
 
 function _updateStreak() {
@@ -302,6 +399,15 @@ function _showScreen(name) {
 document.addEventListener('keydown', function (e) {
   if (!_active) return;
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  // Undo: Ctrl+Z or U
+  if ((e.ctrlKey && e.code === 'KeyZ') || (!e.ctrlKey && !e.metaKey && e.code === 'KeyU')) {
+    e.preventDefault(); undoRating(); return;
+  }
+  // Redo: Ctrl+Y or Ctrl+Shift+Z or R
+  if ((e.ctrlKey && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) ||
+      (!e.ctrlKey && !e.metaKey && e.code === 'KeyR')) {
+    e.preventDefault(); redoRating(); return;
+  }
   if (e.code === 'Space' || e.code === 'ArrowDown') { e.preventDefault(); flipCard(); }
   else if (_flipped) {
     if (e.code === 'Digit1' || e.code === 'KeyA') rateCard(1);
@@ -316,6 +422,10 @@ function openEditModal() {
   if (!_active) return;
   let card = _queue[_index];
   if (!card) return;
+  if (card.card_type === 'image_occlusion') {
+    alert('Image occlusion cards must be edited from the Browse page.');
+    return;
+  }
   _editCardId = card.id;
   document.getElementById('edit-front').value = card.front_text || '';
   document.getElementById('edit-back').value  = card.back_text  || '';

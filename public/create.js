@@ -107,7 +107,7 @@ function setType(type) {
     let frontUploadBox = document.getElementById('front-upload');
     if (frontUploadBox) frontUploadBox.closest('.form-group').style.display = 'none';
   } else {
-    if (backGroup)        backGroup.style.display        = type === 'cloze' ? 'none' : 'block';
+    if (backGroup)        backGroup.style.display        = 'block';
     if (clozeHint)        clozeHint.style.display        = type === 'cloze' ? 'block' : 'none';
     if (occlusionSection) occlusionSection.classList.remove('active');
     if (occlusionActions) occlusionActions.style.display = 'none';
@@ -116,6 +116,16 @@ function setType(type) {
     if (frontEl) frontEl.closest('.form-group').style.display = 'block';
     // Reset occlusion canvas if switching away
     if (typeof resetOcclusionCanvas === 'function') resetOcclusionCanvas();
+    // Relabel back field for cloze
+    let backLabel = backGroup?.querySelector('.form-label');
+    let backArea  = document.getElementById('back');
+    if (type === 'cloze') {
+      if (backLabel) backLabel.textContent = 'Details (optional)';
+      if (backArea)  backArea.placeholder  = 'Extra notes, mnemonics or tips shown after the answer is revealed…';
+    } else {
+      if (backLabel) backLabel.textContent = 'Back';
+      if (backArea)  backArea.placeholder  = 'Answer or explanation…';
+    }
   }
 }
 
@@ -214,7 +224,7 @@ async function submit() {
       subject, unit: unit || '', chapter: chapter || '',
       card_type:       _type,
       front_text:      front,
-      back_text:       _type === 'cloze' ? null : (back || null),
+      back_text:       back || null,
       front_image_url: _frontUrl,
       back_image_url:  _backUrl,
       tags:            _tags,

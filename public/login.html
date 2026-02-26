@@ -294,6 +294,7 @@
     if (!session) {
       // Genuinely not logged in — show the login form
       document.documentElement.style.opacity = '1';
+      if (typeof window.hideSplash === 'function') window.hideSplash();
       return;
     }
 

@@ -444,16 +444,18 @@ async function checkUser() {
   const statusEl   = document.getElementById("authStatus");
 
   if (user) {
+    if (statusEl) statusEl.textContent = user.email;
+
+    await loadFromCloud();
+    await setupRealtime();
+
+    // Set greeting AFTER loadFromCloud so studyData.userName is populated
     if (greetingEl) {
       const name     = studyData.userName || user.email.split("@")[0];
       const hour     = new Date().getHours();
       const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
       greetingEl.textContent = `${greeting}, ${name} 👋`;
     }
-    if (statusEl) statusEl.textContent = user.email;
-
-    await loadFromCloud();
-    await setupRealtime();
   } else {
     if (greetingEl) greetingEl.textContent = "Not logged in";
     if (statusEl)   statusEl.textContent   = "";
@@ -463,6 +465,8 @@ async function checkUser() {
 }
 
 function renderAll() {
+  // Dismiss loading splash now that data is ready
+  if (typeof window.hideSplash === 'function') window.hideSplash();
   // Run after cloud load so studyData is fully populated
   if (typeof swAutoSaveYesterday === "function") swAutoSaveYesterday();
   if (typeof renderStatus               === "function") renderStatus();

@@ -375,6 +375,23 @@ async function setSuspended(cardId, suspend) {
 }
 
 /**
+ * Restore a card's SRS state (used by undo in review).
+ */
+async function restoreCardSRS(cardId, prevSRS) {
+  const userId = await _userId();
+  if (!userId) return;
+  await supabaseClient
+    .from('flashcards')
+    .update({
+      ease_factor:      prevSRS.ease_factor      ?? 2.5,
+      interval_days:    prevSRS.interval_days    ?? 0,
+      next_review_date: prevSRS.next_review_date ?? today(),
+    })
+    .eq('id', cardId)
+    .eq('user_id', userId);
+}
+
+/**
  * Delete a card (cascades to card_reviews via FK).
  * @param {string} cardId
  * @returns {Promise<{ error: any }>}
@@ -390,6 +407,30 @@ async function deleteCard(cardId) {
     .eq('user_id', userId);
 
   return { error };
+}
+
+/**
+ * Batch-delete up to 500 cards at once using an IN clause.
+ * Falls back to chunked requests for >500 ids.
+ * @param {string[]} cardIds
+ * @returns {Promise<{ error: any }>}
+ */
+async function deleteCardsBatch(cardIds) {
+  const userId = await _userId();
+  if (!userId) return { error: 'No user id' };
+  if (!cardIds || !cardIds.length) return { error: null };
+
+  const CHUNK = 500;
+  for (let i = 0; i < cardIds.length; i += CHUNK) {
+    const chunk = cardIds.slice(i, i + CHUNK);
+    const { error } = await supabaseClient
+      .from('flashcards')
+      .delete()
+      .in('id', chunk)
+      .eq('user_id', userId);
+    if (error) return { error };
+  }
+  return { error: null };
 }
 
 /**

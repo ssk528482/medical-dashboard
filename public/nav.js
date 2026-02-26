@@ -44,7 +44,22 @@
   }).join('\n    ');
 
   // ── Build HTML ────────────────────────────────────────────────────────────
+  var splashHtml =
+    '<div id="app-splash" style="position:fixed;inset:0;z-index:999999;background:#0a1628;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">' +
+    '<div style="font-size:64px;animation:splash-pulse 1.8s ease-in-out infinite;">🩺</div>' +
+    '<div style="font-size:18px;font-weight:800;color:#f0f6ff;letter-spacing:-0.01em;">Medical Study OS</div>' +
+    '<div style="width:48px;height:3px;background:rgba(59,130,246,0.25);border-radius:20px;overflow:hidden;">' +
+    '  <div style="height:100%;background:#3b82f6;border-radius:20px;animation:splash-bar 1.4s ease-in-out infinite;"></div>' +
+    '</div>' +
+    '</div>' +
+    '<style>' +
+    '@keyframes splash-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}' +
+    '@keyframes splash-bar{0%{width:0%;margin-left:0}50%{width:100%;margin-left:0}100%{width:0%;margin-left:100%}}' +
+    'html,body{background:#0a1628}' +
+    '</style>';
+
   var html =
+    splashHtml +
     '<div id="nav-overlay"></div>\n' +
     '<nav class="side-nav" id="side-nav">\n' +
     '  <button class="side-nav-toggle" id="side-nav-toggle" title="Toggle sidebar">\u276E</button>\n' +
@@ -76,24 +91,52 @@
     var nav     = document.getElementById('side-nav');
     var overlay = document.getElementById('nav-overlay');
 
+    // Splash screen management
+    var splash = document.getElementById('app-splash');
+    var splashHidden = false;
+    // Hide nav and toggle btn until splash is gone
+    if (nav) nav.style.visibility = 'hidden';
+    window.hideSplash = function () {
+      if (splashHidden || !splash) return;
+      splashHidden = true;
+      splash.style.transition = 'opacity 0.3s ease';
+      splash.style.opacity = '0';
+      // Reveal nav elements as splash fades
+      if (nav) nav.style.visibility = '';
+      var tb2 = document.getElementById('nav-toggle-btn');
+      if (tb2) tb2.style.visibility = '';
+      var rnToggle = document.getElementById('notes-rn-toggle');
+      if (rnToggle) rnToggle.style.visibility = '';
+      var rnNav = document.getElementById('notes-right-nav');
+      if (rnNav) rnNav.style.visibility = '';
+      setTimeout(function () { if (splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 320);
+    };
+    // Fallback: hide after 5 s if nothing called hideSplash
+    setTimeout(window.hideSplash, 5000);
+
     // Floating toggle button
     var tb       = document.createElement('button');
     tb.id        = 'nav-toggle-btn';
-    tb.innerHTML = '&#10095;';
     tb.title     = 'Toggle navigation';
+    function _tbHtml(open) {
+      return '<span class="ntb-arrow">' + (open ? '&#10094;' : '&#10095;') + '</span>' +
+             '<span class="ntb-label">NAV</span>';
+    }
+    tb.innerHTML = _tbHtml(false);
+    tb.style.visibility = 'hidden'; // hidden until splash clears
     document.body.appendChild(tb);
 
     function openNav () {
       nav.classList.add('open');
       overlay.classList.add('open');
       tb.classList.add('open');
-      tb.innerHTML = '&#10094;';
+      tb.innerHTML = _tbHtml(true);
     }
     function closeNav () {
       nav.classList.remove('open');
       overlay.classList.remove('open');
       tb.classList.remove('open');
-      tb.innerHTML = '&#10095;';
+      tb.innerHTML = _tbHtml(false);
     }
 
     tb.addEventListener('click', function () {

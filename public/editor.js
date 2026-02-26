@@ -1221,6 +1221,11 @@ let _bulkSubjects = {};
 
 function openBulkModal() {
   _bulkSubjects = {};
+  let nameEl  = document.getElementById("bulkSubjectName");
+  let topicEl = document.getElementById("bulkTopicsInput");
+  if (nameEl)  nameEl.value  = "";
+  if (topicEl) topicEl.value = "";
+  _renderBulkPreview();
   document.getElementById("bulkModal").style.display = "block";
   document.body.style.overflow = "hidden";
   bulkGoStep1();

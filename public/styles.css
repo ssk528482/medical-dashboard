@@ -69,30 +69,37 @@ body > *:not(.side-nav):not(#nav-overlay):not(#nav-toggle-btn) {
 /* Single sliding tab handle — attached to right edge of nav */
 #nav-toggle-btn {
   position: fixed;
-  top: 14px;
+  top: 16px;
   left: 0;
   z-index: 210;
-  width: 20px;
-  height: 52px;
+  width: 32px;
+  height: 64px;
   min-height: unset;
   padding: 0;
   margin: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: #1e3a5f;
+  border: 1px solid rgba(59,130,246,0.45);
   border-left: none;
-  border-radius: 0 8px 8px 0;
-  color: var(--text-muted);
-  font-size: 11px;
+  border-radius: 0 10px 10px 0;
+  color: #93c5fd;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   cursor: pointer;
-  transition: left 0.28s cubic-bezier(.4,0,.2,1), color 0.15s, background 0.15s;
-  box-shadow: 2px 0 8px rgba(0,0,0,0.35);
+  transition: left 0.28s cubic-bezier(.4,0,.2,1), background 0.15s, color 0.15s, box-shadow 0.15s;
+  box-shadow: 2px 0 12px rgba(59,130,246,0.25), 2px 0 4px rgba(0,0,0,0.5);
   line-height: 1;
+  user-select: none;
 }
-#nav-toggle-btn.open { left: var(--nav-w); }
-#nav-toggle-btn:hover { color: var(--text); background: var(--card); opacity: 1; box-shadow: 2px 0 12px rgba(0,0,0,0.5); }
+#nav-toggle-btn .ntb-label { font-size: 8px; font-weight: 800; letter-spacing: 0.1em; line-height: 1; }
+#nav-toggle-btn .ntb-arrow { font-size: 12px; line-height: 1; font-weight: 400; }
+#nav-toggle-btn.open { left: var(--nav-w); background: #1e3a5f; }
+#nav-toggle-btn:hover { color: #fff; background: #2563eb; box-shadow: 2px 0 16px rgba(59,130,246,0.55), 2px 0 4px rgba(0,0,0,0.5); }
 
 .side-nav {
   position: fixed;
@@ -143,8 +150,8 @@ body > *:not(.side-nav):not(#nav-overlay):not(#nav-toggle-btn) {
 .side-nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 18px;
+  gap: 10px;
+  padding: 9px 16px;
   text-decoration: none;
   color: var(--text-muted);
   font-size: 13px;
@@ -167,9 +174,32 @@ body > *:not(.side-nav):not(#nav-overlay):not(#nav-toggle-btn) {
   background: var(--blue);
   border-radius: 0 3px 3px 0;
 }
-.side-nav-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.side-nav-icon { font-size: 18px; flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; text-align: center; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
 .side-nav-icon svg { display: block; }
 .side-nav-label { opacity: 1; }
+
+/* Per-icon accent colours (inactive) */
+.side-nav-item[data-label="Home"]     .side-nav-icon { color: #60a5fa; background: rgba(96,165,250,0.12); }
+.side-nav-item[data-label="Planner"]  .side-nav-icon { color: #a78bfa; background: rgba(167,139,250,0.12); }
+.side-nav-item[data-label="Syllabus"] .side-nav-icon { color: #34d399; background: rgba(52,211,153,0.12); }
+.side-nav-item[data-label="Stats"]    .side-nav-icon { color: #fbbf24; background: rgba(251,191,36,0.12); }
+.side-nav-item[data-label="Profile"]  .side-nav-icon { color: #38bdf8; background: rgba(56,189,248,0.12); }
+.side-nav-item[data-label="Review"]   .side-nav-icon { color: #f87171; background: rgba(248,113,113,0.12); }
+.side-nav-item[data-label="Cards"]    .side-nav-icon { color: #c084fc; background: rgba(192,132,252,0.12); }
+.side-nav-item[data-label="Notes"]    .side-nav-icon { color: #2dd4bf; background: rgba(45,212,191,0.12); }
+
+/* Active: saturate the icon bubble */
+.side-nav-item.active[data-label="Home"]     .side-nav-icon { color: #3b82f6; background: rgba(59,130,246,0.22); }
+.side-nav-item.active[data-label="Planner"]  .side-nav-icon { color: #8b5cf6; background: rgba(139,92,246,0.22); }
+.side-nav-item.active[data-label="Syllabus"] .side-nav-icon { color: #10b981; background: rgba(16,185,129,0.22); }
+.side-nav-item.active[data-label="Stats"]    .side-nav-icon { color: #f59e0b; background: rgba(245,158,11,0.22); }
+.side-nav-item.active[data-label="Profile"]  .side-nav-icon { color: #0ea5e9; background: rgba(14,165,233,0.22); }
+.side-nav-item.active[data-label="Review"]   .side-nav-icon { color: #ef4444; background: rgba(239,68,68,0.22); }
+.side-nav-item.active[data-label="Cards"]    .side-nav-icon { color: #a855f7; background: rgba(168,85,247,0.22); }
+.side-nav-item.active[data-label="Notes"]    .side-nav-icon { color: #14b8a6; background: rgba(20,184,166,0.22); }
+
+/* Hover: slightly brighten icon bubble */
+.side-nav-item:hover .side-nav-icon { filter: brightness(1.15); }
 
 /* Badges */
 .side-nav-badge {
@@ -305,7 +335,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:f
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(59,130,246,0.14);
 }
-input[type="number"]                        { -moz-appearance: textfield; }
+input[type="number"]                        { -moz-appearance: textfield; appearance: textfield; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
 textarea { min-height: 88px; resize: vertical; }
@@ -2790,10 +2820,8 @@ html.screen-rotated body {
   touch-action: none;
   overscroll-behavior: none;
 }
-/* Keep fixed elements (modals, bulk bars etc.) sane in rotated mode */
-html.screen-rotated .fc-menu-dropdown {
-  /* position is managed by JS getBoundingClientRect which still works */
-}
+/* Keep fixed elements (modals, bulk bars etc.) sane in rotated mode —
+   position is managed by JS getBoundingClientRect which still works */
 
 /* ═══════════════════════════════════════════════════════════
    UI ENHANCEMENTS — All 17 Audit Items
@@ -3180,6 +3208,7 @@ button:not(.icon-btn):not(.collapse-btn):not(.fc-icon-btn):not(.tab-btn):not(.fc
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 .notes-type-card-date {

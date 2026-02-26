@@ -107,6 +107,21 @@
     .summary-cell.good  .sc-value { color: #27ae60; }
     .summary-cell.easy  .sc-value { color: #2980b9; }
 
+    /* Undo / Redo row */
+    #undo-redo-row {
+      display: flex; gap: 8px; margin-bottom: 10px;
+    }
+    .undo-redo-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 12px; border-radius: 9px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text-muted); font-size: 12px; font-weight: 700;
+      cursor: pointer; min-height: unset; margin: 0; transition: background 0.15s, color 0.15s, opacity 0.15s;
+    }
+    .undo-redo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .undo-redo-btn:not(:disabled):hover { background: var(--surface); color: var(--text); }
+    #btn-undo:not(:disabled) { border-color: rgba(251,191,36,0.35); color: #fbbf24; }
+    #btn-redo:not(:disabled) { border-color: rgba(99,102,241,0.35); color: #818cf8; }
+
     /* Inline edit modal */
     .edit-modal-backdrop {
       display: none; position: fixed; inset: 0; z-index: 600;
@@ -206,6 +221,12 @@
       </div>
     </div>
 
+    <!-- Undo / Redo -->
+    <div id="undo-redo-row">
+      <button class="undo-redo-btn" id="btn-undo" onclick="undoRating()" disabled title="Undo last rating (Ctrl+Z or U)">&#8592; Undo</button>
+      <button class="undo-redo-btn" id="btn-redo" onclick="redoRating()" disabled title="Redo (Ctrl+Y or R)">Redo &#8594;</button>
+    </div>
+
     <!-- Flip button -->
     <button id="btn-flip" onclick="flipCard()">Show Answer</button>
 
@@ -222,6 +243,8 @@
         <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">2 Hard</span>
         <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">3 Good</span>
         <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">4 Easy</span>
+        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">U Undo</span>
+        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">R Redo</span>
       </div>
     </div>
 

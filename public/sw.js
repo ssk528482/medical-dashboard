@@ -1,7 +1,7 @@
 // sw.js — Medical Study OS Service Worker
 // Strategy: Network-first with cache fallback for navigation; cache-first for static assets.
 
-const CACHE_NAME = 'medos-v4';
+const CACHE_NAME = 'medos-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -36,6 +36,10 @@ const STATIC_ASSETS = [
   '/search.js',
   '/stopwatch.js',
   '/supabase.js',
+  '/nav.js',
+  '/pwa.js',
+  '/notifications.js',
+  '/cloudinary.js',
   '/manifest.json',
 ];
 

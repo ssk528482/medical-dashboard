@@ -43,6 +43,14 @@ function setCardType(type) {
   _el("occlusion-area")  && (_el("occlusion-area").style.display = type === "image_occlusion" ? "block" : "none");
   _el("front-upload-box") && (_el("front-upload-box").style.display = type === "image_occlusion" ? "none" : "block");
 
+  // Relabel back field depending on type
+  let backLabel = _el("back-group")?.querySelector(".form-label");
+  let backArea  = _el("back");
+  if (backLabel) backLabel.textContent = type === "cloze" ? "Details (optional)" : "Back";
+  if (backArea)  backArea.placeholder  = type === "cloze"
+    ? "Extra notes, mnemonics or tips shown after the answer is revealed…"
+    : "Answer or explanation…";
+
   // Reset occlusion canvas if switching away
   if (type !== "image_occlusion" && typeof resetOcclusionCanvas === "function") {
     resetOcclusionCanvas();

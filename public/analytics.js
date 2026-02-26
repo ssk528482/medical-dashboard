@@ -11,11 +11,11 @@ function renderAnalytics() {
     let subjectQ = 0, subjectCorrect = 0, overdueCount = 0;
 
     subject.units.forEach(unit => {
-      subjectQ       += unit.qbankStats.total;
-      subjectCorrect += unit.qbankStats.correct;
+      subjectQ       += unit.qbankStats?.total   ?? 0;
+      subjectCorrect += unit.qbankStats?.correct ?? 0;
 
       // Weak unit detection
-      if (unit.qbankStats.total > 0) {
+      if ((unit.qbankStats?.total ?? 0) > 0) {
         let uAcc = (unit.qbankStats.correct / unit.qbankStats.total) * 100;
         if (uAcc < 60) {
           weakUnits.push({
@@ -528,7 +528,6 @@ function renderAnalytics() {
     </div>
   `;
 
-  renderIntelligenceAlerts("analyticsAlerts");
   renderTimeTrackingChart();
 }
 
@@ -1252,9 +1251,6 @@ document.addEventListener("DOMContentLoaded", function () {
   ]).then(() => {
     // Also run the time tracking chart (needs DOM to exist first)
     renderTimeTrackingChart();
-    // Alerts
-    if (typeof renderIntelligenceAlerts === "function") {
-      renderIntelligenceAlerts(document.getElementById("analyticsAlerts"));
-    }
+    renderIntelligenceAlerts("analyticsAlerts");
   }).catch(e => console.warn("analytics async sections:", e));
 });

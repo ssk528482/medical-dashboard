@@ -89,16 +89,14 @@ function showSubjectsView(skipPush) {
   let grid = document.getElementById("subjects-grid");
   if (!grid) return;
 
-  // Progress: count notes vs total chapters
+  // Progress: count chapters that have at least one note
   let totalChapters = 0, notedChapters = 0;
-  Object.values(subjects).forEach(s => s.units.forEach(u => {
+  Object.entries(subjects).forEach(([subjectName, s]) => s.units.forEach(u => {
     totalChapters += u.chapters.length;
     notedChapters += u.chapters.filter(ch =>
-      _notesMeta.some(n => n.subject === s && n.unit === u.name && n.chapter === ch.name)
+      _notesMeta.some(n => n.subject === subjectName && n.unit === u.name && n.chapter === ch.name)
     ).length;
   }));
-  // Fix: count by meta
-  notedChapters = _notesMeta.length;
   let pct = totalChapters > 0 ? Math.round(notedChapters / totalChapters * 100) : 0;
   let fillEl = document.getElementById("notes-progress-fill");
   let pctEl  = document.getElementById("notes-progress-pct");
@@ -474,7 +472,7 @@ function _applyNotesFontToView(font) {
 // SAVE NOTE
 // ─────────────────────────────────────────────────────────────────
 
-async function saveCurrentNote() {
+async function saveCurrentNote(fromAutosave = false) {
   if (!_currentSubject) return;
   if (_isSaving) return; // prevent concurrent saves
   _isSaving = true;
@@ -506,7 +504,7 @@ async function saveCurrentNote() {
     _isDirty     = false;
     setSaveStatus("Note cleared ✓");
     await _loadNotesMeta();
-    _enterReadMode();
+    if (!fromAutosave) _enterReadMode();
     return;
   }
 
@@ -515,7 +513,7 @@ async function saveCurrentNote() {
     document.getElementById("btn-save-note").disabled = false;
     _isSaving = false;
     setSaveStatus("");
-    _enterReadMode();
+    if (!fromAutosave) _enterReadMode();
     return;
   }
 
@@ -548,7 +546,7 @@ async function saveCurrentNote() {
   setSaveStatus("Saved ✓");
 
   await _loadNotesMeta();
-  _enterReadMode();
+  if (!fromAutosave) _enterReadMode();
 }
 
 // Auto-save after 2 seconds of inactivity
@@ -558,7 +556,7 @@ function markDirty() {
   _updateWordCount();
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(() => {
-    if (_isDirty && _currentSubject && !_isSaving) saveCurrentNote();
+    if (_isDirty && _currentSubject && !_isSaving) saveCurrentNote(true);
   }, 2000);
 }
 
@@ -1343,7 +1341,7 @@ function openNotesRightNav() {
   let overlay = document.getElementById('nav-overlay');
   let btn     = document.getElementById('notes-rn-toggle');
   if (nav)     nav.classList.add('open');
-  if (btn)     { btn.classList.add('open'); btn.innerHTML = '❯'; }
+  if (btn)     { btn.classList.add('open'); btn.innerHTML = '<span class="nrn-arrow">&#10095;</span><span class="nrn-label">INDEX</span>'; }
   if (overlay) {
     overlay.classList.add('open');
     overlay.addEventListener('click', closeNotesRightNav, { once: true });
@@ -1355,7 +1353,7 @@ function closeNotesRightNav() {
   let overlay = document.getElementById('nav-overlay');
   let btn     = document.getElementById('notes-rn-toggle');
   if (nav)     nav.classList.remove('open');
-  if (btn)     { btn.classList.remove('open'); btn.innerHTML = '❮'; }
+  if (btn)     { btn.classList.remove('open'); btn.innerHTML = '<span class="nrn-arrow">&#10094;</span><span class="nrn-label">INDEX</span>'; }
   if (overlay) overlay.classList.remove('open');
 }
 
