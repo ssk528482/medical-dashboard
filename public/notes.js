@@ -173,6 +173,7 @@ function showUnitsView(subject, skipPush) {
       <div class="notes-subj-card-accent" style="background:${accent};border-radius:var(--radius) var(--radius) 0 0;"></div>
       <div class="notes-unit-grid-card-name">${_esc(unit.name)}</div>
       <div class="notes-unit-grid-card-badge">${noteCount} notes · ${chapCount} chapters</div>
+      <button class="notes-unit-bytype-btn" onclick="showUnitNoteTypesView('${_jesc(subject)}','${_jesc(unit.name)}');event.stopPropagation();" title="Browse all chapters by note type">📋 By Type</button>
       <span class="notes-unit-arrow">›</span>
     </div>`;
   }).join("");
@@ -288,6 +289,141 @@ function showChaptersView(subject, unit, skipPush) {
 }
 function notesBreadcrumbBack() {
   history.back();
+}
+
+// ── Level 2b: Unit Note Types (browse all chapters by type) ───────
+async function showUnitNoteTypesView(subject, unit, skipPush) {
+  if (_isDirty) {
+    let ok = confirm("You have unsaved changes. Discard them?");
+    if (!ok) return;
+    _isDirty = false;
+  }
+
+  _currentSubject = subject;
+  _currentUnit    = unit;
+  _currentChapter = null;
+  _navStack = ["subjects","units","unit-note-types"];
+  if (!skipPush) _pushState('unit-note-types', subject, unit);
+  _setBreadcrumb(["📝 Notes", subject, unit, "By Type"], true);
+  _showView("view-note-types");
+  document.getElementById("notes-progress-bar").style.display = "none";
+
+  let heading = document.getElementById('note-types-heading');
+  if (heading) heading.textContent = unit + ' — All Chapters';
+
+  let grid = document.getElementById('note-types-grid');
+  if (!grid) return;
+
+  grid.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">Loading...</div>';
+
+  let { data: unitNotes } = await fetchUnitNotes(subject, unit);
+
+  const NOTE_TYPES = [
+    { type: 'general',    icon: '📝', label: 'General Notes',  desc: 'Full study notes & explanations' },
+    { type: 'mnemonic',   icon: '🧠', label: 'Mnemonics',       desc: 'Memory aids & tricks' },
+    { type: 'high_yield', icon: '⭐', label: 'High Yield',      desc: 'Exam-critical key points' },
+    { type: 'summary',    icon: '📋', label: 'Summary',         desc: 'Quick overview & recap' },
+  ];
+
+  grid.innerHTML = NOTE_TYPES.map(({ type, icon, label, desc }) => {
+    let typeNotes = (unitNotes || []).filter(n => (n.note_type || 'general') === type);
+    let noteCount = typeNotes.length;
+    return `<div class="notes-type-card${noteCount > 0 ? ' has-note' : ''}" onclick="openUnitNotesByType('${_jesc(subject)}','${_jesc(unit)}','${type}')">
+      <div class="notes-type-card-icon">${icon}</div>
+      <div class="notes-type-card-body">
+        <div class="notes-type-card-label">${label}</div>
+        <div class="notes-type-card-desc">${noteCount > 0 ? noteCount + ' chapter' + (noteCount !== 1 ? 's' : '') + ' with notes' : desc}</div>
+      </div>
+      <span class="notes-type-card-action">${noteCount > 0 ? 'View ›' : 'Browse'}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Level 3b: All chapters of a unit for a given note type ────────
+async function openUnitNotesByType(subject, unit, noteType, skipPush) {
+  if (_isDirty) {
+    let ok = confirm("You have unsaved changes. Discard them?");
+    if (!ok) return;
+    _isDirty = false;
+  }
+
+  noteType = noteType || 'general';
+  _currentSubject  = subject;
+  _currentUnit     = unit;
+  _currentChapter  = null;
+  _currentNoteType = noteType;
+  _navStack        = ["subjects","units","unit-note-types","unit-notes-by-type"];
+
+  const TYPE_LABELS = { general: 'General Notes', mnemonic: 'Mnemonics', high_yield: 'High Yield', summary: 'Summary' };
+  _setBreadcrumb(["📝 Notes", subject, unit, TYPE_LABELS[noteType] || noteType], true);
+  _showUnitView();
+  if (!skipPush) _pushState('unit-notes-by-type', subject, unit, null, noteType);
+
+  document.getElementById("unit-view-title").textContent = unit + ' — ' + (TYPE_LABELS[noteType] || noteType);
+
+  let { data: notes } = await fetchUnitNotes(subject, unit);
+
+  let subjectData = studyData.subjects[subject];
+  let unitData    = subjectData?.units.find(u => u.name === unit);
+  let chapters    = unitData?.chapters || [];
+
+  let container = document.getElementById("unit-cards-container");
+  container.innerHTML = "";
+
+  if (chapters.length === 0) {
+    container.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:30px;font-size:13px;">No chapters in this unit.</div>`;
+    return;
+  }
+
+  // Build note map for this type only
+  let noteMap = {};
+  (notes || []).filter(n => (n.note_type || 'general') === noteType)
+    .forEach(n => { noteMap[n.chapter] = n; });
+
+  const TI = { general: '📝', mnemonic: '🧠', high_yield: '⭐', summary: '📋' };
+  let typeIcon = TI[noteType] || '📝';
+
+  chapters.forEach(chapter => {
+    let note  = noteMap[chapter.name];
+    let color = note?.color || "default";
+
+    let colorBorder = {
+      default: "var(--border)",
+      red:     "rgba(239,68,68,0.4)",
+      yellow:  "rgba(245,158,11,0.4)",
+      green:   "rgba(16,185,129,0.4)",
+      blue:    "rgba(59,130,246,0.4)",
+    }[color] || "var(--border)";
+
+    let card = document.createElement("div");
+    card.className = "notes-unit-card";
+    card.style.borderColor = colorBorder;
+
+    if (note && note.content) {
+      let rendered = typeof marked !== 'undefined' ? marked.parse(note.content) : note.content.replace(/\n/g, '<br>');
+      card.innerHTML = `
+        <div class="notes-unit-card-header">
+          <span class="note-color-dot ${color}"></span>
+          <div class="notes-unit-card-title">${typeIcon} ${_esc(chapter.name)}</div>
+        </div>
+        ${note.tags?.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${note.tags.map(t => `<span style="background:rgba(59,130,246,0.12);color:var(--blue);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;">${_esc(t)}</span>`).join("")}</div>` : ""}
+        <div class="notes-read-body" style="margin-top:6px;">${rendered}</div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Updated: ${_formatDate(note.updated_at)}</div>
+      `;
+    } else {
+      card.innerHTML = `
+        <div class="notes-unit-card-header">
+          <span class="note-color-dot default"></span>
+          <div class="notes-unit-card-title">${typeIcon} ${_esc(chapter.name)}</div>
+          <span style="font-size:10px;color:var(--text-dim);">No note yet</span>
+        </div>
+        <div class="notes-unit-card-preview" style="color:var(--text-dim);">Click to create a ${_esc(TYPE_LABELS[noteType] || noteType)} note for this chapter.</div>
+      `;
+    }
+
+    card.onclick = () => openNote(subject, unit, chapter.name, noteType);
+    container.appendChild(card);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────

@@ -290,6 +290,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     else if (s.view === 'units') showUnitsView(s.subject, true);
     else if (s.view === 'chapters') showChaptersView(s.subject, s.unit, true);
     else if (s.view === 'note-types') showNoteTypesView(s.subject, s.unit, s.chapter, true);
+    else if (s.view === 'unit-note-types') showUnitNoteTypesView(s.subject, s.unit, true);
+    else if (s.view === 'unit-notes-by-type') openUnitNotesByType(s.subject, s.unit, s.noteType || 'general', true);
     else if (s.view === 'note') openNote(s.subject, s.unit, s.chapter, s.noteType || 'general', true);
   });
 });
