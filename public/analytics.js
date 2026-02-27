@@ -226,15 +226,22 @@ function renderAnalytics() {
         });
 
         // Render tabs + charts via inline JS rendered at display time
+        let _isLightTab = document.body.classList.contains('light');
         let tabButtons = subjectNames.map((name, i) => {
           let sessions = allSubjectData[name];
           let lastAcc  = sessions.length ? sessions[sessions.length-1].value : null;
           let trend    = sessions.length >= 2
             ? (sessions[sessions.length-1].value >= sessions[0].value ? "↑" : "↓") : "";
           let trendC   = trend === "↑" ? "#10b981" : trend === "↓" ? "#ef4444" : "#64748b";
+          let tabBg    = i === 0
+            ? (_isLightTab ? "rgba(59,130,246,0.15)" : "#1e3a5f")
+            : (_isLightTab ? "" : "#0f172a");
+          let tabColor = i === 0
+            ? (_isLightTab ? "#1d4ed8" : "#93c5fd")
+            : (_isLightTab ? "" : "#64748b");
           return `<div onclick="showSubjectChart('${name.replace(/'/g,"\\'")}',this)"
             style="cursor:pointer;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;
-              background:${i===0?"#1e3a5f":"#0f172a"};color:${i===0?"#93c5fd":"#64748b"};
+              background:${tabBg};color:${tabColor};
               display:flex;flex-direction:column;align-items:center;gap:2px;min-width:70px;text-align:center;">
             <span>${name}</span>
             <span style="font-size:11px;color:${trendC};">${lastAcc !== null ? lastAcc.toFixed(1)+"%" : "—"} ${trend}</span>
@@ -260,10 +267,13 @@ function renderAnalytics() {
           <script>
             var _sAccData = ${dataJson};
             function showSubjectChart(name, el) {
+              var isLight = document.body.classList.contains('light');
               document.querySelectorAll('#subjectAccTabs > div').forEach(d => {
-                d.style.background='#0f172a'; d.style.color='#64748b';
+                d.style.background = isLight ? '' : '#0f172a';
+                d.style.color      = isLight ? '' : '#64748b';
               });
-              el.style.background='#1e3a5f'; el.style.color='#93c5fd';
+              el.style.background = isLight ? '' : '#1e3a5f';
+              el.style.color      = isLight ? '' : '#93c5fd';
               var container = document.getElementById('subjectAccChart');
               var sessions = _sAccData[name] || [];
               if (sessions.length < 2) {
@@ -666,7 +676,7 @@ function renderPhaseRow(label, phaseData, color) { return _phaseRow(label, phase
 
 function updateExamDate() {
   let val = document.getElementById("examDateInput").value;
-  if (val) { studyData.examDate = val; saveData(); alert("Saved ✓"); renderAnalytics(); }
+  if (val) { studyData.examDate = val; saveData(); showToast("Saved ✓", 'success'); renderAnalytics(); }
 }
 
 // ── Time Tracking Chart ───────────────────────────────────────

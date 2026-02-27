@@ -8,6 +8,11 @@
   var activeMap = { 'create.html': 'browse.html' };
   var activePage = activeMap[page] || page;
 
+  // ── Theme detection (runs before HTML is built) ───────────────────────────
+  var _savedTheme = 'dark';
+  try { _savedTheme = localStorage.getItem('theme') || 'dark'; } catch(e) {}
+  var _isLight = _savedTheme === 'light';
+
   // ── Nav items ─────────────────────────────────────────────────────────────
   var SVG = {
     home:    '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10L10 3l7 7"/><path d="M5 8.5V17h4v-4h2v4h4V8.5"/></svg>',
@@ -44,10 +49,12 @@
   }).join('\n    ');
 
   // ── Build HTML ────────────────────────────────────────────────────────────
+  var _splashBg   = _isLight ? '#eef2f7' : '#0a1628';
+  var _splashText  = _isLight ? '#0f172a' : '#f0f6ff';
   var splashHtml =
-    '<div id="app-splash" style="position:fixed;inset:0;z-index:999999;background:#0a1628;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">' +
-    '<div style="font-size:64px;animation:splash-pulse 1.8s ease-in-out infinite;">🩺</div>' +
-    '<div style="font-size:18px;font-weight:800;color:#f0f6ff;letter-spacing:-0.01em;">Medical Study OS</div>' +
+    '<div id="app-splash" style="position:fixed;inset:0;z-index:999999;background:' + _splashBg + ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">'+
+    '<div style="font-size:64px;animation:splash-pulse 1.8s ease-in-out infinite;">\uD83E\uDE7A</div>' +
+    '<div style="font-size:18px;font-weight:800;color:' + _splashText + ';letter-spacing:-0.01em;">Medical Study OS</div>' +
     '<div style="width:48px;height:3px;background:rgba(59,130,246,0.25);border-radius:20px;overflow:hidden;">' +
     '  <div style="height:100%;background:#3b82f6;border-radius:20px;animation:splash-bar 1.4s ease-in-out infinite;"></div>' +
     '</div>' +
@@ -55,7 +62,7 @@
     '<style>' +
     '@keyframes splash-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}' +
     '@keyframes splash-bar{0%{width:0%;margin-left:0}50%{width:100%;margin-left:0}100%{width:0%;margin-left:100%}}' +
-    'html,body{background:#0a1628}' +
+    (_isLight ? 'body.light{background:#eef2f7}' : 'html,body{background:#0a1628}') +
     '</style>';
 
   var html =
@@ -71,6 +78,10 @@
     '    ' + itemsHtml + '\n' +
     '  </div>\n' +
     '  <div class="nav-rotate-btn-wrap">\n' +
+    '    <button class="nav-theme-btn" id="nav-theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode">\n' +
+    '      <span style="font-size:16px;flex-shrink:0;width:24px;text-align:center;line-height:1;" id="nav-theme-icon">' + (_isLight ? '\uD83C\uDF19' : '\u2600\uFE0F') + '</span>\n' +
+    '      <span id="nav-theme-label">' + (_isLight ? 'Dark Mode' : 'Light Mode') + '</span>\n' +
+    '    </button>\n' +
     '<button class="nav-install-pwa-btn" id="nav-install-btn" style="display:none;margin-bottom:6px;"\n' +
     '      onclick="window._navInstallPwa && window._navInstallPwa()" title="Install app">\n' +
     '      <span style="font-size:16px;flex-shrink:0;width:24px;text-align:center;">\u2B07\uFE0F</span>\n' +
@@ -90,6 +101,13 @@
   document.addEventListener('DOMContentLoaded', function () {
     var nav     = document.getElementById('side-nav');
     var overlay = document.getElementById('nav-overlay');
+
+    // Apply saved theme to body + html element
+    if (_isLight) {
+      document.body.classList.add('light');
+      document.documentElement.style.background = '#eef2f7';
+      document.documentElement.style.color      = '#0f172a';
+    }
 
     // Splash screen management
     var splash = document.getElementById('app-splash');

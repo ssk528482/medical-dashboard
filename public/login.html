@@ -20,6 +20,11 @@
       padding: 20px;
       position: relative;
       overflow: hidden;
+      transition: background 0.22s, color 0.18s;
+    }
+    body.light {
+      background: #eef2f7;
+      color: #0f172a;
     }
 
     /* Animated background grid */
@@ -60,6 +65,12 @@
       width: 100%;
       max-width: 400px;
       box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+      transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
+    }
+    body.light .login-card {
+      background: #ffffff;
+      border-color: #dde3ed;
+      box-shadow: 0 8px 40px rgba(15,30,60,0.13);
     }
 
     .logo {
@@ -84,13 +95,16 @@
       font-weight: 800;
       color: #f1f5f9;
       letter-spacing: -0.02em;
+      transition: color 0.18s;
     }
+    body.light .logo h1 { color: #0f172a; }
 
     .logo p {
       font-size: 13px;
       color: #64748b;
       margin-top: 4px;
     }
+    body.light .logo p { color: #455368; }
 
     .form-group {
       margin-bottom: 16px;
@@ -104,7 +118,9 @@
       text-transform: uppercase;
       letter-spacing: 0.08em;
       margin-bottom: 6px;
+      transition: color 0.18s;
     }
+    body.light label { color: #455368; }
 
     input[type="email"] {
       width: 100%;
@@ -114,8 +130,13 @@
       padding: 12px 14px;
       font-size: 15px;
       color: #e2e8f0;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, background 0.22s, color 0.18s;
       outline: none;
+    }
+    body.light input[type="email"] {
+      background: #f4f7fb;
+      border-color: #dde3ed;
+      color: #0f172a;
     }
 
     input[type="email"]:focus {
@@ -149,6 +170,7 @@
       margin: 20px 0;
       position: relative;
     }
+    body.light .divider { color: #7c93ad; }
     .divider::before, .divider::after {
       content: '';
       position: absolute;
@@ -156,7 +178,9 @@
       width: 40%;
       height: 1px;
       background: #334155;
+      transition: background 0.22s;
     }
+    body.light .divider::before, body.light .divider::after { background: #dde3ed; }
     .divider::before { left: 0; }
     .divider::after { right: 0; }
 
@@ -172,10 +196,13 @@
       border-radius: 10px;
       padding: 10px;
       text-align: center;
+      transition: background 0.22s;
     }
+    body.light .feature { background: #f4f7fb; border: 1px solid #dde3ed; }
 
     .feature-icon { font-size: 20px; margin-bottom: 4px; }
     .feature-label { font-size: 11px; color: #64748b; }
+    body.light .feature-label { color: #455368; }
 
     #statusMsg {
       margin-top: 14px;
@@ -187,7 +214,9 @@
     }
 
     .msg-success { background: #052e16; border: 1px solid #16a34a; color: #86efac; }
+    body.light .msg-success { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
     .msg-error { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+    body.light .msg-error { background: #fff1f2; border-color: #ef4444; color: #dc2626; }
 
     .footer-note {
       text-align: center;
@@ -195,9 +224,14 @@
       color: #475569;
       margin-top: 20px;
     }
+    body.light .footer-note { color: #7c93ad; }
   </style>
 </head>
 <body>
+<script>
+  // Apply saved theme immediately to avoid flash
+  try { if (localStorage.getItem('theme') === 'light') document.body.classList.add('light'); } catch(e) {}
+</script>
 
 <div class="blob blob1"></div>
 <div class="blob blob2"></div>

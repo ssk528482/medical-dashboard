@@ -223,13 +223,12 @@ function _hitTest(x, y) {
 function _promptLabel(boxId) {
   let box = _ocBoxes.find(b => b.id === boxId);
   if (!box) return;
-
-  // Use a simple inline prompt overlay on the canvas
-  let label = window.prompt(`Label for this box (what's hidden):`, box.label);
-  if (label !== null && label.trim() !== "") {
-    box.label = label.trim();
-    _redraw();
-  }
+  showPrompt('Label Box', 'Label for this box (what\'s hidden):', box.label, function(val) {
+    if (val !== null && val.trim() !== "") {
+      box.label = val.trim();
+      _redraw();
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────

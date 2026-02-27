@@ -7,6 +7,7 @@ function renderSubjects() {
   let daysLeft = daysUntilExam();
   if (daysLeft > 0 && daysLeft <= 30) {
     let cdBanner = document.createElement("div");
+    cdBanner.className = "app-countdown-banner";
     cdBanner.style.cssText = "background:linear-gradient(135deg,#450a0a,#7f1d1d);border:1px solid #ef4444;border-radius:12px;padding:14px 16px;margin:0 14px 12px;";
     cdBanner.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -27,6 +28,7 @@ function renderSubjects() {
   let streak = calculateStreak();
   if (streak > 0) {
     let banner = document.createElement("div");
+    banner.className = "app-streak-banner";
     banner.style.cssText = "background:linear-gradient(135deg,#7c2d12,#c2410c);border-radius:12px;padding:12px 16px;margin:0 14px 12px;display:flex;align-items:center;justify-content:space-between;";
     banner.innerHTML = `
       <div>
@@ -208,11 +210,17 @@ function renderRevisionSection() {
   // Scrollable list container — shows SHOW_LIMIT items, rest hidden
   let listWrap = document.createElement("div");
   listWrap.id = "revListWrap";
-  listWrap.style.cssText = "max-height:270px;overflow-y:auto;border-radius:8px;border:1px solid #1e3350;";
+  listWrap.className = "rev-list-wrap";
+  var _isLtRev = document.body.classList.contains("light");
+  listWrap.style.cssText = _isLtRev
+    ? "max-height:270px;overflow-y:auto;border-radius:8px;border:1px solid var(--border,#dde3ed)"
+    : "max-height:270px;overflow-y:auto;border-radius:8px;border:1px solid #1e3350";
 
   due.forEach((item, i) => {
     let row = document.createElement("div");
-    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:8px;border-top:${i===0?'none':'1px solid #1e3350'};${item.isOverdue ? 'background:rgba(239,68,68,0.04);' : ''}`;
+    row.style.cssText = _isLtRev
+      ? `display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:8px;border-top:${i===0?'none':'1px solid var(--border,#dde3ed)'};${item.isOverdue ? 'background:rgba(239,68,68,0.04);' : ''}`
+      : `display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:8px;border-top:${i===0?'none':'1px solid #1e3350'};${item.isOverdue ? 'background:rgba(239,68,68,0.04);' : ''}`;
     let urgency   = item.urgency || (item.isOverdue ? 'moderate' : 'due');
     let urgColor  = urgency === 'critical' ? '#ef4444' : urgency === 'high' ? '#f97316' : urgency === 'moderate' ? '#eab308' : '#3b82f6';
     let urgBg     = urgency === 'critical' ? 'rgba(239,68,68,0.15)' : urgency === 'high' ? 'rgba(249,115,22,0.15)' : urgency === 'moderate' ? 'rgba(234,179,8,0.15)' : 'rgba(59,130,246,0.10)';
@@ -486,7 +494,11 @@ function addStudyEntry() {
 
   let div = document.createElement("div");
   div.id = `studyEntry-${id}`;
-  div.style.cssText = "border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:10px;background:#0a1628;";
+  div.className = "study-entry-row";
+  var _isLtSE = document.body.classList.contains("light");
+  div.style.cssText = _isLtSE
+    ? "border:1px solid var(--border,#dde3ed);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface,#fff)"
+    : "border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:10px;background:#0a1628";
 
   let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
 
@@ -527,16 +539,26 @@ function _studyFillTopics(id) {
   let chipsContainer = document.getElementById(`sTopicsChips-${id}`);
   if (!chipsContainer || !subj || !studyData.subjects[subj]) return;
   let chapters = studyData.subjects[subj].units[ui]?.chapters || [];
+  let _isLtChip = document.body.classList.contains("light");
   chipsContainer.innerHTML = chapters.length === 0
     ? `<span style="color:#64748b;font-size:12px;">No chapters in this unit</span>`
     : chapters.map((ch, ci) => {
         let completed = ch.status === "completed";
+        let chipBg  = completed
+          ? (_isLtChip ? "rgba(22,163,74,0.08)" : "#1a3a1a")
+          : (_isLtChip ? "" : "#1e293b");
+        let chipClr = completed
+          ? (_isLtChip ? "#15803d" : "#4ade80")
+          : (_isLtChip ? "" : "#94a3b8");
+        let chipBdr = completed
+          ? (_isLtChip ? "#16a34a" : "#166534")
+          : (_isLtChip ? "" : "#334155");
         return `<button type="button" class="topic-chip${completed ? " already-done" : ""}" data-ci="${ci}"
           onclick="toggleTopicChip(this)"
           style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;
-            background:${completed ? "#1a3a1a" : "#1e293b"};
-            color:${completed ? "#4ade80" : "#94a3b8"};
-            border:1px solid ${completed ? "#166534" : "#334155"};
+            background:${chipBg};
+            color:${chipClr};
+            border:1px solid ${chipBdr};
             transition:all 0.15s;white-space:nowrap;">
           ${completed ? "✓ " : ""}${ch.name}
         </button>`;
@@ -546,16 +568,17 @@ function _studyFillTopics(id) {
 function toggleTopicChip(btn) {
   // Never allow selecting a chapter that's already completed
   if (btn.classList.contains("already-done")) return;
+  var isLight = document.body.classList.contains("light");
   if (btn.classList.contains("selected")) {
     btn.classList.remove("selected");
-    btn.style.background = "#1e293b";
-    btn.style.color = "#94a3b8";
-    btn.style.border = "1px solid #334155";
+    btn.style.background = isLight ? "" : "#1e293b";
+    btn.style.color      = isLight ? "" : "#94a3b8";
+    btn.style.border     = isLight ? "" : "1px solid #334155";
   } else {
     btn.classList.add("selected");
-    btn.style.background = "#1e3a5f";
-    btn.style.color = "#93c5fd";
-    btn.style.border = "1px solid #3b82f6";
+    btn.style.background = isLight ? "" : "#1e3a5f";
+    btn.style.color      = isLight ? "" : "#93c5fd";
+    btn.style.border     = isLight ? "" : "1px solid #3b82f6";
   }
 }
 
@@ -567,7 +590,10 @@ function addQbankEntry() {
 
   let div = document.createElement("div");
   div.id = `qbankEntry-${id}`;
-  div.style.cssText = "border:1px solid #1e293b;border-radius:8px;padding:10px;margin-bottom:8px;";
+  var _isLtQB = document.body.classList.contains("light");
+  div.style.cssText = _isLtQB
+    ? "border:1px solid var(--border,#dde3ed);border-radius:8px;padding:10px;margin-bottom:8px;"
+    : "border:1px solid #1e293b;border-radius:8px;padding:10px;margin-bottom:8px;";
 
   let options = subjectNames.map(n => `<option value="${n}">${n}</option>`).join("");
 
@@ -623,7 +649,10 @@ function renderRevisionCheckboxList() {
   let selectAllBtn = document.createElement("button");
   selectAllBtn.type = "button";
   selectAllBtn.textContent = "✓ Select All Due";
-  selectAllBtn.style.cssText = "background:#1e3a5f;color:#93c5fd;font-size:11px;padding:5px 12px;border-radius:7px;border:1px solid #1d4ed8;margin-bottom:8px;cursor:pointer;";
+  var _isLt = document.body.classList.contains("light");
+  selectAllBtn.style.cssText = _isLt
+    ? "background:rgba(59,130,246,0.1);color:#1d4ed8;font-size:11px;padding:5px 12px;border-radius:7px;border:1px solid #3b82f6;margin-bottom:8px;cursor:pointer;"
+    : "background:#1e3a5f;color:#93c5fd;font-size:11px;padding:5px 12px;border-radius:7px;border:1px solid #1d4ed8;margin-bottom:8px;cursor:pointer;";
   selectAllBtn.onclick = function() {
     let all = container.querySelectorAll("input[type='checkbox']");
     let anyUnchecked = Array.from(all).some(c => !c.checked);
@@ -635,11 +664,18 @@ function renderRevisionCheckboxList() {
   // Scrollable wrapper after 5 items
   let wrapper = document.createElement("div");
   if (due.length > 5) {
-    wrapper.style.cssText = "max-height:220px;overflow-y:auto;border:1px solid #1e293b;border-radius:8px;padding:4px 0;";
+    var _isLtW = document.body.classList.contains("light");
+    wrapper.style.cssText = _isLtW
+      ? "max-height:220px;overflow-y:auto;border:1px solid var(--border,#dde3ed);border-radius:8px;padding:4px 0;"
+      : "max-height:220px;overflow-y:auto;border:1px solid #1e293b;border-radius:8px;padding:4px 0;";
   }
   due.forEach(item => {
     let label = document.createElement("label");
-    label.style.cssText = "display:block;padding:6px 8px;font-size:13px;cursor:pointer;border-bottom:1px solid #1e293b;";
+    label.className = "rev-checkbox-label";
+    var _isLtL = document.body.classList.contains("light");
+    label.style.cssText = _isLtL
+      ? "display:block;padding:6px 8px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border,#dde3ed);"
+      : "display:block;padding:6px 8px;font-size:13px;cursor:pointer;border-bottom:1px solid #1e293b;";
     label.innerHTML = `
       <input type="checkbox" value="${item.subjectName}|${item.unitIndex}|${item.chapterIndex}" style="margin-right:8px;">
       ${item.subjectName} — ${item.unitName} → ${item.topicName}
@@ -651,7 +687,7 @@ function renderRevisionCheckboxList() {
 }
 
 async function deleteEveningUpdate() {
-  if (!confirm("Delete today's evening update and resubmit?")) return;
+  showConfirm('Delete Update', "Delete today's evening update and resubmit? All logged study data for today will be reversed.", async () => {
   let todayKey = today();
   if (studyData.dailyHistory?.[todayKey]) {
     // Reverse study entries
@@ -720,6 +756,7 @@ async function deleteEveningUpdate() {
 
   renderEveningUpdate();
   renderSubjects();
+  }, 'Delete', true);
 }
 
 // Keep backward compatibility: old populateAllEveningSelectors calls now just render the form
@@ -733,7 +770,7 @@ function populateAllEveningSelectors() {
 function _fillFromPlan() {
   let plan = studyData.dailyPlan;
   if (!plan || plan.date !== today() || !plan.study?.subject) {
-    alert("No plan generated for today."); return;
+    showToast("No plan generated for today.", 'warn'); return;
   }
   let subject = plan.study.subject;
   let subjectObj = studyData.subjects[subject];
@@ -779,16 +816,26 @@ function _fillFromPlan() {
     chipsContainer.innerHTML = `<span style="color:#64748b;font-size:12px;">No chapters in this unit</span>`;
     return;
   }
+  let _isLtEChip = document.body.classList.contains("light");
   chipsContainer.innerHTML = chapters.map((ch, ci) => {
     let completed = ch.status === "completed";
     let selected  = plannedCIs.has(ci) && !completed;
+    let eBg  = selected   ? (_isLtEChip ? "rgba(59,130,246,0.15)"  : "#1e3a5f")
+             : completed  ? (_isLtEChip ? "rgba(22,163,74,0.08)"   : "#1a3a1a")
+                          : (_isLtEChip ? ""                        : "#1e293b");
+    let eClr = selected   ? (_isLtEChip ? "#1d4ed8"  : "#93c5fd")
+             : completed  ? (_isLtEChip ? "#15803d"  : "#4ade80")
+                          : (_isLtEChip ? ""         : "#94a3b8");
+    let eBdr = selected   ? (_isLtEChip ? "#3b82f6"  : "#3b82f6")
+             : completed  ? (_isLtEChip ? "#16a34a"  : "#166534")
+                          : (_isLtEChip ? ""         : "#334155");
     return `<button type="button"
       class="topic-chip${completed ? " already-done" : ""}${selected ? " selected" : ""}"
       data-ci="${ci}" onclick="toggleTopicChip(this)"
       style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;
-        background:${selected ? "#1e3a5f" : completed ? "#1a3a1a" : "#1e293b"};
-        color:${selected ? "#93c5fd" : completed ? "#4ade80" : "#94a3b8"};
-        border:1px solid ${selected ? "#3b82f6" : completed ? "#166534" : "#334155"};
+        background:${eBg};
+        color:${eClr};
+        border:1px solid ${eBdr};
         transition:all 0.15s;white-space:nowrap;">
       ${completed ? "✓ " : ""}${ch.name}
     </button>`;
@@ -814,6 +861,7 @@ function _updateQbankAcc(id) {
 
 // Improvement #10: Mood emoji selector
 function _selectMood(btn) {
+  var isLight = document.body.classList.contains("light");
   document.querySelectorAll("#eveningMoodRow [data-mood]").forEach(b => {
     b.dataset.selected = "0";
     b.style.border = "2px solid transparent";
@@ -822,7 +870,7 @@ function _selectMood(btn) {
   });
   btn.dataset.selected = "1";
   btn.style.border = "2px solid #16a34a";
-  btn.style.background = "#0f2b1a";
+  btn.style.background = isLight ? "rgba(22,163,74,0.1)" : "#0f2b1a";
   btn.style.transform = "scale(1.2)";
 }
 
@@ -1005,7 +1053,11 @@ function renderCardsDueWidget(container) {
   getDueCardCount().then(count => {
     let el = document.createElement("div");
     el.className = "card";
-    el.style.cssText = "background:linear-gradient(135deg,#0f2040,#1a2f52);border-color:#3b4f7a;";
+  el.classList.add("js-dark-gradient-btn");
+    var _isLtCard = document.body.classList.contains("light");
+    if (!_isLtCard) {
+      el.style.cssText = "background:linear-gradient(135deg,#0f2040,#1a2f52);border-color:#3b4f7a;";
+    }
     el.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div>

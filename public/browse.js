@@ -9,7 +9,6 @@ let _all          = [];        // all fetched cards
 let _subTab       = 'new';     // new | revise | all
 let _selectMode   = false;
 let _selected     = new Set(); // selected card ids
-let _confirmFn    = null;
 let _editCardId   = null;
 let _csvParsed    = [];
 
@@ -483,7 +482,7 @@ async function deleteOneCard(id) {
     async () => {
       let { error } = await deleteCard(id);
       if (error) {
-        alert('Delete failed: ' + (error.message || JSON.stringify(error)));
+        showToast('Delete failed: ' + (error.message || JSON.stringify(error)), 'error');
         return;
       }
       await _loadPreserving();
@@ -570,7 +569,7 @@ async function saveEdit() {
   let card  = _all.find(c => c.id === _editCardId);
   let front = document.getElementById('edit-front').value.trim();
   let back  = document.getElementById('edit-back').value.trim();
-  if (!front) { alert('Front text is required.'); return; }
+  if (!front) { showToast('Front text is required.', 'warn'); return; }
   let btn = document.querySelector('.edit-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   let { error } = await saveCard({
@@ -580,27 +579,18 @@ async function saveEdit() {
     chapter: card?.chapter, tags: card?.tags || []
   });
   if (btn) { btn.disabled = false; btn.textContent = '💾 Save Changes'; }
-  if (error) { alert('Save failed: ' + (error.message || error)); return; }
+  if (error) { showToast('Save failed: ' + (error.message || error), 'error'); return; }
   closeEditModal();
   await _loadPreserving();
 }
 
-// ── Confirm Modal ─────────────────────────────────────────────────
+// ── Confirm Modal (shim → global popup system) ──────────────────────────
 function openConfirm(title, body, fn, okLabel) {
-  _confirmFn = fn;
-  document.getElementById('confirm-title').textContent = title;
-  document.getElementById('confirm-body').innerHTML    = body;
-  document.getElementById('confirm-ok').textContent    = okLabel || 'Delete';
-  document.getElementById('confirm-modal').classList.add('open');
+  showConfirm(title, body, fn, okLabel || 'Delete', true);
 }
-function closeConfirm() {
-  document.getElementById('confirm-modal').classList.remove('open');
-  _confirmFn = null;
-}
+function closeConfirm() { _gsCloseConfirm(); }
 async function runConfirm() {
-  let fn = _confirmFn; // capture before closeConfirm clears it
-  closeConfirm();
-  if (fn) await fn();
+  await _gsRunConfirm();
 }
 
 // ── CSV Import ────────────────────────────────────────────────────

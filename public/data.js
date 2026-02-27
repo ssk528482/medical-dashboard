@@ -245,18 +245,18 @@ function addSubject() {
   let name = document.getElementById("subjectName")?.value.trim();
   let size = document.getElementById("subjectSize")?.value || "medium";
   let topicsRaw = document.getElementById("topicsInput")?.value.trim();
-  if (!name || !topicsRaw) { alert("Enter subject and units."); return; }
+  if (!name || !topicsRaw) { showToast("Enter subject and units.", 'warn'); return; }
 
   let units = topicsRaw.split("\n").filter(t => t.trim()).map(t => makeUnitObj(t.trim()));
   studyData.subjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   saveData();
   if (document.getElementById("subjectName")) document.getElementById("subjectName").value = "";
   if (document.getElementById("topicsInput")) document.getElementById("topicsInput").value = "";
-  alert("Subject added.");
+  showToast("Subject added.", 'success');
 }
 
 function finishSetup() {
-  if (Object.keys(studyData.subjects).length === 0) { alert("Add at least one subject."); return; }
+  if (Object.keys(studyData.subjects).length === 0) { showToast("Add at least one subject.", 'warn'); return; }
   studyData.setupComplete = true;
   saveData();
   renderStatus();

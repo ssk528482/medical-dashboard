@@ -57,8 +57,7 @@
 
 <!-- ── Bulk Import Modal ── -->
 <div id="bulkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999;overflow-y:auto;padding:20px;">
-  <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;max-width:500px;margin:0 auto;padding:24px;">
-
+  <div class="modal-box" style="max-width:500px;margin:0 auto;padding:24px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <div style="font-size:16px;font-weight:700;">📥 Bulk Import Subjects</div>
       <button onclick="closeBulkModal()" style="background:#334155;padding:6px 12px;margin:0;font-size:13px;">✕ Close</button>
@@ -67,8 +66,8 @@
     <!-- Step dots -->
     <div style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:20px;">
       <div id="bDot1" style="width:28px;height:28px;border-radius:50%;background:#3b82f6;border:2px solid #3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</div>
-      <div id="bLine1" style="width:60px;height:2px;background:#334155;"></div>
-      <div id="bDot2" style="width:28px;height:28px;border-radius:50%;background:#1e293b;border:2px solid #334155;color:#64748b;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</div>
+      <div id="bLine1" style="width:60px;height:2px;background:var(--border);"></div>
+      <div id="bDot2" style="width:28px;height:28px;border-radius:50%;background:var(--surface);border:2px solid var(--border);color:var(--text-dim);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</div>
     </div>
 
     <!-- Step 1 -->
@@ -83,13 +82,13 @@
         <option value="small">Small</option>
       </select>
 
-      <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:10px;">
+      <div style="background:var(--card);border-radius:10px;padding:10px;margin-bottom:10px;">
         <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">📋 Units & Topics</div>
         <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.7;">
           Format per line:<br>
-          <code style="background:#1e293b;padding:2px 5px;border-radius:4px;">Unit [Qs] | Chapter(start-end), Chapter(start-end)</code><br>
-          <span style="color:#8b5cf6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">[180]</code> = total questions in unit (optional)</span><br>
-          <span style="color:#3b82f6;">• <code style="background:#1e293b;padding:1px 4px;border-radius:3px;">(1-42)</code> = page range (optional)</span><br>
+          <code style="background:var(--surface);padding:2px 5px;border-radius:4px;">Unit [Qs] | Chapter(start-end), Chapter(start-end)</code><br>
+          <span style="color:#8b5cf6;">• <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">[180]</code> = total questions in unit (optional)</span><br>
+          <span style="color:#3b82f6;">• <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">(1-42)</code> = page range (optional)</span><br>
           <span style="color:#64748b;">• Plain name with no pages/Qs also works</span>
         </div>
         <textarea id="bulkTopicsInput" rows="8" placeholder="Upper Limb [180] | Bones(1-42), Muscles(43-67), Nerves(68-95)&#10;Lower Limb [160] | Hip Joint(1-30), Knee(31-55), Ankle(56-80)&#10;Head &amp; Neck [220] | Scalp(1-18), Face(19-40)&#10;Thorax | Heart, Lungs&#10;Abdomen" style="width:100%;margin-bottom:0;font-family:monospace;font-size:12px;"></textarea>
@@ -99,7 +98,7 @@
 
       <div id="bulkPreview" style="display:none;margin-top:14px;">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">SUBJECTS TO IMPORT</div>
-        <div id="bulkPreviewList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:200px;overflow-y:auto;"></div>
+        <div id="bulkPreviewList" style="background:var(--card);border-radius:10px;padding:10px;max-height:200px;overflow-y:auto;"></div>
       </div>
 
       <button id="bulkNextBtn" onclick="bulkGoStep2()" style="width:100%;background:#16a34a;margin-top:12px;display:none;">
@@ -110,16 +109,16 @@
     <!-- Step 2 -->
     <div id="bulkStep2" style="display:none;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div style="background:#0f172a;border-radius:10px;padding:12px;text-align:center;">
+        <div style="background:var(--card);border-radius:10px;padding:12px;text-align:center;">
           <div id="bulkSummarySubjects" style="font-size:28px;font-weight:800;color:#8b5cf6;">0</div>
           <div style="font-size:11px;color:#64748b;">Subjects</div>
         </div>
-        <div style="background:#0f172a;border-radius:10px;padding:12px;text-align:center;">
+        <div style="background:var(--card);border-radius:10px;padding:12px;text-align:center;">
           <div id="bulkSummaryTopics" style="font-size:28px;font-weight:800;color:#3b82f6;">0</div>
           <div style="font-size:11px;color:#64748b;">Total Units</div>
         </div>
       </div>
-      <div id="bulkReviewList" style="background:#0f172a;border-radius:10px;padding:10px;max-height:200px;overflow-y:auto;margin-bottom:14px;"></div>
+      <div id="bulkReviewList" style="background:var(--card);border-radius:10px;padding:10px;max-height:200px;overflow-y:auto;margin-bottom:14px;"></div>
       <div style="display:flex;gap:8px;">
         <button onclick="bulkGoStep1()" style="flex:1;background:#334155;margin:0;">← Back</button>
         <button onclick="bulkConfirmImport()" style="flex:1;background:#16a34a;margin:0;">🚀 Import All</button>

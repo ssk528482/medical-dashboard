@@ -294,9 +294,11 @@ function notesBreadcrumbBack() {
 // ── Level 2b: Unit Note Types (browse all chapters by type) ───────
 async function showUnitNoteTypesView(subject, unit, skipPush) {
   if (_isDirty) {
-    let ok = confirm("You have unsaved changes. Discard them?");
-    if (!ok) return;
-    _isDirty = false;
+    showConfirm('Unsaved Changes', 'You have unsaved changes. Discard them?', () => {
+      _isDirty = false;
+      showUnitNoteTypesView(subject, unit, skipPush);
+    }, 'Discard');
+    return;
   }
 
   _currentSubject = subject;
@@ -342,9 +344,11 @@ async function showUnitNoteTypesView(subject, unit, skipPush) {
 // ── Level 3b: All chapters of a unit for a given note type ────────
 async function openUnitNotesByType(subject, unit, noteType, skipPush) {
   if (_isDirty) {
-    let ok = confirm("You have unsaved changes. Discard them?");
-    if (!ok) return;
-    _isDirty = false;
+    showConfirm('Unsaved Changes', 'You have unsaved changes. Discard them?', () => {
+      _isDirty = false;
+      openUnitNotesByType(subject, unit, noteType, skipPush);
+    }, 'Discard');
+    return;
   }
 
   noteType = noteType || 'general';
@@ -433,9 +437,11 @@ async function openUnitNotesByType(subject, unit, noteType, skipPush) {
 async function openNote(subject, unit, chapter, noteType, skipPush) {
   noteType = noteType || 'general';
   if (_isDirty) {
-    let ok = confirm("You have unsaved changes. Discard them?");
-    if (!ok) return;
-    _isDirty = false;
+    showConfirm('Unsaved Changes', 'You have unsaved changes. Discard them?', () => {
+      _isDirty = false;
+      openNote(subject, unit, chapter, noteType, skipPush);
+    }, 'Discard');
+    return;
   }
 
   _currentSubject  = subject;
@@ -492,6 +498,8 @@ function _enterReadMode() {
   document.getElementById("btn-cancel-edit").style.display   = "none";
   document.getElementById("btn-toggle-edit").style.display   = "";
   document.getElementById("btn-toggle-edit").classList.remove("active");
+  let _delBtnR = document.getElementById("btn-delete-note");
+  if (_delBtnR) _delBtnR.style.display = (note && note.id) ? "" : "none";
 
   // Show Note→Cards button only if note has content
   let n2cBtn = document.getElementById("btn-note-to-cards");
@@ -519,6 +527,8 @@ function _enterEditMode() {
   document.getElementById("btn-cancel-edit").style.display   = "";
   document.getElementById("btn-toggle-edit").classList.add("active");
   document.getElementById("btn-toggle-edit").textContent     = "✏️ Editing";
+  let _delBtnE = document.getElementById("btn-delete-note");
+  if (_delBtnE) _delBtnE.style.display = _currentNote?.id ? "" : "none";
   document.getElementById("note-content-editor").focus();
   _applyNotesFontToView(localStorage.getItem('_notesFont') || studyData.uiState?.notesFont || 'patrick-hand');
   _updateWordCount();
@@ -534,16 +544,17 @@ function toggleNoteEditMode() {
 
 function cancelEdit() {
   if (_isDirty) {
-    let ok = confirm("Discard unsaved changes?");
-    if (!ok) return;
-    _isDirty = false;
-    // Reload note content
-    document.getElementById("note-content-editor").value = _currentNote?.content || "";
-    document.getElementById("note-title-input").value    = _currentNote?.title   || "";
-    _noteTags  = _currentNote?.tags  || [];
-    _noteColor = _currentNote?.color || "default";
-    _renderTagChips();
-    _setColorSwatchActive(_noteColor);
+    showConfirm('Discard Changes', 'Discard unsaved changes?', () => {
+      _isDirty = false;
+      document.getElementById("note-content-editor").value = _currentNote?.content || "";
+      document.getElementById("note-title-input").value    = _currentNote?.title   || "";
+      _noteTags  = _currentNote?.tags  || [];
+      _noteColor = _currentNote?.color || "default";
+      _renderTagChips();
+      _setColorSwatchActive(_noteColor);
+      _enterReadMode();
+    }, 'Discard');
+    return;
   }
   _enterReadMode();
 }
@@ -607,6 +618,35 @@ function _applyNotesFontToView(font) {
 // ─────────────────────────────────────────────────────────────────
 // SAVE NOTE
 // ─────────────────────────────────────────────────────────────────
+
+async function deleteCurrentNote() {
+  if (!_currentNote?.id) return;
+  showConfirm('Delete Note', 'Delete this note permanently? This cannot be undone.', async () => {
+    setSaveStatus("Deleting…");
+    const userId = (await supabaseClient.auth.getUser()).data?.user?.id;
+    if (userId) {
+      await supabaseClient.from('notes').delete()
+        .eq('user_id', userId)
+        .eq('subject', _currentSubject)
+        .eq('unit',    _currentUnit)
+        .eq('chapter', _currentChapter)
+        .eq('note_type', _currentNoteType || 'general');
+    } else {
+      await deleteNote(_currentNote.id);
+    }
+    _currentNote = null;
+    _isDirty     = false;
+    setSaveStatus("Note deleted ✓");
+    await _loadNotesMeta();
+    document.getElementById("note-content-editor").value = "";
+    document.getElementById("note-title-input").value    = "";
+    _noteTags  = [];
+    _noteColor = "default";
+    _renderTagChips();
+    _setColorSwatchActive(_noteColor);
+    _enterReadMode();
+  }, 'Delete', true);
+}
 
 async function saveCurrentNote(fromAutosave = false) {
   if (!_currentSubject) return;
@@ -812,7 +852,7 @@ document.addEventListener("paste", async function (e) {
 
 async function _uploadAndInsertImage(file) {
   if (!_currentSubject) {
-    alert("Open a note first before uploading images.");
+    showToast("Open a note first before uploading images.", 'warn');
     return;
   }
   setSaveStatus("Uploading image…");
@@ -892,9 +932,11 @@ function _renderSearchResults(results, query) {
 
 async function openUnitView(subject, unit) {
   if (_isDirty) {
-    let ok = confirm("You have unsaved changes. Discard them?");
-    if (!ok) return;
-    _isDirty = false;
+    showConfirm('Unsaved Changes', 'You have unsaved changes. Discard them?', () => {
+      _isDirty = false;
+      openUnitView(subject, unit);
+    }, 'Discard');
+    return;
   }
 
   _currentSubject = subject;
@@ -1035,7 +1077,7 @@ function exportUnitPdf() {
 
 function openAiNoteModal() {
   if (!_currentSubject || !_editMode) {
-    alert("Open a chapter note in edit mode first.");
+    showToast("Open a chapter note in edit mode first.", 'warn');
     return;
   }
   document.getElementById("ai-note-source").value  = "";
@@ -1186,9 +1228,11 @@ function _formatDate(isoStr) {
 
 async function showNoteTypesView(subject, unit, chapter, skipPush) {
   if (_isDirty) {
-    let ok = confirm("You have unsaved changes. Discard them?");
-    if (!ok) return;
-    _isDirty = false;
+    showConfirm('Unsaved Changes', 'You have unsaved changes. Discard them?', () => {
+      _isDirty = false;
+      showNoteTypesView(subject, unit, chapter, skipPush);
+    }, 'Discard');
+    return;
   }
 
   _currentSubject = subject;
@@ -1312,8 +1356,8 @@ function notesMarkChapterRevised(subjectName, ui, ci, level) {
     ch.revisionIndex = 0;
     if (typeof fixPointer === 'function') fixPointer(subjectName);
   }
-  if (level === 2 && ch.revisionIndex < 1) { alert('Complete R1 first before marking R2.'); return; }
-  if (level === 3 && ch.revisionIndex < 2) { alert('Complete R2 first before marking R3.'); return; }
+  if (level === 2 && ch.revisionIndex < 1) { showToast('Complete R1 first before marking R2.', 'warn'); return; }
+  if (level === 3 && ch.revisionIndex < 2) { showToast('Complete R2 first before marking R3.', 'warn'); return; }
 
   // Toggle off if clicking same level
   if (ch.revisionIndex === level) {
@@ -1388,16 +1432,18 @@ function _handleEditorKeydown(event) {
 function _applyTemplate(type) {
   let ta = document.getElementById('note-content-editor');
   if (!ta) return;
-  if (ta.value.trim() && !confirm('Replace existing content with this template?')) return;
   const TEMPLATES = {
     high_yield: '## ⭐ High-Yield Points\n- \n- \n\n## 🔑 Key Facts\n- \n- \n\n## ⚠️ Don\'t Miss\n- \n\n## 🔗 Clinical Correlation\n- ',
     summary:    '## Summary\n\n### Pathophysiology\n\n### Clinical Features\n- Symptoms:\n- Signs:\n\n### Diagnosis\n- Gold standard:\n- Investigations:\n\n### Management\n- First line:\n- Second line:\n\n### Prognosis\n',
     mnemonic:   '## 🧠 Mnemonic\n\n**Mnemonic:** \n\n**Breakdown:**\n- **Letter** = \n- **Letter** = \n\n**Memory Story / Image:**\n\n**Example / Clinical Use:**\n',
     quick:      '## Quick Notes\n\n- \n- \n- \n- \n\n> Key: \n',
   };
-  ta.value = TEMPLATES[type] || '';
-  markDirty();
-  ta.focus();
+  function _doApplyTmpl() { ta.value = TEMPLATES[type] || ''; markDirty(); ta.focus(); }
+  if (ta.value.trim()) {
+    showConfirm('Replace Content', 'Replace existing content with this template?', _doApplyTmpl, 'Replace');
+    return;
+  }
+  _doApplyTmpl();
 }
 
 // =================================================================
@@ -1593,7 +1639,7 @@ function _rnToggleUnit(head) {
 
 function exportCurrentNotePdf() {
   if (!_currentNote && !(document.getElementById('note-content-editor')?.value)) {
-    alert('Open a note first.'); return;
+    showToast('Open a note first.', 'warn'); return;
   }
   let content   = _currentNote?.content || document.getElementById('note-content-editor')?.value || '';
   let title     = _currentNote?.title   || document.getElementById('note-title-input')?.value     || _currentChapter;
@@ -1601,7 +1647,7 @@ function exportCurrentNotePdf() {
   let noteTypeLabel = { general: 'General Notes', mnemonic: 'Mnemonics', high_yield: 'High Yield', summary: 'Summary' }[_currentNoteType] || '';
 
   let win = window.open('', '_blank');
-  if (!win) { alert('Allow pop-ups to export PDF.'); return; }
+  if (!win) { showToast('Allow pop-ups to export PDF.', 'warn'); return; }
   win.document.write(`<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
     <title>${_esc(title)}</title>
@@ -1660,7 +1706,7 @@ function openNoteToCardsModal() {
   let note    = _currentNote;
   let content = note?.content || document.getElementById("note-content-editor")?.value || "";
   if (!content.trim()) {
-    alert("No note content to generate cards from. Write some notes first.");
+    showToast("No note content to generate cards from. Write some notes first.", 'warn');
     return;
   }
   let preview = document.getElementById("n2c-preview");

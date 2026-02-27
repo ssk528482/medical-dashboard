@@ -337,7 +337,7 @@ function startRenameSubject(name) {
 function commitRenameSubject(oldName, newName) {
   newName = newName.trim();
   if (!newName || newName === oldName) { renderEditor(); return; }
-  if (studyData.subjects[newName]) { alert("A subject with that name already exists."); renderEditor(); return; }
+  if (studyData.subjects[newName]) { showToast("A subject with that name already exists.", 'error'); renderEditor(); return; }
   let obj = studyData.subjects[oldName];
   studyData.subjects[newName] = obj;
   delete studyData.subjects[oldName];
@@ -547,10 +547,19 @@ function addNewSubject() {
   saveData(); renderEditor();
 }
 
-function deleteSubject(name) {
-  if (!confirm(`Delete "${name}" and all its units/chapters?`)) return;
-  delete studyData.subjects[name];
-  saveData(); renderEditor();
+async function deleteSubject(name) {
+  showConfirm('Delete Subject', 'Delete "<strong>' + name + '</strong>" and all its units, chapters, notes and flashcards? This cannot be undone.', async () => {
+    // Cascade: delete all notes and flashcards for this subject from DB
+    const userId = (await supabaseClient.auth.getUser()).data?.user?.id;
+    if (userId) {
+      await Promise.all([
+        supabaseClient.from('notes').delete().eq('user_id', userId).eq('subject', name),
+        supabaseClient.from('flashcards').delete().eq('user_id', userId).eq('subject', name),
+      ]);
+    }
+    delete studyData.subjects[name];
+    saveData(); renderEditor();
+  }, 'Delete', true);
 }
 
 function addUnit(subjectName) {
@@ -566,11 +575,21 @@ function addUnit(subjectName) {
   saveData(); renderEditor();
 }
 
-function deleteUnit(subjectName, ui) {
-  if (!confirm("Delete this unit and all its chapters?")) return;
-  studyData.subjects[subjectName].units.splice(ui, 1);
-  fixPointer(subjectName);
-  saveData(); renderEditor();
+async function deleteUnit(subjectName, ui) {
+  const unit = studyData.subjects[subjectName].units[ui];
+  showConfirm('Delete Unit', 'Delete "<strong>' + unit.name + '</strong>" and all its chapters, notes and flashcards? This cannot be undone.', async () => {
+    // Cascade: delete all notes and flashcards for this unit from DB
+    const userId = (await supabaseClient.auth.getUser()).data?.user?.id;
+    if (userId) {
+      await Promise.all([
+        supabaseClient.from('notes').delete().eq('user_id', userId).eq('subject', subjectName).eq('unit', unit.name),
+        supabaseClient.from('flashcards').delete().eq('user_id', userId).eq('subject', subjectName).eq('unit', unit.name),
+      ]);
+    }
+    studyData.subjects[subjectName].units.splice(ui, 1);
+    fixPointer(subjectName);
+    saveData(); renderEditor();
+  }, 'Delete', true);
 }
 
 function editUnitQuestionCount(subjectName, ui) {
@@ -691,14 +710,14 @@ function markUnitRevised(subjectName, ui, level) {
   if (level === 2) {
     let notReady = unit.chapters.filter(c => c.revisionIndex < 1);
     if (notReady.length) {
-      alert(`${notReady.length} chapter(s) haven't completed R1 yet. Mark all chapters R1 first.`);
+      showToast(notReady.length + ' chapter(s) haven\'t completed R1 yet. Mark all chapters R1 first.', 'warn');
       return;
     }
   }
   if (level === 3) {
     let notReady = unit.chapters.filter(c => c.revisionIndex < 2);
     if (notReady.length) {
-      alert(`${notReady.length} chapter(s) haven't completed R2 yet. Mark all chapters R2 first.`);
+      showToast(notReady.length + ' chapter(s) haven\'t completed R2 yet. Mark all chapters R2 first.', 'warn');
       return;
     }
   }
@@ -767,10 +786,24 @@ function addChapter(subjectName, ui) {
   saveData(); renderEditor();
 }
 
-function deleteChapter(subjectName, ui, ci) {
-  studyData.subjects[subjectName].units[ui].chapters.splice(ci, 1);
-  fixPointer(subjectName);
-  saveData(); renderEditor();
+async function deleteChapter(subjectName, ui, ci) {
+  const unit    = studyData.subjects[subjectName].units[ui];
+  const chapter = unit.chapters[ci];
+  showConfirm('Delete Chapter', 'Delete "<strong>' + chapter.name + '</strong>" along with its notes and flashcards? This cannot be undone.', async () => {
+    // Cascade: delete all notes and flashcards for this chapter from DB
+    const userId = (await supabaseClient.auth.getUser()).data?.user?.id;
+    if (userId) {
+      await Promise.all([
+        supabaseClient.from('notes').delete()
+          .eq('user_id', userId).eq('subject', subjectName).eq('unit', unit.name).eq('chapter', chapter.name),
+        supabaseClient.from('flashcards').delete()
+          .eq('user_id', userId).eq('subject', subjectName).eq('unit', unit.name).eq('chapter', chapter.name),
+      ]);
+    }
+    studyData.subjects[subjectName].units[ui].chapters.splice(ci, 1);
+    fixPointer(subjectName);
+    saveData(); renderEditor();
+  }, 'Delete', true);
 }
 
 function setChapterDifficulty(subjectName, ui, ci, level) {
@@ -814,15 +847,15 @@ function markChapterRevised(subjectName, ui, ci, level) {
 
   // ── Guards ──
   if (level === 1 && ch.status !== "completed") {
-    alert("Mark chapter as completed (✓) first before marking R1.");
+    showToast("Mark chapter as completed (✓) first before marking R1.", 'warn');
     return;
   }
   if (level === 2 && ch.revisionIndex < 1) {   // fix: removed wrong && condition
-    alert("Complete R1 first before marking R2.");
+    showToast("Complete R1 first before marking R2.", 'warn');
     return;
   }
   if (level === 3 && ch.revisionIndex < 2) {
-    alert("Complete R2 first before marking R3.");
+    showToast("Complete R2 first before marking R3.", 'warn');
     return;
   }
 
@@ -927,7 +960,9 @@ function renderQbank() {
         let isLocked = !!unit.qbankLocked;
         let isFullyAttempted = unit.questionCount > 0 && uTotal >= unit.questionCount;
 
-        unitEl.style.cssText = `background:#0f172a;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid ${unit.qbankDone ? "#16a34a" : "#1e293b"};`;
+        unitEl.style.cssText = document.body.classList.contains("light")
+          ? `background:var(--card,#f4f7fb);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid ${unit.qbankDone ? "#16a34a" : "var(--border,#dde3ed)"};`
+          : `background:#0f172a;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid ${unit.qbankDone ? "#16a34a" : "#1e293b"};`;
 
         // Attempted % — how much of the syllabus has been attempted
         let attemptPct = unit.questionCount > 0 ? Math.min(100, Math.round(uTotal / unit.questionCount * 100)) : null;
@@ -1111,7 +1146,7 @@ function _confirmUnitComplete(subjectName, ui, totalQs) {
 
   // Use questionCount as total if set, else use what was entered
   let total = totalQs > 0 ? totalQs : correct;
-  if (correct > total) { alert("Correct cannot exceed total."); return; }
+  if (correct > total) { showToast("Correct cannot exceed total.", 'error'); return; }
 
   // Set stats — replace (not add) since this is a direct complete
   unit.qbankStats.total   = total;
@@ -1165,8 +1200,8 @@ function setQbankRevision(subjectName, ui, level) {
 function logUnitQbank(subjectName, ui) {
   let total   = parseInt(document.getElementById(`qb-total-${subjectName}-${ui}`)?.value) || 0;
   let correct = parseInt(document.getElementById(`qb-correct-${subjectName}-${ui}`)?.value) || 0;
-  if (total <= 0) { alert("Enter attempted questions."); return; }
-  if (correct > total) { alert("Correct cannot exceed attempted."); return; }
+  if (total <= 0) { showToast("Enter attempted questions.", 'warn'); return; }
+  if (correct > total) { showToast("Correct cannot exceed attempted.", 'error'); return; }
 
   let unit = studyData.subjects[subjectName].units[ui];
 
@@ -1196,12 +1231,13 @@ function logUnitQbank(subjectName, ui) {
 }
 
 function clearUnitQbank(subjectName, ui) {
-  if (!confirm("Clear all qbank data for this unit? This resets attempts, accuracy, lock and completion.")) return;
-  let unit = studyData.subjects[subjectName].units[ui];
-  unit.qbankStats   = { total: 0, correct: 0 };
-  unit.qbankDone    = false;
-  unit.qbankLocked  = false;
-  saveData(); renderQbank();
+  showConfirm('Reset QBank Data', 'Clear all qbank data for this unit? This resets attempts, accuracy, lock and completion.', () => {
+    let unit = studyData.subjects[subjectName].units[ui];
+    unit.qbankStats   = { total: 0, correct: 0 };
+    unit.qbankDone    = false;
+    unit.qbankLocked  = false;
+    saveData(); renderQbank();
+  }, 'Reset', true);
 }
 
 // ─── Tab Switching ────────────────────────────────────────────
@@ -1241,12 +1277,12 @@ function bulkAddSubject() {
   let name     = document.getElementById("bulkSubjectName").value.trim();
   let size     = document.getElementById("bulkSubjectSize").value;
   let rawUnits = document.getElementById("bulkTopicsInput").value.trim();
-  if (!name) { alert("Enter subject name."); return; }
-  if (!rawUnits) { alert("Enter at least one unit."); return; }
+  if (!name) { showToast("Enter subject name.", 'warn'); return; }
+  if (!rawUnits) { showToast("Enter at least one unit.", 'warn'); return; }
 
   // Use smart parser: supports "Unit [Qs] | Chapter(start-end), ..."
   let units = parseUnitsText(rawUnits);
-  if (!units.length) { alert("Could not parse any units."); return; }
+  if (!units.length) { showToast("Could not parse any units.", 'error'); return; }
 
   _bulkSubjects[name] = { size, units, pointer: { unit: 0, chapter: 0 } };
   document.getElementById("bulkSubjectName").value = "";
@@ -1291,7 +1327,7 @@ function bulkRemoveSubject(name) {
 
 function bulkGoStep2() {
   let keys = Object.keys(_bulkSubjects);
-  if (!keys.length) { alert("Add at least one subject first."); return; }
+  if (!keys.length) { showToast("Add at least one subject first.", 'warn'); return; }
 
   let totalUnits = Object.values(_bulkSubjects).reduce((a, s) => a + s.units.length, 0);
   document.getElementById("bulkSummarySubjects").textContent = keys.length;
@@ -1322,9 +1358,12 @@ function bulkGoStep1() {
   document.getElementById("bulkStep1").style.display = "block";
   document.getElementById("bulkStep2").style.display = "none";
   let d1 = document.getElementById("bDot1"), d2 = document.getElementById("bDot2"), l1 = document.getElementById("bLine1");
+  let _isLtBulk1 = document.body.classList.contains("light");
   d1.style.background = "#3b82f6"; d1.style.borderColor = "#3b82f6"; d1.style.color = "white"; d1.textContent = "1";
-  d2.style.background = "#1e293b"; d2.style.borderColor = "#334155"; d2.style.color = "#64748b";
-  l1.style.background = "#334155";
+  d2.style.background = _isLtBulk1 ? "var(--surface,#fff)" : "#1e293b";
+  d2.style.borderColor = _isLtBulk1 ? "var(--border,#dde3ed)" : "#334155";
+  d2.style.color = _isLtBulk1 ? "var(--text-muted,#455368)" : "#64748b";
+  l1.style.background = _isLtBulk1 ? "var(--border,#dde3ed)" : "#334155";
 }
 
 function bulkConfirmImport() {
@@ -1341,7 +1380,7 @@ function bulkConfirmImport() {
   saveData();
   closeBulkModal();
   renderEditor();
-  alert(`✓ Imported ${keys.length} subject${keys.length > 1 ? "s" : ""} successfully.`);
+  showToast('✓ Imported ' + keys.length + ' subject' + (keys.length > 1 ? 's' : '') + ' successfully.', 'success');
 }
 
 function toggleaddSubjectCollapse(buttonElement, contentId) {

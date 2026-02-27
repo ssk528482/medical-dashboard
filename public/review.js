@@ -14,7 +14,6 @@ let _startedAt   = null;
 let _timerInt    = null;
 let _ratings     = { 1:0, 2:0, 3:0, 4:0 };
 let _streak      = 0;
-let _confirmFn   = null;
 let _editCardId  = null;
 let _isFiltered  = false;  // true when launched from browse with specific card ids
 let _undoStack   = [];     // [{index, card, prevSRS, rating, preRatingStreak, wasRequeued}]
@@ -423,7 +422,7 @@ function openEditModal() {
   let card = _queue[_index];
   if (!card) return;
   if (card.card_type === 'image_occlusion') {
-    alert('Image occlusion cards must be edited from the Browse page.');
+    showToast('Image occlusion cards must be edited from the Browse page.', 'warn');
     return;
   }
   _editCardId = card.id;
@@ -442,7 +441,7 @@ async function saveEdit() {
   let card  = _queue[_index];
   let front = (document.getElementById('edit-front')?.value || '').trim();
   let back  = (document.getElementById('edit-back')?.value  || '').trim();
-  if (!front) { alert('Front text is required.'); return; }
+  if (!front) { showToast('Front text is required.', 'warn'); return; }
 
   let btn = document.querySelector('.edit-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -483,16 +482,9 @@ function deleteCurrentCard() {
   );
 }
 
-// ── Confirm Modal ─────────────────────────────────────────────────
+// ── Confirm Modal (shim → global popup system) ──────────────────────────
 function openConfirm(title, body, fn, okLabel) {
-  _confirmFn = fn;
-  document.getElementById('confirm-title').textContent = title;
-  document.getElementById('confirm-body').innerHTML    = body;
-  document.getElementById('confirm-ok').textContent   = okLabel || 'Confirm';
-  document.getElementById('confirm-modal').classList.add('open');
+  showConfirm(title, body, fn, okLabel || 'Delete', true);
 }
-function closeConfirm() {
-  document.getElementById('confirm-modal').classList.remove('open');
-  _confirmFn = null;
-}
-async function runConfirm() { closeConfirm(); if (_confirmFn) await _confirmFn(); }
+function closeConfirm() { _gsCloseConfirm(); }
+async function runConfirm() { await _gsRunConfirm(); }

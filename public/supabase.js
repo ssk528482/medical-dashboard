@@ -420,13 +420,13 @@ async function loadFromCloud() {
 // ─── LOGIN / LOGOUT ────────────────────────────────────────────────────────
 async function login() {
   const email = document.getElementById("emailInput")?.value;
-  if (!email) { alert("Enter email"); return; }
+  if (!email) { showToast("Enter email", 'warn'); return; }
   const { error } = await supabaseClient.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: "https://medical-dashboard-lac.vercel.app/index.html" },
   });
-  if (error) alert("Login failed: " + error.message);
-  else alert("Check your email for a magic link.");
+  if (error) showToast("Login failed: " + error.message, 'error');
+  else showToast("Check your email for a magic link.", 'info');
 }
 
 async function logout() {

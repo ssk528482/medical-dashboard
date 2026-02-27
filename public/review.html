@@ -149,19 +149,6 @@
       cursor: pointer; margin: 0; min-height: unset;
     }
 
-    /* Confirm modal */
-    .confirm-backdrop {
-      display: none; position: fixed; inset: 0; z-index: 700;
-      background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
-      align-items: center; justify-content: center; padding: 16px;
-    }
-    .confirm-backdrop.open { display: flex; }
-    .confirm-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; width: 100%; max-width: 340px; text-align: center; }
-    .confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-    .confirm-body  { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
-    .confirm-btns  { display: flex; gap: 10px; justify-content: center; }
-    .confirm-cancel { background: var(--card); color: var(--text-muted); border: 1px solid var(--border); padding: 9px 20px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; min-height: unset; margin: 0; }
-    .confirm-ok { background: var(--red); color: #fff; border: none; padding: 9px 20px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 700; min-height: unset; margin: 0; }
   </style>
 </head>
 <body>
@@ -238,13 +225,13 @@
       <button class="rating-btn" data-r="4" onclick="rateCard(4)">😄 Easy</button>
       <!-- Keyboard shortcuts hint -->
       <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">Space flip</span>
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">1 Again</span>
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">2 Hard</span>
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">3 Good</span>
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">4 Easy</span>
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">U Undo</span>
-        <span style="font-size:10px;color:#334155;background:#1e293b;border:1px solid #2a3a50;border-radius:5px;padding:2px 7px;">R Redo</span>
+        <span class="kbd-hint">Space flip</span>
+        <span class="kbd-hint">1 Again</span>
+        <span class="kbd-hint">2 Hard</span>
+        <span class="kbd-hint">3 Good</span>
+        <span class="kbd-hint">4 Easy</span>
+        <span class="kbd-hint">U Undo</span>
+        <span class="kbd-hint">R Redo</span>
       </div>
     </div>
 
@@ -285,18 +272,6 @@
     <span class="edit-label">Back</span>
     <textarea class="edit-textarea" id="edit-back"  rows="3" placeholder="Back text…"></textarea>
     <button class="edit-save-btn" onclick="saveEdit()">💾 Save Changes</button>
-  </div>
-</div>
-
-<!-- ═══ CONFIRM MODAL ═══ -->
-<div class="confirm-backdrop" id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
-  <div class="confirm-box">
-    <div class="confirm-title" id="confirm-title">Confirm</div>
-    <div class="confirm-body"  id="confirm-body"></div>
-    <div class="confirm-btns">
-      <button class="confirm-cancel" onclick="closeConfirm()">Cancel</button>
-      <button class="confirm-ok" id="confirm-ok" onclick="runConfirm()">Delete</button>
-    </div>
   </div>
 </div>
 

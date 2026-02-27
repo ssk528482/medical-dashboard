@@ -16,21 +16,30 @@
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
-      background: #1e293b;
-      color: #94a3b8;
-      border: 1px solid #334155;
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
       transition: all 0.15s;
       white-space: nowrap;
     }
     .topic-chip.selected {
-      background: #1e3a5f !important;
+      background: rgba(59,130,246,0.18) !important;
       color: #93c5fd !important;
       border-color: #3b82f6 !important;
     }
+    body.light .topic-chip.selected {
+      background: rgba(59,130,246,0.14) !important;
+      color: #1d4ed8 !important;
+    }
     .topic-chip.already-done {
-      background: #1a3a1a;
+      background: rgba(16,185,129,0.12);
       color: #4ade80;
       border-color: #166534;
+    }
+    body.light .topic-chip.already-done {
+      background: rgba(16,185,129,0.12);
+      color: #15803d;
+      border-color: #16a34a;
     }
     /* Evening submitted card */
     .evening-submitted-card {
@@ -40,24 +49,28 @@
       padding: 16px;
       margin-bottom: 10px;
     }
+    body.light .evening-submitted-card {
+      background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+      border-color: #16a34a;
+    }
     .evening-entry-line {
       display: flex;
       align-items: flex-start;
       gap: 8px;
       padding: 6px 0;
-      border-bottom: 1px solid #1a3a1a;
+      border-bottom: 1px solid var(--border);
       font-size: 13px;
-      color: #cbd5e1;
+      color: var(--text-muted);
     }
     .evening-entry-line:last-child { border-bottom: none; }
     .entry-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
     /* Section separator */
     .form-section {
-      background: #0f172a;
+      background: var(--card);
       border-radius: 12px;
       padding: 14px;
       margin-bottom: 12px;
-      border: 1px solid #1e293b;
+      border: 1px solid var(--border);
     }
     .form-section-title {
       font-weight: 700;
@@ -68,20 +81,29 @@
       gap: 6px;
     }
     /* ── Stopwatch ── */
-    .sw-block { background:#0a1628;border-top:1px solid #1e293b;border-radius:0 0 10px 10px;padding:10px 12px;margin-top:8px; }
+    .sw-block { background:var(--card);border-top:1px solid var(--border);border-radius:0 0 10px 10px;padding:10px 12px;margin-top:8px; }
     .sw-row   { display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
     .sw-display { font-size:22px;font-weight:800;font-family:'SF Mono','Fira Code',monospace;min-width:86px;letter-spacing:1px; }
-    .sw-target  { font-size:11px;color:#64748b;flex:1;min-width:60px; }
+    .sw-target  { font-size:11px;color:var(--text-dim);flex:1;min-width:60px; }
     .sw-status  { font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px; }
-    .sw-status.on-target { background:#052e16;color:#4ade80; }
-    .sw-status.over      { background:#450a0a;color:#fca5a5; }
-    .sw-status.under     { background:#1e3a5f;color:#93c5fd; }
+    .sw-status.on-target { background:rgba(16,185,129,0.15);color:#15803d; }
+    body:not(.light) .sw-status.on-target { background:#052e16;color:#4ade80; }
+    .sw-status.over      { background:rgba(239,68,68,0.13);color:#dc2626; }
+    body:not(.light) .sw-status.over { background:#450a0a;color:#fca5a5; }
+    .sw-status.under     { background:rgba(59,130,246,0.13);color:#2563eb; }
+    body:not(.light) .sw-status.under { background:#1e3a5f;color:#93c5fd; }
     .sw-btn { padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;border:none;cursor:pointer;margin:0; }
     .sw-btn.start { background:#16a34a;color:white; }
     .sw-btn.pause { background:#d97706;color:white; }
-    .sw-btn.reset { background:#334155;color:#94a3b8; }
-    .sw-bar-wrap  { height:5px;background:#1e293b;border-radius:3px;margin-top:8px;overflow:hidden; }
+    .sw-btn.reset { background:var(--surface);color:var(--text-muted);border:1px solid var(--border); }
+    .sw-bar-wrap  { height:5px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden; }
     .sw-bar-fill  { height:100%;border-radius:3px;transition:width .8s linear; }
+    /* Pin button states */
+    .pin-btn-default { background:#1e3a5f;color:#93c5fd;border:1px solid #2a4f80; }
+    body.light .pin-btn-default { background:rgba(59,130,246,0.12);color:#1d4ed8;border-color:#93c5fd; }
+    .pin-btn-pinned { background:#052e16;color:#4ade80;border:1px solid #166534; }
+    body.light .pin-btn-pinned { background:rgba(16,185,129,0.12);color:#15803d;border-color:#16a34a; }
+    .unpin-btn { background:var(--surface);color:var(--text-muted);border:1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -110,8 +132,8 @@
     <select id="pinSubjectSelect" style="font-size:12px;padding:5px 8px;flex:1;min-width:120px;max-width:200px;">
       <option value="">Auto (recommended)</option>
     </select>
-    <button id="pinBtn" onclick="pinSubjectForToday()" style="font-size:12px;padding:6px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2a4f80;margin:0;">📌 Pin</button>
-    <button onclick="unpinSubject()" style="font-size:12px;padding:6px 8px;background:#1e293b;color:#64748b;margin:0;">✕ Unpin</button>
+    <button id="pinBtn" onclick="pinSubjectForToday()" class="pin-btn-default" style="font-size:12px;padding:6px 10px;margin:0;">📌 Pin</button>
+    <button onclick="unpinSubject()" class="unpin-btn" style="font-size:12px;padding:6px 8px;margin:0;">✕ Unpin</button>
   </div>
   <div id="planOutput" style="margin-top:10px;"></div>
 </div>
@@ -164,7 +186,7 @@
     if (studyData?.pinnedSubjectDate === (typeof today==="function"?today():"") && studyData?.pinnedSubject) {
       if (sel) sel.value = studyData.pinnedSubject;
       let btn = document.getElementById("pinBtn");
-      if (btn) { btn.textContent = "✓ Pinned"; btn.style.background = "#052e16"; btn.style.color = "#4ade80"; }
+      if (btn) { btn.textContent = "✓ Pinned"; btn.className = "pin-btn-pinned"; btn.style.fontSize="12px"; btn.style.padding="6px 10px"; btn.style.margin="0"; }
     }
   });
 
@@ -175,7 +197,7 @@
     studyData.pinnedSubjectDate = (typeof today==="function") ? today() : new Date().toISOString().split("T")[0];
     if (typeof saveData==="function") saveData();
     let btn = document.getElementById("pinBtn");
-    if (btn) { btn.textContent = "✓ Pinned"; btn.style.background = "#052e16"; btn.style.color = "#4ade80"; }
+    if (btn) { btn.textContent = "✓ Pinned"; btn.className = "pin-btn-pinned"; btn.style.fontSize="12px"; btn.style.padding="6px 10px"; btn.style.margin="0"; }
   }
 
   function unpinSubject() {
@@ -183,7 +205,7 @@
     delete studyData.pinnedSubjectDate;
     if (typeof saveData==="function") saveData();
     let btn = document.getElementById("pinBtn");
-    if (btn) { btn.textContent = "📌 Pin"; btn.style.background = "#1e3a5f"; btn.style.color = "#93c5fd"; }
+    if (btn) { btn.textContent = "📌 Pin"; btn.className = "pin-btn-default"; btn.style.fontSize="12px"; btn.style.padding="6px 10px"; btn.style.margin="0"; }
     let sel = document.getElementById("pinSubjectSelect");
     if (sel) sel.value = "";
   }

@@ -8,38 +8,60 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 20px; max-width: 500px; margin: 0 auto 16px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; transition: background 0.22s, color 0.18s; }
+    body.light { background: #eef2f7; color: #0f172a; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 20px; max-width: 500px; margin: 0 auto 16px; transition: background 0.22s, border-color 0.22s; }
+    body.light .card { background: #ffffff; border-color: #dde3ed; box-shadow: 0 2px 12px rgba(15,30,60,0.07); }
     .section-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin-bottom: 14px; }
+    body.light .section-title { color: #0f172a; }
     label { display: block; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
-    input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; font-size: 14px; color: #e2e8f0; margin-bottom: 12px; outline: none; transition: border-color .2s; }
+    body.light label { color: #455368; }
+    input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; font-size: 14px; color: #e2e8f0; margin-bottom: 12px; outline: none; transition: border-color .2s, background 0.22s, color 0.18s; }
+    body.light input, body.light select, body.light textarea { background: #f4f7fb; border-color: #dde3ed; color: #0f172a; }
     input:focus, select:focus, textarea:focus { border-color: #3b82f6; }
     button { background: #3b82f6; color: white; border: none; padding: 12px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
     button:hover { opacity: .88; }
     button.secondary { background: #334155; }
+    body.light button.secondary { background: #dde3ed; color: #0f172a; }
     button.success   { background: #16a34a; }
     button.full      { width: 100%; }
     .steps { display: flex; align-items: center; justify-content: center; gap: 0; margin: 20px auto 28px; max-width: 320px; }
     .step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: #1e293b; border: 2px solid #334155; color: #64748b; transition: all .3s; position: relative; z-index: 1; }
+    body.light .step-dot { background: #f4f7fb; border-color: #dde3ed; color: #7c93ad; }
     .step-dot.active { background: #3b82f6; border-color: #3b82f6; color: white; }
     .step-dot.done   { background: #16a34a; border-color: #16a34a; color: white; }
     .step-line { flex: 1; height: 2px; background: #334155; transition: background .3s; }
+    body.light .step-line { background: #dde3ed; }
     .step-line.done { background: #16a34a; }
     .step-panel { display: none; max-width: 500px; margin: 0 auto; }
     .step-panel.active { display: block; }
     .preview-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #1e293b; font-size: 13px; }
+    body.light .preview-item { border-bottom-color: #dde3ed; }
     .preview-item:last-child { border-bottom: none; }
     .badge { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; color: white; }
     .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-    .summary-box { background: #0f172a; border-radius: 10px; padding: 12px; text-align: center; }
+    .summary-box { background: #0f172a; border-radius: 10px; padding: 12px; text-align: center; transition: background 0.22s; }
+    body.light .summary-box { background: #f4f7fb; border: 1px solid #dde3ed; }
     .summary-big { font-size: 28px; font-weight: 800; color: #3b82f6; }
     .tip { background: #0f2d4a; border: 1px solid #1d4ed8; border-radius: 10px; padding: 12px; font-size: 12px; color: #93c5fd; margin-top: 12px; line-height: 1.5; }
+    body.light .tip { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
     .nav-row { display: flex; gap: 10px; max-width: 500px; margin: 0 auto; }
     h1 { text-align: center; padding: 24px 0 4px; font-size: 22px; font-weight: 800; color: #f1f5f9; }
+    body.light h1 { color: #0f172a; }
     h1 + p { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 20px; }
+    body.light h1 + p { color: #455368; }
+    /* Inline code elements inside setup cards */
+    code { background: #1e293b; padding: 2px 5px; border-radius: 4px; font-size: 11px; }
+    body.light code { background: #e8eef7; color: #0f172a; border: 1px solid #dde3ed; }
+    /* Subject list / review list boxes */
+    #subjectList, #summarySubjectList, #subjectPreview > div { background: #0f172a; border-radius: 10px; padding: 10px; }
+    body.light #subjectList, body.light #summarySubjectList { background: #f4f7fb; border: 1px solid #dde3ed; }
   </style>
 </head>
 <body>
+<script>
+  try { if (localStorage.getItem('theme') === 'light') document.body.classList.add('light'); } catch(e) {}
+</script>
 
 <h1>🩺 Setup Your Study Plan</h1>
 <p>This takes about 2 minutes</p>
@@ -84,7 +106,7 @@
       <option value="small">Small</option>
     </select>
 
-    <div style="background:#0f172a;border-radius:10px;padding:10px;margin-bottom:12px;">
+      <div style="background:var(--card, #0f172a);border-radius:10px;padding:10px;margin-bottom:12px;">
       <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;font-weight:600;">📋 Units &amp; Topics</div>
       <div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.7;">
         Format per line:<br>

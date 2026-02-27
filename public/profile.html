@@ -20,25 +20,25 @@
 
 <!-- Import Confirmation Modal -->
 <div id="importModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:999;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#1e293b;border:2px solid #7c3aed;border-radius:16px;max-width:400px;width:100%;padding:24px;">
+  <div class="modal-box" style="border:2px solid #7c3aed;max-width:400px;width:100%;padding:24px;">
     <div style="text-align:center;margin-bottom:16px;">
       <div style="font-size:36px;">📦</div>
       <div style="font-size:17px;font-weight:800;color:#c4b5fd;margin-top:8px;">Restore Backup?</div>
     </div>
-    <div style="background:#1e1b4b;border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:#a5b4fc;">
+    <div style="background:var(--card);border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:#a5b4fc;border:1px solid var(--border);">
       <div style="font-weight:700;margin-bottom:8px;color:#c4b5fd;">📅 Exported: <span id="importSummaryDate"></span></div>
       <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 14px;">
-        <span>📚 Subjects</span><span id="importSummarySubjects" style="font-weight:700;color:#e2e8f0;"></span>
-        <span>📅 History</span><span id="importSummaryHistory" style="font-weight:700;color:#e2e8f0;"></span>
-        <span>🃏 Flashcards</span><span id="importSummaryCards" style="font-weight:700;color:#e2e8f0;"></span>
-        <span>🔁 Reviews</span><span id="importSummaryReviews" style="font-weight:700;color:#e2e8f0;"></span>
-        <span>📝 Notes</span><span id="importSummaryNotes" style="font-weight:700;color:#e2e8f0;"></span>
+        <span>📚 Subjects</span><span id="importSummarySubjects" style="font-weight:700;color:var(--text);"></span>
+        <span>📅 History</span><span id="importSummaryHistory" style="font-weight:700;color:var(--text);"></span>
+        <span>🃏 Flashcards</span><span id="importSummaryCards" style="font-weight:700;color:var(--text);"></span>
+        <span>🔁 Reviews</span><span id="importSummaryReviews" style="font-weight:700;color:var(--text);"></span>
+        <span>📝 Notes</span><span id="importSummaryNotes" style="font-weight:700;color:var(--text);"></span>
       </div>
     </div>
-    <div style="background:#450a0a;border-radius:8px;padding:10px;font-size:12px;color:#fca5a5;margin-bottom:14px;line-height:1.6;">
+    <div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:8px;padding:10px;font-size:12px;color:#fca5a5;margin-bottom:14px;line-height:1.6;">
       ⚠️ This will <strong>replace all your current data</strong>. This cannot be undone.
     </div>
-    <div id="importModalStatus" style="font-size:12px;color:#94a3b8;min-height:16px;margin-bottom:12px;"></div>
+    <div id="importModalStatus" style="font-size:12px;color:var(--text-muted);min-height:16px;margin-bottom:12px;"></div>
     <div style="display:flex;gap:10px;">
       <button id="importCancelBtn" onclick="closeImportModal()" style="flex:1;background:#334155;margin:0;">Cancel</button>
       <button id="importConfirmBtn" onclick="confirmImport()" style="flex:1;background:#7c3aed;margin:0;font-weight:700;">⬆️ Restore</button>
@@ -48,14 +48,14 @@
 
 <!-- Reset Confirmation Modal -->
 <div id="resetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#1e293b;border:2px solid #ef4444;border-radius:16px;max-width:380px;width:100%;padding:24px;">
+  <div class="modal-box" style="border:2px solid #ef4444;max-width:380px;width:100%;padding:24px;">
 
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:40px;">⚠️</div>
       <div style="font-size:17px;font-weight:800;color:#fca5a5;margin-top:8px;">Reset Everything?</div>
     </div>
 
-    <div style="background:#450a0a;border-radius:10px;padding:12px;font-size:13px;color:#fca5a5;margin-bottom:18px;line-height:1.6;">
+    <div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:10px;padding:12px;font-size:13px;color:#fca5a5;margin-bottom:18px;line-height:1.6;">
       This will permanently erase:<br>
       • All subjects, units &amp; chapters<br>
       • All qbank stats<br>
@@ -64,7 +64,7 @@
       <strong>Your name will be kept.</strong> You'll be taken back to setup.
     </div>
 
-    <label style="display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+    <label style="display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
       Type <strong style="color:#ef4444;">RESET</strong> to confirm
     </label>
     <input type="text" id="resetConfirmInput" placeholder="Type RESET here"

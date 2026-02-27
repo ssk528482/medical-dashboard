@@ -122,7 +122,7 @@ function _getTimeOfDayProfile() {
 
 function generatePlan() {
   let hours = parseFloat(document.getElementById("dailyHours").value);
-  if (!hours || hours <= 0) { alert("Enter valid hours."); return; }
+  if (!hours || hours <= 0) { showToast("Enter valid hours.", 'warn'); return; }
 
   if (studyData.dailyPlan?.date === today()) {
     renderSavedPlan();
@@ -139,7 +139,7 @@ function generatePlan() {
   let subjectsSorted = Object.keys(studyData.subjects)
     .sort((a, b) => subjectPriority(b) - subjectPriority(a));
 
-  if (!subjectsSorted.length) { alert("Add subjects first."); return; }
+  if (!subjectsSorted.length) { showToast("Add subjects first.", 'warn'); return; }
 
   // #16 — pinned subject override
   let pinnedSubject = (studyData.pinnedSubjectDate === today() && studyData.pinnedSubject)
@@ -706,7 +706,7 @@ function resetTodayPlan() {
   saveData();
   document.getElementById("planOutput").innerHTML = "";
   document.getElementById("generateButton").disabled = false;
-  alert("Today's plan reset.");
+  showToast("Today's plan reset.", 'info');
 }
 
 function submitEvening() {
