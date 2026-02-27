@@ -95,6 +95,19 @@ function _autoCalibrateSpeeds() {
     let s = Math.round(totalQs / totalQbankHrs);
     if (s >= 10 && s <= 120) studyData.qbankSpeed = s;
   }
+
+  // FC5 — calibrate minsPerCard from actual review history
+  let totalCards = 0, totalReviewHrs = 0;
+  recentDates.forEach(date => {
+    let e = history[date];
+    if (!e) return;
+    if (e.timeTracking?.cards?.accumulated) totalReviewHrs += e.timeTracking.cards.accumulated / 3600;
+    if (e.cardsReviewed) totalCards += e.cardsReviewed;
+  });
+  if (totalReviewHrs >= 0.5 && totalCards >= 10) {
+    let m = (totalReviewHrs * 60) / totalCards;
+    if (m >= 0.5 && m <= 5) studyData.reviewMinsPerCard = parseFloat(m.toFixed(2));
+  }
 }
 
 // ─── Dynamic ratios: qbank grows with exam proximity, revision 0% when nothing due (#7, #8) ─
@@ -109,6 +122,362 @@ function _computeDynamicRatios(overdueCount, dueCount) {
   let qbankRatio = Math.min(baseQbankRatio, 1 - revisionRatio - 0.10);
   let studyRatio = Math.max(0.10, 1 - revisionRatio - qbankRatio);
   return { studyRatio, qbankRatio, revisionRatio };
+}
+
+// ─── Intelligent QBank Planner: 9-signal multi-unit scoring (IQ engine) ────
+// Scores every unit across ALL subjects using accuracy, revision alignment,
+// EF decay, consolidation window, missed reviews, difficulty, exam proximity,
+// remaining question count and early-revision stage weighting.
+// Returns an array of { line, qs, subjectName, unitName } for plan rendering.
+function _computeSmartQbankPlan(totalQs, qbankSpeed, todayStudySubject) {
+  let candidates = [];
+  let revDueKeys = new Set(
+    getRevisionsDueToday().map(r => `${r.subjectName}||${r.unitIndex}`)
+  );
+  let recentWindow = Array.from({ length: 7 }, (_, i) => addDays(today(), -i));
+  let proximity = examProximityFactor();
+
+  Object.keys(studyData.subjects).forEach(subjectName => {
+    let subject = studyData.subjects[subjectName];
+    subject.units.forEach((unit, ui) => {
+      let unitQsTotal = unit.questionCount || 0;
+      let unitQsDone  = unit.qbankStats?.total || 0;
+      let unitQsLeft  = unitQsTotal > 0 ? Math.max(0, unitQsTotal - unitQsDone) : null;
+      // Skip if explicitly done AND question bank fully exhausted
+      if (unit.qbankDone && unitQsLeft === 0) return;
+      // Skip units with no completed chapters — can't do qbank on unread content
+      let completedCount = unit.chapters.filter(ch => ch.status === 'completed').length;
+      if (completedCount === 0) return;
+
+      let score = 0;
+      let tags  = [];
+
+      // ── Signal 1: Accuracy (inverse — lower = higher priority) ─────────
+      let acc = unit.qbankStats?.total > 0
+        ? (unit.qbankStats.correct / unit.qbankStats.total) * 100 : null;
+      if (acc === null) {
+        score += 28; tags.push({ t: 'No baseline yet', c: '#8b5cf6' });
+      } else if (acc < 50) {
+        score += 65; tags.push({ t: `${acc.toFixed(0)}% — critical`, c: '#ef4444' });
+      } else if (acc < 65) {
+        score += 42; tags.push({ t: `${acc.toFixed(0)}% — weak`, c: '#f97316' });
+      } else if (acc < 80) {
+        score += 20; tags.push({ t: `${acc.toFixed(0)}% — needs work`, c: '#eab308' });
+      } else {
+        score += 4;  tags.push({ t: `${acc.toFixed(0)}% ✓`, c: '#10b981' });
+      }
+
+      // ── Signal 2: Consolidation window — completed within 7 days ───────
+      let recentDone = unit.chapters.filter(ch =>
+        ch.status === 'completed' && ch.completedOn && recentWindow.includes(ch.completedOn)
+      ).length;
+      if (recentDone > 0) {
+        score += Math.min(38, recentDone * 11);
+        tags.push({ t: `${recentDone} ch this week — consolidate`, c: '#3b82f6' });
+      }
+
+      // ── Signal 3: Revision due today — qbank reinforces same content ───
+      if (revDueKeys.has(`${subjectName}||${ui}`)) {
+        score += 38; tags.push({ t: 'Revision due — reinforce', c: '#a78bfa' });
+      }
+
+      // ── Signal 4: Weak EF (< 1.9) = struggling with long-term recall ───
+      let lowEF = unit.chapters.filter(ch =>
+        ch.status === 'completed' && (ch.difficultyFactor || 2.5) < 1.9
+      ).length;
+      if (lowEF > 0) {
+        score += Math.min(28, lowEF * 7);
+        tags.push({ t: `${lowEF} struggling ch`, c: '#f87171' });
+      }
+
+      // ── Signal 5: Missed revisions → active recall urgently needed ─────
+      let missed = unit.chapters.reduce((s, ch) => s + (ch.missedRevisions || 0), 0);
+      if (missed > 0) {
+        score += Math.min(32, missed * 6);
+        tags.push({ t: `${missed} missed reviews`, c: '#ef4444' });
+      }
+
+      // ── Signal 6: Today's primary study subject — same-session boost ───
+      if (subjectName === todayStudySubject) {
+        score += 18; tags.push({ t: "Today's subject", c: '#10b981' });
+      }
+
+      // ── Signal 7: Hard chapters at early revision, scaled by exam proximity
+      let hardDone = unit.chapters.filter(ch =>
+        ch.difficulty === 'hard' && ch.status === 'completed' && (ch.revisionIndex || 0) < 4
+      ).length;
+      if (hardDone > 0) {
+        score += Math.min(22, hardDone * 4) * (1 + proximity * 0.8);
+        tags.push({ t: `${hardDone} hard ch`, c: '#f59e0b' });
+      }
+
+      // ── Signal 8: Remaining question proportion ─────────────────────────
+      if (unitQsLeft === null) {
+        score += 6;
+      } else if (unitQsLeft > 0) {
+        score += Math.min(14, (unitQsLeft / (unitQsTotal || 1)) * 18);
+      }
+
+      // ── Signal 9: Early revision stage (R1/R2) benefits most from qbank ─
+      let earlyRev = unit.chapters.filter(ch =>
+        ch.status === 'completed' && (ch.revisionIndex || 0) <= 2
+      ).length;
+      if (earlyRev > 0) score += Math.min(16, earlyRev * 2);
+
+      candidates.push({ subjectName, unit, ui, score, tags, acc, unitQsLeft });
+    });
+  });
+
+  if (!candidates.length) return [];
+  candidates.sort((a, b) => b.score - a.score);
+
+  // Allocate questions to top 4 candidates proportional to their score
+  let topN       = Math.min(4, candidates.length);
+  let top        = candidates.slice(0, topN);
+  let totalScore = top.reduce((s, c) => s + c.score, 0);
+  let allocations = [];
+  let qLeft = totalQs;
+
+  top.forEach((c, idx) => {
+    if (qLeft <= 0) return;
+    let rawProp  = totalScore > 0 ? c.score / totalScore : 1 / topN;
+    // First unit ≥ 40% of questions; subsequent units have no forced floor
+    let prop     = idx === 0 ? Math.max(0.40, rawProp) : rawProp;
+    let qForUnit = idx === top.length - 1
+      ? qLeft
+      : Math.max(5, Math.round(totalQs * prop));
+    qForUnit = Math.min(qForUnit, qLeft);
+    if (c.unitQsLeft !== null) qForUnit = Math.min(qForUnit, c.unitQsLeft);
+    if (qForUnit <= 0) return;
+
+    let accVal  = c.acc;
+    let accTag  = accVal !== null
+      ? ` <span style="color:${accVal>=75?'#10b981':accVal>=50?'#eab308':'#ef4444'}">${accVal.toFixed(0)}%</span>`
+      : ` <span style="color:#8b5cf6">no data</span>`;
+    let leftTag = c.unitQsLeft !== null
+      ? ` <span style="color:#94a3b8">· ${c.unitQsLeft} left</span>` : "";
+    let tagHTML = c.tags.slice(0, 3)
+      .map(t => `<span style="font-size:10px;background:${t.c}22;color:${t.c};padding:1px 5px;border-radius:4px;border:1px solid ${t.c}44">${t.t}</span>`)
+      .join(" ");
+
+    let line =
+      `🧪 <strong>${c.subjectName}</strong> → ${c.unit.name}` +
+      ` <span style="color:#94a3b8">~${qForUnit} Qs (${(qForUnit/qbankSpeed).toFixed(1)}h)</span>` +
+      accTag + leftTag +
+      (tagHTML ? `<div style="margin-top:3px;margin-left:20px">${tagHTML}</div>` : "");
+
+    allocations.push({ line, qs: qForUnit, subjectName: c.subjectName, unitName: c.unit.name });
+    qLeft -= qForUnit;
+  });
+
+  return allocations;
+}
+
+// ─── S1+S6: Difficulty-weighted chapter time estimate ────────────────────
+// Hard chapters take ~1.7× longer per page; easy ~0.85×
+// Returns effective minutes for this chapter
+function _getChapterEffectiveMins(ch, subjectSize, readingSpeed) {
+  let diffMult = ch.difficulty === 'hard' ? 1.7 : ch.difficulty === 'easy' ? 0.85 : 1.0;
+  if (ch.pageCount > 0) {
+    return (ch.pageCount / readingSpeed) * 60 * diffMult;
+  }
+  let base = { large: 90, medium: 60, small: 45 }[subjectSize] || 60;
+  return base * diffMult;
+}
+
+// ─── S3: Count revisions due tomorrow ────────────────────────────────────
+function _getTomorrowRevisionCount() {
+  let tomorrow = addDays(today(), 1);
+  let count = 0;
+  Object.values(studyData.subjects || {}).forEach(subj => {
+    subj.units.forEach(u => u.chapters.forEach(ch => {
+      if (ch.nextRevision && ch.nextRevision <= tomorrow) count++;
+    }));
+  });
+  return count;
+}
+
+// ─── S4: Momentum — avg completed chapters/day over last 7 logged days ───
+function _getMomentumChaptersPerDay() {
+  let history = studyData.dailyHistory || {};
+  let days = 0, total = 0;
+  for (let i = 1; i <= 7; i++) {
+    let d = addDays(today(), -i);
+    let e = history[d];
+    if (!e) continue;
+    total += (e.studyEntries || []).reduce((s, se) => s + (se.topics?.length || 0), 0);
+    days++;
+  }
+  return days >= 3 ? total / days : null;
+}
+
+// ─── R1–R8: Smart Revision Planner ───────────────────────────────────────
+// R1: time-budget fitting   R2: EF-first sort     R3: subject grouping
+// R4: qbank-pair advice     R5: depth labels      R6: batch split
+// R7: first-recall flag     R8: memory-at-risk badge
+function _computeRevisionPlan(revisionDue, revisionMins, todayStudySubject) {
+  // R5: depth info — minutes per stage
+  const DEPTH = [
+    { label: 'First recall',  short: 'R1', color: '#ef4444', mins: 15 },
+    { label: 'Consolidation', short: 'R2', color: '#f97316', mins: 10 },
+    { label: 'Deep retention',short: 'R3', color: '#eab308', mins:  7 },
+    { label: 'Maintenance',   short: 'R4+',color: '#10b981', mins:  4 }
+  ];
+  function depthOf(revIdx) {
+    return revIdx < 3 ? DEPTH[revIdx] : DEPTH[3];
+  }
+
+  let yesterday = addDays(today(), -1);
+
+  // R2: sort — EF < 1.8 first, then overdue days, then urgency
+  let sorted = [...revisionDue].sort((a, b) => {
+    let chA = studyData.subjects[a.subjectName]?.units[a.unitIndex]?.chapters[a.chapterIndex];
+    let chB = studyData.subjects[b.subjectName]?.units[b.unitIndex]?.chapters[b.chapterIndex];
+    let efA = chA?.difficultyFactor ?? 2.5;
+    let efB = chB?.difficultyFactor ?? 2.5;
+    let aStr = efA < 1.8 ? 1 : 0, bStr = efB < 1.8 ? 1 : 0;
+    if (bStr !== aStr) return bStr - aStr;
+    return (b.overdueDays || 0) - (a.overdueDays || 0);
+  });
+
+  // R1: fit into time budget (always show at least 1)
+  let minsLeft = revisionMins;
+  let fitted = [], overflow = [];
+  sorted.forEach(r => {
+    let ch = studyData.subjects[r.subjectName]?.units[r.unitIndex]?.chapters[r.chapterIndex];
+    if (!ch) return;
+    let d = depthOf(ch.revisionIndex || 0);
+    if (minsLeft >= d.mins || fitted.length === 0) {
+      fitted.push({ r, ch, d });
+      minsLeft -= d.mins;
+    } else {
+      overflow.push({ r, ch, d });
+    }
+  });
+
+  // R3: group fitted items by subject||unitIndex for context-switching reduction
+  let groups = {};
+  fitted.forEach(item => {
+    let key = `${item.r.subjectName}||${item.r.unitIndex}`;
+    if (!groups[key]) groups[key] = { sub: item.r.subjectName, ui: item.r.unitIndex, items: [] };
+    groups[key].items.push(item);
+  });
+
+  let lines = [];
+
+  // R4: qbank pairing recommendation — shown once per unit needing it
+  let qbankPairAdvice = new Set();
+  fitted.forEach(({ r, ch, d }) => {
+    if ((ch.revisionIndex || 0) <= 1) {
+      let unit = studyData.subjects[r.subjectName]?.units[r.unitIndex];
+      let unitAcc = unit?.qbankStats?.total > 0
+        ? (unit.qbankStats.correct / unit.qbankStats.total) * 100 : null;
+      if (unitAcc !== null && unitAcc < 60) {
+        qbankPairAdvice.add(`${r.subjectName}||${r.unitIndex}`);
+      }
+    }
+  });
+
+  // qbank pairing banner
+  if (qbankPairAdvice.size > 0) {
+    let pairNames = [...qbankPairAdvice].map(k => {
+      let [sn, ui] = k.split('||');
+      return `${sn} → ${studyData.subjects[sn]?.units[parseInt(ui)]?.name || 'unit'}`;
+    }).join(', ');
+    lines.push(
+      `<div style="background:#1e1a3a;border:1px solid #6d28d9;border-radius:8px;padding:7px 10px;`+
+      `margin-bottom:8px;font-size:11px;color:#c4b5fd;">` +
+      `⚡ <strong>Do Qbank FIRST</strong> for: ${pairNames} — active recall before passive review ↑ retention</div>`
+    );
+  }
+
+  // R6: batch split recommendation
+  if (overflow.length > 0) {
+    lines.push(
+      `<div style="background:#1a1a2e;border:1px solid #334155;border-radius:8px;padding:7px 10px;`+
+      `margin-bottom:8px;font-size:11px;color:#94a3b8;">` +
+      `📦 <strong>Split suggested:</strong> ${fitted.length} items fit now · ${overflow.length} more for Batch 2 after new study</div>`
+    );
+  }
+
+  // Render grouped items
+  Object.values(groups).forEach(group => {
+    // Group header if multiple groups exist
+    if (Object.keys(groups).length > 1) {
+      let unitName = studyData.subjects[group.sub]?.units[group.ui]?.name || '';
+      let sameAsStudy = group.sub === todayStudySubject;
+      lines.push(
+        `<div style="font-size:11px;font-weight:700;color:${sameAsStudy?'#10b981':'#64748b'};`+
+        `margin:8px 0 3px;border-top:1px solid #0f172a;padding-top:6px;">`+
+        `${sameAsStudy ? '✦ ' : ''}${group.sub} — ${unitName}</div>`
+      );
+    }
+
+    group.items.forEach(({ r, ch, d }) => {
+      let nextR      = d.short;
+      let urgency    = r.urgency || (r.isOverdue ? 'moderate' : 'due');
+      let urgColor   = urgency === 'critical' ? '#ef4444' : urgency === 'high' ? '#f97316'
+                     : urgency === 'moderate' ? '#eab308' : '#3b82f6';
+      let urgBg      = urgency === 'critical' ? '#450a0a' : urgency === 'high' ? '#431407'
+                     : urgency === 'moderate' ? '#422006' : '#1e3a5f';
+      let overdueTag = r.isOverdue
+        ? ` <span style="background:${urgBg};color:${urgColor};font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;">${r.overdueDays}d overdue</span>` : "";
+      let pageTag    = ch.pageCount > 0 ? ` <span style="color:#64748b;font-size:11px;">(${ch.pageCount}p)</span>` : "";
+      let diffTag    = ch.difficulty ? ` <span style="font-size:10px;color:${ch.difficulty==='hard'?'#ef4444':ch.difficulty==='easy'?'#10b981':'#64748b'};">${ch.difficulty}</span>` : "";
+
+      // R5: depth label tag
+      let depthTag = `<span style="font-size:10px;background:${d.color}22;color:${d.color};padding:1px 6px;border-radius:4px;border:1px solid ${d.color}44;">${d.label} · ~${d.mins}m</span>`;
+
+      // R7: first recall flag — completed yesterday → highest urgency
+      let firstRecallTag = '';
+      if (ch.completedOn === yesterday && (ch.revisionIndex || 0) === 0) {
+        firstRecallTag = ` <span style="background:#1a3a1a;color:#4ade80;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid #166534;">🆕 First recall</span>`;
+      }
+
+      // R8: memory at risk badge — 3+ missed revisions
+      let memRiskTag = '';
+      if ((ch.missedRevisions || 0) >= 3) {
+        let ef = (ch.difficultyFactor || 2.5).toFixed(1);
+        memRiskTag = ` <span style="background:#450a0a;color:#fca5a5;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid #ef444433;">⚠ Memory at risk · EF ${ef}</span>`;
+      } else if ((ch.difficultyFactor || 2.5) < 1.8) {
+        memRiskTag = ` <span style="background:#3b1515;color:#f87171;font-size:10px;padding:1px 5px;border-radius:4px;">EF low</span>`;
+      }
+
+      // Quality-score buttons (unchanged)
+      let qualBtns = `<span style="display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle;">` +
+        [['1','#450a0a','#fca5a5','✗'],['2','#3b1515','#f87171','△'],['3','#422006','#fb923c','~'],['4','#0f3a1a','#4ade80','✓'],['5','#0f2a3a','#60a5fa','★']]
+        .map(([q, bg, fc, lbl]) =>
+          `<button onclick="markRevisionDone('${r.subjectName.replace(/'/g,"\\'")}',${r.unitIndex},${r.chapterIndex},${q});this.closest('.rev-row').style.opacity='.35';this.closest('.rev-row').style.pointerEvents='none';"
+            style="background:${bg};color:${fc};border:1px solid ${fc}33;border-radius:4px;font-size:10px;padding:2px 5px;cursor:pointer;min-height:unset;line-height:1;" title="Quality ${q}">${lbl}</button>`
+        ).join('') + `</span>`;
+
+      let unitName2 = studyData.subjects[r.subjectName].units[r.unitIndex]?.name;
+      lines.push(
+        `<div class="rev-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 0;border-bottom:1px solid #0f172a;">` +
+        `<span>🔁 <strong>${r.subjectName}</strong> → ${unitName2} → <em>${ch.name}</em></span>` +
+        ` <span style="font-size:11px;background:#1e293b;color:#93c5fd;padding:1px 5px;border-radius:4px;">${nextR}</span>` +
+        ` ${depthTag}` + pageTag + diffTag + firstRecallTag + memRiskTag + overdueTag + qualBtns +
+        ` <span class="rev-meta" data-key="${r.subjectName}||${unitName2}||${ch.name}"></span>` +
+        `</div>`
+      );
+    });
+  });
+
+  // Batch 2 summary
+  if (overflow.length > 0) {
+    let batch2Subjects = [...new Set(overflow.map(x => x.r.subjectName))].join(', ');
+    lines.push(
+      `<div style="margin-top:6px;padding:6px 10px;background:#0a0f1a;border:1px dashed #334155;border-radius:8px;">` +
+      `<span style="font-size:11px;color:#64748b;font-weight:700;">📋 Batch 2 (${overflow.length} items after study):</span> ` +
+      `<span style="font-size:11px;color:#475569;">${batch2Subjects}</span></div>`
+    );
+  }
+
+  if (lines.length === 0) {
+    lines.push(`🔁 No revisions due today`);
+  }
+
+  return { lines, fittedCount: fitted.length, overflowCount: overflow.length };
 }
 
 // ─── Time-of-day study profile (#12) ─────────────────────────────────────
@@ -164,12 +533,55 @@ function generatePlan() {
     ? hours * todProfile.studyBoost          // on good days: only time-of-day governs (≤ hours)
     : Math.max(hours * 0.5, hours * burnoutAdj * todProfile.studyBoost); // on bad days: reduce
 
+  // ── FC4: Reserve flashcard time FROM total (not extra) ───────────────────
+  // Use last-session due estimate × calibrated mins/card, capped at 20% of total
+  let minsPerCard     = studyData.reviewMinsPerCard || 1.5;
+  let fcEstimate      = studyData.fcDueEstimate || 0;
+  let cardsMinsReserve = Math.min(
+    Math.max(0, Math.round(fcEstimate * minsPerCard)),
+    Math.round(adjHours * 0.20 * 60)
+  );
+  let cardsHrsReserve = parseFloat((cardsMinsReserve / 60).toFixed(1));
+  // planHours = budget available for study/qbank/revision after cards are carved out
+  let planHours = Math.max(adjHours * 0.5, adjHours - cardsHrsReserve);
+
+  // ── S3: Tomorrow's revision load warning ─────────────────────────────────
+  let tomorrowRevCount = _getTomorrowRevisionCount();
+  let tomorrowHeavy    = tomorrowRevCount >= 10;
+  // Reduce today's study block slightly to avoid double-loading
+  let tomorrowWarnHTML = '';
+  if (tomorrowHeavy) {
+    tomorrowWarnHTML = `<div style="background:#422006;border:1px solid #f97316;border-radius:8px;padding:6px 10px;margin-top:6px;font-size:11px;color:#fed7aa;">📅 Heavy revision day tomorrow (${tomorrowRevCount} due) — study load lightened by 15% today</div>`;
+  }
+
+  // ── S4: Momentum hint ────────────────────────────────────────────────────
+  let momentum = _getMomentumChaptersPerDay();
+  let momentumHint = '';
+  if (momentum !== null) {
+    momentumHint = `<div style="font-size:11px;color:#475569;margin-top:3px;">📈 Your 7-day avg: ${momentum.toFixed(1)} chapters/day</div>`;
+  }
+
+  // ── S5: Interleaving — detect 3+ consecutive days same subject ───────────
+  let consecutiveSameDays = 0;
+  for (let i = 1; i <= 5; i++) {
+    let d = addDays(today(), -i);
+    let hist = studyData.dailyHistory?.[d];
+    if (!hist) break;
+    let subj = hist.studyEntries?.[0]?.subject || hist.studySubject;
+    if (subj === topSubject) consecutiveSameDays++;
+    else break;
+  }
+  let shouldInterleave = consecutiveSameDays >= 3 && daysLeft > 60;
+
   // #7, #8 — dynamic ratios based on exam proximity and due load
   let { studyRatio, qbankRatio, revisionRatio } = _computeDynamicRatios(overdueCount, revisionDue.length);
 
-  let studyMins    = Math.round(adjHours * studyRatio    * 60);
-  let qbankMins    = Math.round(adjHours * qbankRatio    * 60);
-  let revisionMins = Math.round(adjHours * revisionRatio * 60);
+  // Apply S3 adjustment to study ratio if tomorrow is heavy
+  if (tomorrowHeavy) studyRatio = Math.max(0.10, studyRatio * 0.85);
+
+  let studyMins    = Math.round(planHours * studyRatio    * 60);
+  let qbankMins    = Math.round(planHours * qbankRatio    * 60);
+  let revisionMins = Math.round(planHours * revisionRatio * 60);
 
   let studyTime    = (studyMins    / 60).toFixed(1);
   let qbankTime    = (qbankMins    / 60).toFixed(1);
@@ -224,7 +636,7 @@ function generatePlan() {
       </div>
       <div style="padding:4px 0;font-size:14px;line-height:1.9;">
         <strong>🔁 Revision:</strong> ${revTime2} hrs — ${revisionDue.length} chapters due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}<br>
-        <strong>🧪 Qbank:</strong> ${qbTime2} hrs — weak units first
+        <strong>🧪 Qbank:</strong> ${qbTime2} hrs — ${(() => { let iq = _computeSmartQbankPlan(Math.round(parseFloat(qbTime2)*60*(studyData.qbankSpeed||30)), studyData.qbankSpeed||30, topSubject); return iq.length > 0 ? iq.map(a => `<strong>${a.subjectName}</strong> → ${a.unitName} ~${a.qs}Q`).join(', ') : 'intelligent priority order'; })()}
         ${burnoutWarn}${examAlert}
       </div>`;
     studyData.dailyPlan = {
@@ -242,16 +654,36 @@ function generatePlan() {
 
   // ── SMART STUDY BLOCK ─────────────────────────────────────────
   let readingSpeed = studyData.readingSpeed || 25;
+  // S1: difficulty-adjusted budget
   let pagesBudget  = Math.round(studyMins / 60 * readingSpeed);
   let ptr          = subjectObj.pointer || { unit: 0, chapter: 0 };
 
+  // S2: time-of-day cognitive load flag
+  let h24 = new Date().getHours();
+  let isEveningSession = h24 >= 19;
+
+  // S7: detect mid-chapter carry-forward (chapter-level, not just subject-level)
+  let prevPlan = studyData.dailyPlan; // still the OLD plan since we haven't saved yet
+  let carryChapterKey = null; // "unitIndex||chapterIndex" → resumeFromPage
+  if (carriedForward && prevPlan?.study?.planChapters?.length > 0) {
+    let lastEntry = prevPlan.study.planChapters[prevPlan.study.planChapters.length - 1];
+    if (lastEntry && lastEntry.pgEnd !== undefined) {
+      let prevUnit = subjectObj.units[lastEntry.unitIndex];
+      let prevCh   = prevUnit?.chapters[lastEntry.chapterIndex];
+      if (prevCh && prevCh.status !== 'completed' && prevCh.endPage && lastEntry.pgEnd < prevCh.endPage) {
+        carryChapterKey = `${lastEntry.unitIndex}||${lastEntry.chapterIndex}`;
+      }
+    }
+  }
+
   let studyLines      = [];
+  let timeMinsLeft    = studyMins;
   let pagesLeft       = pagesBudget;
-  let timeMinsLeft    = studyMins; // #6 fix: separate time budget for no-page chapters
   let chaptersDone    = 0;
   let planChapters    = [];
   let foundStart      = false;
-  let timeBudgetExhausted = false; // true = broke out because budget ran out
+  let timeBudgetExhausted = false;
+  let eveningHardFlagged  = false;   // S2: at most one evening warning
 
   outerLoop:
   for (let ui = 0; ui < subjectObj.units.length; ui++) {
@@ -262,42 +694,74 @@ function generatePlan() {
       if (ch.status === "completed") continue;
       foundStart = true;
 
+      // S1: difficulty multiplier
+      let diffMult      = ch.difficulty === 'hard' ? 1.7 : ch.difficulty === 'easy' ? 0.85 : 1.0;
+      let effectiveSpeed = readingSpeed / diffMult; // pages per hour at this difficulty
+
+      // S2: evening hard-chapter soft-warning (flag but still include)
+      let eveningTag = '';
+      if (isEveningSession && ch.difficulty === 'hard' && !eveningHardFlagged) {
+        eveningTag = ` <span style="font-size:10px;background:#422006;color:#fed7aa;padding:1px 6px;border-radius:4px;">🌆 heavy evening</span>`;
+        eveningHardFlagged = true;
+      }
+
       if (ch.pageCount > 0) {
-        if (pagesLeft <= 0) { timeBudgetExhausted = true; break outerLoop; }
+        // S1: use effective speed for time constraint Check
+        let minsPerPage  = 60 / effectiveSpeed;
+        let maxPagesByTime = timeMinsLeft > 0 ? Math.floor(timeMinsLeft / minsPerPage) : 0;
+        if (maxPagesByTime <= 0 && chaptersDone > 0) { timeBudgetExhausted = true; break outerLoop; }
+
+        // S7: resume from mid-chapter carry position if applicable
+        let ckKey = `${ui}||${ci}`;
+        let resumeFrom = (carryChapterKey === ckKey && prevPlan?.study?.planChapters)
+          ? (() => {
+              let le = prevPlan.study.planChapters.find(p => p.unitIndex === ui && p.chapterIndex === ci);
+              return le?.pgEnd !== undefined ? le.pgEnd + 1 : null;
+            })()
+          : null;
+
         let alreadyRead = planChapters
           .filter(p => p.unitIndex === ui && p.chapterIndex === ci)
           .reduce((s, p) => s + (p.pgEnd - p.pgStart + 1), 0);
-        let chStart = ch.startPage + alreadyRead;
+        let chStart = resumeFrom !== null ? resumeFrom : ch.startPage + alreadyRead;
         let chEnd   = ch.endPage;
         if (chStart > chEnd) continue;
 
-        let pagesToRead = Math.min(pagesLeft, chEnd - chStart + 1);
+        let pagesToRead = Math.min(maxPagesByTime, pagesLeft, chEnd - chStart + 1);
+        if (pagesToRead <= 0) { timeBudgetExhausted = true; break outerLoop; }
         let pgEnd       = chStart + pagesToRead - 1;
-        let hrs         = (pagesToRead / readingSpeed).toFixed(1);
+        let hrs         = (pagesToRead / effectiveSpeed).toFixed(1); // S1: show actual time
         let phaseLabel  = _getChapterPhaseLabel(ch);
+
+        // S7: resume badge
+        let resumeTag = resumeFrom !== null
+          ? ` <span style="font-size:10px;background:#1a3a1a;color:#4ade80;padding:1px 5px;border-radius:4px;">↩ Resume</span>` : '';
 
         studyLines.push(
           `📖 <strong>${topSubject}</strong> → ${unit.name} → <em>${ch.name}</em>` +
           ` <span style="color:#94a3b8;">pg ${chStart}–${pgEnd} (${pagesToRead}p · ${hrs}h)</span>` +
-          (phaseLabel ? ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${phaseLabel}</span>` : "")
+          (phaseLabel ? ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${phaseLabel}</span>` : "") +
+          resumeTag + eveningTag
         );
         planChapters.push({ unitIndex: ui, chapterIndex: ci, pgStart: chStart, pgEnd });
         pagesLeft    -= pagesToRead;
-        timeMinsLeft -= (pagesToRead / readingSpeed) * 60;
+        timeMinsLeft -= pagesToRead * minsPerPage; // S1: consume actual time
         chaptersDone++;
 
         if (pgEnd < chEnd) { timeBudgetExhausted = true; break outerLoop; }
       } else {
-        // #6 fix: use timeMinsLeft for no-page chapters (no longer contaminates pages budget)
+        // No-page chapter: use difficulty-weighted estimate
         let chapterHrs  = subjectObj.size === "large" ? 1.5 : subjectObj.size === "medium" ? 1.0 : 0.75;
+        chapterHrs      = chapterHrs * diffMult; // S1: weight by difficulty
         let chapterMins = chapterHrs * 60;
-        if (timeMinsLeft <= 0) { timeBudgetExhausted = true; break outerLoop; }
+        if (timeMinsLeft <= 0 && chaptersDone > 0) { timeBudgetExhausted = true; break outerLoop; }
 
         let phaseLabel = _getChapterPhaseLabel(ch);
         studyLines.push(
           `📖 <strong>${topSubject}</strong> → ${unit.name} → <em>${ch.name}</em>` +
-          ` <span style="color:#94a3b8;">(~${chapterHrs}h est.)</span>` +
-          (phaseLabel ? ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${phaseLabel}</span>` : "")
+          ` <span style="color:#94a3b8;">(~${chapterHrs.toFixed(1)}h est.)</span>` +
+          (phaseLabel ? ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${phaseLabel}</span>` : "") +
+          eveningTag
         );
         planChapters.push({ unitIndex: ui, chapterIndex: ci });
         timeMinsLeft -= chapterMins;
@@ -307,10 +771,50 @@ function generatePlan() {
     }
   }
 
+  // S5: Interleaving injection — after 3+ consecutive days same subject AND exam > 60d
+  let interleaveLines = [];
+  let interleaveSubject = null;
+  if (shouldInterleave && timeMinsLeft > 15) {
+    for (let si = 0; si < subjectsSorted.length; si++) {
+      let sn = subjectsSorted[si];
+      if (sn === topSubject) continue;
+      let so = studyData.subjects[sn];
+      let sPtr = so.pointer || { unit: 0, chapter: 0 };
+      let foundInterleave = false;
+      for (let ui = 0; ui < so.units.length && !foundInterleave; ui++) {
+        let unit    = so.units[ui];
+        let ciStart = ui === sPtr.unit ? sPtr.chapter : 0;
+        for (let ci = ciStart; ci < unit.chapters.length && !foundInterleave; ci++) {
+          let ch = unit.chapters[ci];
+          if (ch.status === 'completed') continue;
+          let dm   = ch.difficulty === 'hard' ? 1.7 : ch.difficulty === 'easy' ? 0.85 : 1.0;
+          let es   = readingSpeed / dm;
+          let pagesToRead = ch.pageCount > 0 ? Math.min(Math.floor(timeMinsLeft / (60 / es)), ch.endPage - ch.startPage + 1) : 0;
+          if (ch.pageCount > 0 && pagesToRead > 0) {
+            let hrs = (pagesToRead / es).toFixed(1);
+            interleaveLines.push(
+              `📖 <strong>${sn}</strong> → ${unit.name} → <em>${ch.name}</em>` +
+              ` <span style="color:#94a3b8;">pg ${ch.startPage}–${ch.startPage+pagesToRead-1} (${pagesToRead}p · ${hrs}h)</span>`
+            );
+          } else if (ch.pageCount === 0) {
+            let chrs = (so.size === 'large' ? 1.5 : so.size === 'medium' ? 1.0 : 0.75) * dm;
+            interleaveLines.push(
+              `📖 <strong>${sn}</strong> → ${unit.name} → <em>${ch.name}</em>` +
+              ` <span style="color:#94a3b8;">(~${chrs.toFixed(1)}h est.)</span>`
+            );
+          }
+          interleaveSubject = sn;
+          foundInterleave = true;
+        }
+      }
+      if (foundInterleave) break;
+    }
+  }
+
   // #11 — if primary chapters exhausted before budget ran out, fill with next subject
   let secondarySubject = null;
   let secondaryLines   = [];
-  if (!timeBudgetExhausted && (pagesLeft > 5 || timeMinsLeft > 10)) {
+  if (!timeBudgetExhausted && !shouldInterleave && (pagesLeft > 5 || timeMinsLeft > 10)) {
     for (let si = 0; si < subjectsSorted.length; si++) {
       let sn = subjectsSorted[si];
       if (sn === topSubject) continue;
@@ -327,21 +831,25 @@ function generatePlan() {
         for (let ci = ciStart; ci < unit.chapters.length; ci++) {
           let ch = unit.chapters[ci];
           if (ch.status === "completed") continue;
+          let dm  = ch.difficulty === 'hard' ? 1.7 : ch.difficulty === 'easy' ? 0.85 : 1.0;
+          let es  = readingSpeed / dm;
           if (ch.pageCount > 0) {
             if (sPagesLeft <= 0) break secLoop;
-            let pages = Math.min(sPagesLeft, ch.endPage - ch.startPage + 1);
-            let hrs   = (pages / readingSpeed).toFixed(1);
+            let pages = Math.min(Math.floor(sTimeMins / (60 / es)), sPagesLeft, ch.endPage - ch.startPage + 1);
+            if (pages <= 0) break secLoop;
+            let hrs   = (pages / es).toFixed(1);
             secondaryLines.push(
               `📖 <strong>${sn}</strong> → ${unit.name} → <em>${ch.name}</em>` +
               ` <span style="color:#94a3b8;">pg ${ch.startPage}–${ch.startPage+pages-1} (${pages}p · ${hrs}h)</span>`
             );
             sPagesLeft -= pages;
+            sTimeMins  -= pages * (60 / es);
           } else {
-            let chHrs = so.size === "large" ? 1.5 : so.size === "medium" ? 1.0 : 0.75;
+            let chHrs = (so.size === "large" ? 1.5 : so.size === "medium" ? 1.0 : 0.75) * dm;
             if (sTimeMins <= 0) break secLoop;
             secondaryLines.push(
               `📖 <strong>${sn}</strong> → ${unit.name} → <em>${ch.name}</em>` +
-              ` <span style="color:#94a3b8;">(~${chHrs}h est.)</span>`
+              ` <span style="color:#94a3b8;">(~${chHrs.toFixed(1)}h est.)</span>`
             );
             sTimeMins -= chHrs * 60;
             sPagesLeft -= chHrs * readingSpeed;
@@ -352,98 +860,28 @@ function generatePlan() {
     }
   }
 
-  if (studyLines.length === 0 && secondaryLines.length === 0) {
+  if (studyLines.length === 0 && secondaryLines.length === 0 && interleaveLines.length === 0) {
     studyLines.push(`📖 <strong>${topSubject}</strong> — All chapters completed 🎉`);
   }
 
-  // ── SMART QBANK BLOCK ─────────────────────────────────────────
-  let qbankSpeed = studyData.qbankSpeed || 30;
-  let qTotal     = Math.round(qbankMins / 60 * qbankSpeed);
+  // ── INTELLIGENT QBANK BLOCK (IQ engine) ──────────────────────────────────
+  // Uses 9 signals: accuracy, consolidation window, revision alignment, EF decay,
+  // missed reviews, today's subject boost, hard chapters × exam proximity,
+  // remaining question proportion, and early-revision stage weighting.
+  let qbankSpeed    = studyData.qbankSpeed || 30;
+  let qTotal        = Math.round(qbankMins / 60 * qbankSpeed);
+  let iqAllocations = _computeSmartQbankPlan(qTotal, qbankSpeed, topSubject);
 
-  // Pick qbank subject: weakest accuracy; null (no data) treated as worst (#1)
-  let qSubject = topSubject;
-  let worstAcc = Infinity;
-  subjectsSorted.forEach(sn => {
-    let s = studyData.subjects[sn];
-    if (!s.units.some(u => !u.qbankDone)) return;
-    let acc    = subjectAccuracy(s);
-    let effAcc = (acc === null) ? -1 : acc;
-    if (effAcc < worstAcc) { worstAcc = effAcc; qSubject = sn; }
-  });
-
-  let qSubjectObj = studyData.subjects[qSubject];
-  let qbankLines  = [];
-  let qRemaining  = qTotal;
-
-  qSubjectObj.units.forEach((unit, ui) => {
-    if (qRemaining <= 0) return;
-    let unitQsTotal = unit.questionCount || 0;
-    let unitQsDone  = unit.qbankStats.total || 0;
-    let unitQsLeft  = unitQsTotal > 0 ? Math.max(0, unitQsTotal - unitQsDone) : null;
-    let unitAcc     = unit.qbankStats.total > 0
-      ? (unit.qbankStats.correct / unit.qbankStats.total * 100).toFixed(0) + "%" : null;
-    let qForUnit    = unitQsLeft !== null
-      ? Math.min(qRemaining, Math.min(qTotal, unitQsLeft))
-      : qRemaining;
-    if (unit.qbankDone && unitQsLeft === 0) return;
-    let accTag  = unitAcc ? ` <span style="color:${parseFloat(unitAcc)>=75?"#10b981":parseFloat(unitAcc)>=50?"#eab308":"#ef4444"}">${unitAcc} acc</span>` : "";
-    let leftTag = unitQsLeft !== null ? ` <span style="color:#94a3b8;">· ${unitQsLeft} Qs left</span>` : "";
-    qbankLines.push(
-      `🧪 <strong>${qSubject}</strong> → ${unit.name}` +
-      ` <span style="color:#94a3b8;">~${qForUnit} Qs (${(qForUnit/qbankSpeed).toFixed(1)}h)</span>` +
-      accTag + leftTag
-    );
-    qRemaining -= qForUnit;
-  });
-
+  // Primary subject for backward-compatible save (top-scored unit's subject)
+  let qSubject   = iqAllocations.length > 0 ? iqAllocations[0].subjectName : topSubject;
+  let qbankLines = iqAllocations.map(a => a.line);
   if (qbankLines.length === 0) {
-    qbankLines.push(`🧪 <strong>${qSubject}</strong> — <span style="color:#94a3b8;">~${qTotal} questions (${qbankTime}h)</span>`);
+    qbankLines.push(`🧪 <span style="color:#94a3b8">~${qTotal} questions (${qbankTime}h) — add qbank data to enable smart selection</span>`);
   }
 
-  // ── REVISION BLOCK — urgency-aware, quality-score buttons ────
-  let revLines = [];
-  if (revisionDue.length === 0) {
-    revLines.push(`🔁 No revisions due today`);
-  } else {
-    let showCount = Math.min(revisionDue.length, 10);
-    revisionDue.slice(0, showCount).forEach(r => {
-      let ch = studyData.subjects[r.subjectName]?.units[r.unitIndex]?.chapters[r.chapterIndex];
-      if (!ch) return;
-      let nextR     = `R${(ch.revisionIndex || 0) + 1}`;
-      let urgency   = r.urgency || (r.isOverdue ? 'moderate' : 'due');
-      let urgColor  = urgency === 'critical' ? '#ef4444'
-                    : urgency === 'high'     ? '#f97316'
-                    : urgency === 'moderate' ? '#eab308'
-                    : '#3b82f6';
-      let urgBg     = urgency === 'critical' ? '#450a0a'
-                    : urgency === 'high'     ? '#431407'
-                    : urgency === 'moderate' ? '#422006'
-                    : '#1e3a5f';
-      let overdueTag = r.isOverdue
-        ? ` <span style="background:${urgBg};color:${urgColor};font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;">${r.overdueDays}d overdue</span>` : "";
-      let pageTag   = ch.pageCount > 0 ? ` <span style="color:#64748b;font-size:11px;">(${ch.pageCount}p)</span>` : "";
-      let diffTag   = ch.difficulty ? ` <span style="font-size:10px;color:${ch.difficulty==='hard'?'#ef4444':ch.difficulty==='easy'?'#10b981':'#64748b'};">${ch.difficulty}</span>` : "";
-      // Inline quality-score buttons to record recall right from the plan
-      let qualBtns  = `<span style="display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle;">` +
-        [['1','#450a0a','#fca5a5','✗'],['2','#3b1515','#f87171','△'],['3','#422006','#fb923c','~'],['4','#0f3a1a','#4ade80','✓'],['5','#0f2a3a','#60a5fa','★']]
-        .map(([q, bg, fc, lbl]) =>
-          `<button onclick="markRevisionDone('${r.subjectName.replace(/'/g,"\\'")}',${r.unitIndex},${r.chapterIndex},${q});this.closest('.rev-row').style.opacity='.35';this.closest('.rev-row').style.pointerEvents='none';"
-            style="background:${bg};color:${fc};border:1px solid ${fc}33;border-radius:4px;font-size:10px;padding:2px 5px;cursor:pointer;min-height:unset;line-height:1;" title="Quality ${q}">${lbl}</button>`
-        ).join('') + `</span>`;
-      revLines.push(
-        `<div class="rev-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 0;border-bottom:1px solid #0f172a;">` +
-        `<span>🔁 <strong>${r.subjectName}</strong> → ${studyData.subjects[r.subjectName].units[r.unitIndex]?.name} → <em>${ch.name}</em></span>` +
-        ` <span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:1px 5px;border-radius:4px;">${nextR}</span>` +
-        pageTag + diffTag + overdueTag + qualBtns +
-        ` <span class="rev-meta" data-key="${r.subjectName}||${studyData.subjects[r.subjectName].units[r.unitIndex]?.name}||${ch.name}"></span>` +
-        `</div>`
-      );
-    });
-    if (revisionDue.length > showCount) {
-      revLines.push(`<span style="color:#64748b;font-size:12px;">+ ${revisionDue.length - showCount} more chapters due</span>`);
-    }
-  }
-
+  // ── INTELLIGENT REVISION BLOCK (R1–R8) ──────────────────────────────────
+  let revPlan      = _computeRevisionPlan(revisionDue, revisionMins, topSubject);
+  let revisionHtml = revPlan.lines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
   // ── RENDER ────────────────────────────────────────────────────
   // #20 — carry-forward / pinned badge
   let carryTag = carriedForward
@@ -455,28 +893,48 @@ function generatePlan() {
     ? `<div style="font-size:11px;color:#f59e0b;margin:6px 0 3px;font-weight:700;border-top:1px solid #1e293b;padding-top:6px;">⏩ Continuing with ${secondarySubject}:</div>` +
       secondaryLines.map(l => `<div style="margin-bottom:6px;line-height:1.5;">${l}</div>`).join("") : "";
 
-  let studyHtml    = studyLines.map(l => `<div style="margin-bottom:6px;line-height:1.5;">${l}</div>`).join("") + secondaryHtml;
-  let qbankHtml    = qbankLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
-  let revisionHtml = revLines.map(l   => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
+  // S5: interleaving html
+  let interleaveHtml = interleaveLines.length > 0
+    ? `<div style="margin:6px 0 3px;padding:5px 10px;background:#1a1a2e;border:1px solid #4f46e5;border-radius:8px;">` +
+      `<div style="font-size:11px;color:#a5b4fc;font-weight:700;margin-bottom:3px;">🔀 Interleave — ${interleaveSubject}` +
+      ` <span style="font-weight:400;color:#6366f1;">${consecutiveSameDays}d streak on ${topSubject} → inserting 1 chapter from different subject</span></div>` +
+      interleaveLines.map(l => `<div style="line-height:1.5;">${l}</div>`).join("") + `</div>` : "";
 
-  // #14 — recommended session order
+  let studyHtml = studyLines.map(l => `<div style="margin-bottom:6px;line-height:1.5;">${l}</div>`).join("") + secondaryHtml + interleaveHtml;
+  let qbankHtml = qbankLines.map(l => `<div style="margin-bottom:4px;line-height:1.5;">${l}</div>`).join("");
+
+  // #14 — recommended session order (R6-batch-aware, flashcards AFTER revision)
   let orderItems = revisionDue.length > 0
-    ? ["🔁 Revision (memory first)", "📖 New study", "🧪 Qbank practice", "🃏 Flashcards"]
-    : ["📖 New study", "🧪 Qbank practice", "🃏 Flashcards"];
+    ? (revPlan.overflowCount > 0
+        ? ["🔁 Revision Batch 1", "🃏 Flashcards", "📖 New study", "🧪 Qbank", "🔁 Revision Batch 2"]
+        : ["🔁 Revision (memory first)", "🃏 Flashcards", "📖 New study", "🧪 Qbank"])
+    : ["🃏 Flashcards", "📖 New study", "🧪 Qbank"];
 
   // #17 — Pomodoro session suggestion
   let totalBlocks25 = Math.ceil((adjHours * 60) / 30);
 
-  // #19 — Plan summary header bar
+  // FC4: reserved cards label in summary
+  let cardsLabel = cardsHrsReserve > 0
+    ? `<span style="font-size:12px;color:#f59e0b;" id="plan-card-summary">🃏 ~${cardsHrsReserve}h</span>`
+    : `<span style="font-size:12px;color:#475569;" id="plan-card-summary">🃏 …</span>`;
+
+  // S4 momentum + S3 tomorrow warning hints
+  let contextHints = [momentumHint, tomorrowWarnHTML].filter(Boolean).join('');
+
+  let revisionHeader = revisionDue.length === 0
+    ? `🔁 REVISION — nothing due today`
+    : `🔁 REVISION — ${revisionTime} hrs · ${revPlan.fittedCount} of ${revisionDue.length} fit${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}${revPlan.overflowCount > 0 ? ` · ${revPlan.overflowCount} → Batch 2` : ""}`;
+
+  // #19 — Plan summary header bar (FC4: cards included in total)
   let summaryBar = `
     <div style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;
       border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;
       align-items:center;gap:10px;flex-wrap:wrap;">
-      <span style="font-size:13px;font-weight:800;color:#f1f5f9;">⏱ ${adjHours.toFixed(1)}h plan</span>
+      <span style="font-size:13px;font-weight:800;color:#f1f5f9;">⏱ ${adjHours.toFixed(1)}h</span>
       <span style="font-size:12px;color:#3b82f6;">📖 ${studyTime}h</span>
       <span style="font-size:12px;color:#10b981;">🧪 ${qbankTime}h</span>
       <span style="font-size:12px;color:#8b5cf6;">🔁 ${revisionTime}h</span>
-      <span id="plan-card-summary" style="font-size:12px;color:#f59e0b;">🃏 …</span>
+      ${cardsLabel}
       <span style="margin-left:auto;font-size:11px;color:#475569;">🍅 ${totalBlocks25} Pomodoros</span>
     </div>`;
 
@@ -495,6 +953,7 @@ function generatePlan() {
         📖 STUDY — ${studyTime} hrs total${pagesBudget > 0 ? " · ~" + pagesBudget + " pages" : ""}${carryTag}
       </div>
       ${studyHtml}
+      ${contextHints}
     </div>
     <div id="sw-slot-study"></div>
 
@@ -508,7 +967,7 @@ function generatePlan() {
 
     <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;margin-top:8px;border:1px solid #1e293b;border-bottom:none;">
       <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
-        🔁 REVISION — ${revisionTime} hrs · ${revisionDue.length} due${overdueCount > 0 ? ` (${overdueCount} overdue)` : ""}
+        ${revisionHeader}
       </div>
       ${revisionHtml}
     </div>
@@ -522,10 +981,14 @@ function generatePlan() {
   studyData.dailyPlan = {
     date: today(),
     study: { subject: topSubject, unitIndex: ptr.unit, chapterIndex: ptr.chapter, planChapters },
-    qbank: { subject: qSubject },
+    qbank: {
+      subject: qSubject,
+      iqAllocations: iqAllocations.map(a => ({ subjectName: a.subjectName, unitName: a.unitName, qs: a.qs }))
+    },
     revisionCount: revisionDue.length, overdueCount,
     hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
     studyTime, qbankTime, revisionTime,
+    cardsHrsReserve: parseFloat(cardsHrsReserve.toFixed(1)),
     burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
     carriedForward, pinnedSubject: pinnedSubject || null,
     completed: false,
@@ -534,7 +997,7 @@ function generatePlan() {
       study:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(studyTime)*3600) },
       qbank:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(qbankTime)*3600) },
       revision: { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revisionTime)*3600) },
-      cards:    { accumulated:0, startedAt:null, running:false, targetSecs: 0 }
+      cards:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(cardsHrsReserve*3600) }
     }
   };
 
@@ -551,9 +1014,10 @@ function generatePlan() {
   _enrichRevisionBlock();
 }
 
-// ─── Flashcards Due block — appended async to plan output ─────────────────
-// Called after generatePlan() renders HTML and after renderSavedPlan()
-// replays saved HTML. Fetches live due count, never stored in savedHTML.
+// ─── Flashcards Due block — FC1–FC5 smart version ────────────────────────
+// FC1: per-subject breakdown  FC2: same-session subject first
+// FC3: split warning if >60   FC4: cards from total hours (not extra)
+// FC5: calibrated minsPerCard from history
 async function _appendFlashcardsPlanBlock() {
   let planEl = document.getElementById("planOutput");
   if (!planEl) return;
@@ -565,16 +1029,31 @@ async function _appendFlashcardsPlanBlock() {
 
   try {
     let dueCount = await getDueCardCount();
-    // #18 — use history-calibrated mins/card if available (stored by _autoCalibrateSpeeds future hook)
-    let minsPerCard = studyData.reviewMinsPerCard || 1.5;
-    let estMins  = Math.max(5, Math.round(dueCount * minsPerCard));
-    let estHrs   = (estMins / 60).toFixed(1);
 
-    // Update #19 summary bar card slot
+    // FC5: use calibrated minsPerCard
+    let minsPerCard = studyData.reviewMinsPerCard || 1.5;
+    let estMins     = Math.max(5, Math.round(dueCount * minsPerCard));
+    let estHrs      = parseFloat((estMins / 60).toFixed(1));
+
+    // Store fcDueEstimate for next session's FC4 card-time reservation
+    studyData.fcDueEstimate = dueCount;
+    saveData();
+
+    // FC4: Update summary bar — reflect actual cards time as part of total
     let summaryCardEl = document.getElementById('plan-card-summary');
     if (summaryCardEl) {
-      summaryCardEl.textContent = dueCount === 0 ? '🃏 none due' : `🃏 ${estHrs}h (${dueCount})`;
-      summaryCardEl.style.color = dueCount === 0 ? '#10b981' : '#f59e0b';
+      if (dueCount === 0) {
+        summaryCardEl.textContent = '🃏 none due';
+        summaryCardEl.style.color = '#10b981';
+      } else {
+        summaryCardEl.textContent = `🃏 ${estHrs}h (${dueCount})`;
+        summaryCardEl.style.color = '#f59e0b';
+      }
+      // Also update the cards stopwatch target with actual time
+      if (studyData.dailyPlan?.stopwatches?.cards) {
+        studyData.dailyPlan.stopwatches.cards.targetSecs = Math.round(estHrs * 3600);
+        saveData();
+      }
     }
 
     let block = document.createElement("div");
@@ -595,14 +1074,70 @@ async function _appendFlashcardsPlanBlock() {
             text-decoration:none;white-space:nowrap;flex-shrink:0;">Browse →</a>
         </div>`;
     } else {
-      let urgencyColor  = dueCount >= 50 ? "#ef4444" : dueCount >= 20 ? "#f59e0b" : "#3b82f6";
-      let urgencyLabel  = dueCount >= 50 ? "High priority" : dueCount >= 20 ? "Moderate" : "On track";
+      let urgencyColor = dueCount >= 50 ? "#ef4444" : dueCount >= 20 ? "#f59e0b" : "#3b82f6";
+      let urgencyLabel = dueCount >= 50 ? "High priority" : dueCount >= 20 ? "Moderate" : "On track";
+
+      // FC3: split recommendation if > 60
+      let splitHtml = '';
+      if (dueCount > 60) {
+        splitHtml = `<div style="background:#422006;border:1px solid #f97316;border-radius:6px;padding:5px 9px;margin-top:6px;font-size:11px;color:#fed7aa;">` +
+          `⚡ ${dueCount} cards — <strong>split session:</strong> ~30 before study, rest after new study</div>`;
+      }
+
+      // FC1+FC2: per-subject breakdown with same-session subject first
+      let subjectBreakdownHtml = '';
+      let todaySubject = studyData.dailyPlan?.study?.subject || null;
+      try {
+        let cardResult = typeof getCardCounts === "function" ? await getCardCounts() : null;
+        let cardMap    = cardResult?.data || {};
+
+        // Aggregate by subject
+        let subjTotals = {};
+        Object.entries(cardMap).forEach(([key, val]) => {
+          let sn = key.split('||')[0];
+          if (!subjTotals[sn]) subjTotals[sn] = { total: 0, due: 0 };
+          subjTotals[sn].total += val.total || 0;
+          subjTotals[sn].due   += val.due   || 0;
+        });
+
+        // FC2: sort — same-session subject first, then by due count desc
+        let subjEntries = Object.entries(subjTotals)
+          .filter(([, v]) => v.due > 0)
+          .sort((a, b) => {
+            let aFirst = a[0] === todaySubject ? 1 : 0;
+            let bFirst = b[0] === todaySubject ? 1 : 0;
+            if (bFirst !== aFirst) return bFirst - aFirst;
+            return b[1].due - a[1].due;
+          });
+
+        if (subjEntries.length > 0) {
+          subjectBreakdownHtml = `<div style="margin-top:7px;display:flex;flex-wrap:wrap;gap:5px;">` +
+            subjEntries.map(([sn, v]) => {
+              let sameSession = sn === todaySubject;
+              let bg  = sameSession ? '#0f2a1a' : '#0a1628';
+              let bdr = sameSession ? '#16a34a' : '#1e293b';
+              let clr = sameSession ? '#4ade80' : '#93c5fd';
+              let lbl = sameSession ? `🔥 ${sn}` : sn;
+              let mins = Math.round(v.due * minsPerCard);
+              return `<span style="background:${bg};border:1px solid ${bdr};color:${clr};` +
+                `font-size:11px;padding:3px 9px;border-radius:8px;">${lbl}: ${v.due} due (~${mins}m)</span>`;
+            }).join('') +
+          `</div>`;
+
+          // FC2: same-session label
+          if (todaySubject && subjTotals[todaySubject]?.due > 0) {
+            subjectBreakdownHtml += `<div style="font-size:11px;color:#16a34a;margin-top:5px;">🔥 <strong>${todaySubject} cards first</strong> — same-session consolidation ↑ retention</div>`;
+          }
+        }
+      } catch (_) { /* subject breakdown is optional */ }
+
       block.innerHTML = `
         <div style="background:#0f172a;border-radius:10px 10px 0 0;padding:10px;
           border:1px solid #1e293b;border-bottom:none;">
           <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;
             letter-spacing:.06em;margin-bottom:6px;">
             🃏 FLASHCARDS — ~${estHrs} hrs · ${dueCount} due
+            <span style="font-weight:400;color:#475569;font-size:10px;margin-left:6px;">(included in today's total)</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="flex:1;">
@@ -612,9 +1147,8 @@ async function _appendFlashcardsPlanBlock() {
             <span style="background:${urgencyColor}22;color:${urgencyColor};
               padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;">${urgencyLabel}</span>
           </div>
-          <div style="font-size:12px;color:#475569;margin-top:6px;">
-            Estimated ${estMins} min · ${dueCount >= 50 ? "Do this before new study" : "Fits alongside your plan"}
-          </div>
+          ${subjectBreakdownHtml}
+          ${splitHtml}
         </div>
         <div style="padding:8px;background:#0f172a;border-radius:0 0 10px 10px;
           border:1px solid #1e293b;border-top:none;">
@@ -625,24 +1159,22 @@ async function _appendFlashcardsPlanBlock() {
           </a>
         </div>
         <div id="sw-slot-cards"></div>`;
-
     }
 
     planEl.appendChild(block);
 
-    // Inject cards stopwatch into the slot (only when cards are due)
+    // Inject cards stopwatch (only when cards are due)
     if (dueCount > 0 && typeof swInject === "function") {
-      // Ensure cards stopwatch state exists in dailyPlan
-      if (studyData.dailyPlan && studyData.dailyPlan.stopwatches) {
+      if (studyData.dailyPlan?.stopwatches) {
         if (!studyData.dailyPlan.stopwatches.cards) {
           studyData.dailyPlan.stopwatches.cards = {
             accumulated: 0, startedAt: null, running: false,
-            targetSecs: Math.round(parseFloat(estHrs) * 3600)
+            targetSecs: Math.round(estHrs * 3600)
           };
           saveData();
         }
       }
-      swInject("cards", parseFloat(estHrs));
+      swInject("cards", estHrs);
     }
   } catch (e) {
     console.warn("_appendFlashcardsPlanBlock:", e);
