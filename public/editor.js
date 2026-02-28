@@ -231,9 +231,9 @@ function renderEditor() {
             <details style="font-size:12px;">
               <summary style="cursor:pointer;color:#64748b;padding:2px 0;">📋 Bulk paste chapters</summary>
               <div style="margin-top:6px;">
-                <textarea id="bulkCh-${esc(subjectName)}-${ui}" placeholder="Chapter Name&#10;Another Chapter | 10-25&#10;Third Chapter | 26-40" rows="4"
+                <textarea id="bulkCh-${esc(subjectName)}-${ui}" placeholder="Chapter Name&#10;Another Chapter (10-25)&#10;Third Chapter (26-40)" rows="4"
                   style="width:100%;font-size:12px;padding:6px 8px;background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;resize:vertical;"></textarea>
-                <div style="font-size:10px;color:#475569;margin:3px 0 5px;">Format: <code style="color:#64748b;">Chapter Name</code> or <code style="color:#64748b;">Chapter Name | startPg-endPg</code></div>
+                <div style="font-size:10px;color:#475569;margin:3px 0 5px;">Format: <code style="color:#64748b;">Chapter Name</code> or <code style="color:#64748b;">Chapter Name (startPg-endPg)</code></div>
                 <button onclick="bulkAddChapters('${esc(subjectName)}',${ui})" style="margin-top:4px;padding:5px 14px;font-size:12px;">Add All</button>
               </div>
             </details>
@@ -436,12 +436,12 @@ function bulkAddChapters(subjectName, ui) {
   let lines = ta.value.split("\n").map(l => l.trim()).filter(Boolean);
   if (!lines.length) return;
   lines.forEach(line => {
-    // Parse optional page range: "Chapter Name | 10-25" or "Chapter Name|10-25"
+    // Parse optional page range: "Chapter Name (10-25)" or "Chapter Name"
     let name, startPage = 0, endPage = 0;
-    let pipeIdx = line.lastIndexOf("|");
-    if (pipeIdx !== -1) {
-      name = line.slice(0, pipeIdx).trim();
-      let pagesPart = line.slice(pipeIdx + 1).trim(); // e.g. "10-25"
+    let parenMatch = line.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    if (parenMatch) {
+      name = parenMatch[1].trim();
+      let pagesPart = parenMatch[2].trim(); // e.g. "10-25"
       let dashIdx = pagesPart.indexOf("-");
       if (dashIdx !== -1) {
         startPage = parseInt(pagesPart.slice(0, dashIdx)) || 0;
