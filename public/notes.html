@@ -249,6 +249,7 @@
 
 <script>
 // ── Notes page boot ───────────────────────────────────────────────
+// initNotes() handles all URL restore + popstate — no duplicate needed here
 document.addEventListener("DOMContentLoaded", async function () {
   if (typeof initNotes === "function") await initNotes();
 
@@ -261,40 +262,6 @@ document.addEventListener("DOMContentLoaded", async function () {
       badge.style.display = "inline-block";
     }
   }
-
-  // Deep-link: restore from URL params or open directly
-  let params   = new URLSearchParams(window.location.search);
-  let subject  = params.get("subject");
-  let unit     = params.get("unit");
-  let chapter  = params.get("chapter");
-  let noteType = params.get("noteType") || 'general';
-  let view     = params.get("view");
-  if (view === 'note' && subject && unit && chapter) {
-    openNote(subject, unit, chapter, noteType, true);
-  } else if (view === 'note-types' && subject && unit && chapter) {
-    showNoteTypesView(subject, unit, chapter, true);
-  } else if (view === 'chapters' && subject && unit) {
-    showChaptersView(subject, unit, true);
-  } else if (view === 'units' && subject) {
-    showUnitsView(subject, true);
-  } else if (subject && unit && chapter) {
-    openNote(subject, unit, chapter, noteType, true);
-  } else if (subject && unit && !chapter) {
-    showChaptersView(subject, unit, true);
-  }
-
-  // Browser back/forward support
-  window.addEventListener('popstate', function(e) {
-    let s = e.state;
-    if (!s) { showSubjectsView(true); return; }
-    if (s.view === 'subjects')   showSubjectsView(true);
-    else if (s.view === 'units') showUnitsView(s.subject, true);
-    else if (s.view === 'chapters') showChaptersView(s.subject, s.unit, true);
-    else if (s.view === 'note-types') showNoteTypesView(s.subject, s.unit, s.chapter, true);
-    else if (s.view === 'unit-note-types') showUnitNoteTypesView(s.subject, s.unit, true);
-    else if (s.view === 'unit-notes-by-type') openUnitNotesByType(s.subject, s.unit, s.noteType || 'general', true);
-    else if (s.view === 'note') openNote(s.subject, s.unit, s.chapter, s.noteType || 'general', true);
-  });
 });
 </script>
 

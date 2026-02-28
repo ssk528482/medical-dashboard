@@ -119,11 +119,12 @@
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <div>
       <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:3px;">Hours Available</label>
-      <input type="number" id="dailyHours" style="width:90px;" min="1" max="16" placeholder="hrs">
+      <input type="number" id="dailyHours" style="width:90px;" min="1" max="16" placeholder="hrs" oninput="checkHoursChange()">
     </div>
-    <div style="display:flex;gap:8px;align-items:flex-end;padding-top:18px;">
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding-top:18px;">
       <button id="generateButton" onclick="generatePlan()">Generate Plan</button>
-      <button onclick="resetTodayPlan()" style="background:#ef4444;font-size:12px;padding:8px 10px;margin-top:0;">Reset</button>
+      <button id="regenButton" onclick="regeneratePlan()" style="display:none;background:#f59e0b;color:#0f172a;font-size:12px;padding:8px 13px;margin-top:0;font-weight:700;">↺ Regen</button>
+      <button onclick="confirmResetPlan()" style="background:#ef4444;font-size:12px;padding:8px 10px;margin-top:0;">Reset</button>
     </div>
   </div>
   <!-- #16 Subject pin override -->

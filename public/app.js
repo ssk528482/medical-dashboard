@@ -882,6 +882,7 @@ function renderSavedPlan() {
 
   let hoursInput = document.getElementById("dailyHours");
   if (hoursInput && plan.hours) hoursInput.value = plan.hours;
+  if (typeof checkHoursChange === 'function') checkHoursChange();
 
   let daysLeft   = daysUntilExam();
   let burnoutWarn = (plan.burnoutAdj && plan.burnoutAdj < 1.0)

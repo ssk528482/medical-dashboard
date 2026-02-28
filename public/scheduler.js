@@ -645,8 +645,18 @@ function generatePlan() {
       hours, adjustedHours: parseFloat(adjHours.toFixed(1)),
       studyTime: "0", qbankTime: qbTime2, revisionTime: revTime2,
       burnoutAdj: parseFloat(burnoutAdj.toFixed(3)),
-      completed: false, examCountdownMode: true
+      completed: false, examCountdownMode: true,
+      stopwatches: (function() {
+        let savedSW = (studyData._savedStopwatches?.date === today()) ? studyData._savedStopwatches : null;
+        return {
+          study:    { accumulated: savedSW?.study    || 0, startedAt:null, running:false, targetSecs: 0 },
+          qbank:    { accumulated: savedSW?.qbank    || 0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(qbTime2)*3600) },
+          revision: { accumulated: savedSW?.revision || 0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revTime2)*3600) },
+          cards:    { accumulated: savedSW?.cards    || 0, startedAt:null, running:false, targetSecs: 0 }
+        };
+      })()
     };
+    delete studyData._savedStopwatches;
     saveData();
     document.getElementById("generateButton").disabled = true;
     return;
@@ -993,15 +1003,21 @@ function generatePlan() {
     carriedForward, pinnedSubject: pinnedSubject || null,
     completed: false,
     renderedHTML: _planHTML,
-    stopwatches: {
-      study:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(studyTime)*3600) },
-      qbank:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(qbankTime)*3600) },
-      revision: { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revisionTime)*3600) },
-      cards:    { accumulated:0, startedAt:null, running:false, targetSecs: Math.round(cardsHrsReserve*3600) }
-    }
+    stopwatches: (function() {
+      // Restore any accumulated time saved before a same-day plan reset
+      let savedSW = (studyData._savedStopwatches?.date === today()) ? studyData._savedStopwatches : null;
+      return {
+        study:    { accumulated: savedSW?.study    || 0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(studyTime)*3600) },
+        qbank:    { accumulated: savedSW?.qbank    || 0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(qbankTime)*3600) },
+        revision: { accumulated: savedSW?.revision || 0, startedAt:null, running:false, targetSecs: Math.round(parseFloat(revisionTime)*3600) },
+        cards:    { accumulated: savedSW?.cards    || 0, startedAt:null, running:false, targetSecs: Math.round(cardsHrsReserve*3600) }
+      };
+    })()
   };
 
+  delete studyData._savedStopwatches; // clean up after restore
   saveData();
+  checkHoursChange(); // sync regen button after fresh plan is saved
 
   if (typeof swInject === "function") {
     swInject("study",    parseFloat(studyTime));
@@ -1233,12 +1249,121 @@ function _getChapterPhaseLabel(ch) {
   return "Read ✓";
 }
 
+// ── Capture real elapsed stopwatch times (running or paused) ────
+function _captureStopwatches() {
+  // swElapsed() returns accumulated + live running delta, so it's correct
+  // whether the timer is currently ticking or paused.
+  return {
+    date:     today(),
+    study:    (typeof swElapsed === 'function' ? swElapsed('study')    : 0),
+    qbank:    (typeof swElapsed === 'function' ? swElapsed('qbank')    : 0),
+    revision: (typeof swElapsed === 'function' ? swElapsed('revision') : 0),
+    cards:    (typeof swElapsed === 'function' ? swElapsed('cards')    : 0)
+  };
+}
+
+// ── Reset confirmation popup ─────────────────────────────────────
+function confirmResetPlan() {
+  let plan = studyData.dailyPlan;
+  let sw   = plan?.stopwatches;
+  let fmtH = s => s > 0 ? (s/3600).toFixed(1)+'h' : '—';
+
+  let keepHTML = '';
+  if (sw) {
+    // Use swElapsed so running timers are read correctly
+    let sAcc = (typeof swElapsed === 'function' ? swElapsed('study')    : sw.study?.accumulated    || 0);
+    let qAcc = (typeof swElapsed === 'function' ? swElapsed('qbank')    : sw.qbank?.accumulated    || 0);
+    let rAcc = (typeof swElapsed === 'function' ? swElapsed('revision') : sw.revision?.accumulated || 0);
+    let cAcc = (typeof swElapsed === 'function' ? swElapsed('cards')    : sw.cards?.accumulated    || 0);
+    let totalSecs = sAcc + qAcc + rAcc + cAcc;
+    keepHTML =
+      `<div style="background:rgba(16,185,129,0.09);border:1px solid rgba(16,185,129,0.28);
+         border-radius:8px;padding:8px 12px;margin:10px 0 6px;font-size:12px;">
+         <div style="font-weight:700;color:#10b981;margin-bottom:5px;">⏱ Stopwatch times preserved:</div>
+         <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 14px;">
+           <span style="color:var(--text-muted);">📖 Study</span>
+           <span style="font-weight:700;color:var(--text);">${fmtH(sAcc)}</span>
+           <span style="color:var(--text-muted);">🧪 QBank</span>
+           <span style="font-weight:700;color:var(--text);">${fmtH(qAcc)}</span>
+           <span style="color:var(--text-muted);">🔁 Revision</span>
+           <span style="font-weight:700;color:var(--text);">${fmtH(rAcc)}</span>
+           <span style="color:var(--text-muted);">🃏 Cards</span>
+           <span style="font-weight:700;color:var(--text);">${fmtH(cAcc)}</span>
+         </div>
+         ${totalSecs > 0 ? `<div style="margin-top:5px;font-size:11px;color:var(--text-dim);">Total tracked today: ${(totalSecs/3600).toFixed(1)}h — will auto-restore on next generate.</div>` : ''}
+       </div>
+       <div style="font-size:12px;color:var(--text-dim);line-height:1.6;">
+         ✖ The scheduled chapter list will be wiped.<br>
+         ✔ Your evening log &amp; daily history are unaffected.
+       </div>`;
+  }
+
+  showConfirm(
+    'Reset Today\'s Plan?',
+    'The plan will be cleared so you can regenerate it with new hours or syllabus changes.' + keepHTML,
+    resetTodayPlan,
+    'Reset & Preserve Times',
+    true
+  );
+}
+
+// ── Regenerate with new hours (preserves stopwatches) ────────────
+function regeneratePlan() {
+  let plan = studyData.dailyPlan;
+  if (plan?.date === today()) {
+    // Capture BEFORE deleting the plan (swElapsed reads from dailyPlan)
+    studyData._savedStopwatches = _captureStopwatches();
+    // Pause any running timer so startedAt doesn't linger
+    if (plan.stopwatches) {
+      ['study','qbank','revision','cards'].forEach(k => {
+        let s = plan.stopwatches[k];
+        if (s?.running) { s.accumulated = studyData._savedStopwatches[k]; s.running = false; s.startedAt = null; }
+      });
+    }
+    delete studyData.dailyPlan;
+    saveData();
+  }
+  let regenBtn = document.getElementById('regenButton');
+  if (regenBtn) regenBtn.style.display = 'none';
+  document.getElementById('generateButton').disabled = false;
+  generatePlan();
+}
+
+// ── Show/hide Regenerate button based on hours change ────────────
+function checkHoursChange() {
+  let plan    = studyData?.dailyPlan;
+  let regenBtn = document.getElementById('regenButton');
+  if (!regenBtn) return;
+
+  if (!plan || plan.date !== today()) {
+    regenBtn.style.display = 'none';
+    return;
+  }
+
+  let newVal    = parseFloat(document.getElementById('dailyHours')?.value);
+  let savedHrs  = plan.hours;
+  if (!newVal || !savedHrs || newVal === savedHrs) {
+    regenBtn.style.display = 'none';
+  } else {
+    let diff = (newVal - savedHrs).toFixed(1);
+    let sign = diff > 0 ? '+' : '';
+    regenBtn.textContent  = `↺ Regen ${newVal}h (${sign}${diff}h)`;
+    regenBtn.style.display = '';
+  }
+}
+
 function resetTodayPlan() {
-  if (studyData.dailyPlan?.date === today()) delete studyData.dailyPlan;
+  if (studyData.dailyPlan?.date === today()) {
+    // Capture real elapsed time (swElapsed handles running timers correctly)
+    studyData._savedStopwatches = _captureStopwatches();
+    delete studyData.dailyPlan;
+  }
   saveData();
-  document.getElementById("planOutput").innerHTML = "";
-  document.getElementById("generateButton").disabled = false;
-  showToast("Today's plan reset.", 'info');
+  document.getElementById('planOutput').innerHTML = '';
+  document.getElementById('generateButton').disabled = false;
+  let regenBtn = document.getElementById('regenButton');
+  if (regenBtn) regenBtn.style.display = 'none';
+  showToast('Today\'s plan reset. Stopwatch times preserved.', 'info');
 }
 
 function submitEvening() {

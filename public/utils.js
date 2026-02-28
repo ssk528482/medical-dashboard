@@ -177,3 +177,99 @@ function _updateThemeBtn() {
   if (icon)  icon.textContent  = isLight ? '\uD83C\uDF19' : '\u2600\uFE0F';
   if (label) label.textContent = isLight ? 'Dark Mode' : 'Light Mode';
 }
+
+// ─── LaTeX → Unicode converter ───────────────────────────────────────────────
+// Converts $...$ and $$...$$ math blocks (and bare \commands) to readable Unicode.
+// Used on paste into notes editor and at render time so old notes are also fixed.
+function latexToUnicode(text) {
+  if (!text) return text;
+
+  const MAP = {
+    // Arrows
+    '\\rightarrow':'→','\\to':'→','\\longrightarrow':'⟶',
+    '\\leftarrow':'←','\\longleftarrow':'⟵',
+    '\\leftrightarrow':'↔','\\longleftrightarrow':'⟺',
+    '\\Rightarrow':'⇒','\\Leftarrow':'⇐','\\Leftrightarrow':'⇔',
+    '\\uparrow':'↑','\\downarrow':'↓','\\updownarrow':'↕',
+    '\\nearrow':'↗','\\searrow':'↘','\\nwarrow':'↖','\\swarrow':'↙',
+    // Greek lowercase
+    '\\alpha':'α','\\beta':'β','\\gamma':'γ','\\delta':'δ',
+    '\\epsilon':'ε','\\varepsilon':'ε','\\zeta':'ζ','\\eta':'η',
+    '\\theta':'θ','\\vartheta':'ϑ','\\iota':'ι','\\kappa':'κ',
+    '\\lambda':'λ','\\mu':'μ','\\nu':'ν','\\xi':'ξ',
+    '\\pi':'π','\\varpi':'ϖ','\\rho':'ρ','\\varrho':'ϱ',
+    '\\sigma':'σ','\\varsigma':'ς','\\tau':'τ','\\upsilon':'υ',
+    '\\phi':'φ','\\varphi':'φ','\\chi':'χ','\\psi':'ψ','\\omega':'ω',
+    // Greek uppercase
+    '\\Gamma':'Γ','\\Delta':'Δ','\\Theta':'Θ','\\Lambda':'Λ',
+    '\\Xi':'Ξ','\\Pi':'Π','\\Sigma':'Σ','\\Upsilon':'Υ',
+    '\\Phi':'Φ','\\Psi':'Ψ','\\Omega':'Ω',
+    // Comparison / equality
+    '\\geq':'≥','\\ge':'≥','\\leq':'≤','\\le':'≤',
+    '\\neq':'≠','\\ne':'≠','\\approx':'≈','\\equiv':'≡',
+    '\\sim':'∼','\\simeq':'≃','\\cong':'≅','\\propto':'∝',
+    // Arithmetic
+    '\\times':'×','\\div':'÷','\\pm':'±','\\mp':'∓',
+    '\\cdot':'·','\\bullet':'•','\\circ':'∘',
+    // Calculus / set theory
+    '\\infty':'∞','\\partial':'∂','\\nabla':'∇',
+    '\\forall':'∀','\\exists':'∃','\\nexists':'∄',
+    '\\in':'∈','\\notin':'∉','\\ni':'∋',
+    '\\subset':'⊂','\\supset':'⊃','\\subseteq':'⊆','\\supseteq':'⊇',
+    '\\cup':'∪','\\cap':'∩','\\emptyset':'∅','\\varnothing':'∅',
+    '\\sum':'∑','\\prod':'∏','\\int':'∫','\\sqrt':'√',
+    // Logic / misc
+    '\\therefore':'∴','\\because':'∵',
+    '\\angle':'∠','\\perp':'⊥','\\parallel':'∥',
+    '\\oplus':'⊕','\\otimes':'⊗',
+    '\\degree':'°','\\circ':'°',
+    '\\ldots':'…','\\cdots':'⋯','\\vdots':'⋮','\\ddots':'⋱',
+    '\\hbar':'ℏ','\\ell':'ℓ','\\Re':'ℜ','\\Im':'ℑ',
+    '\\aleph':'ℵ','\\prime':'′','\\dag':'†','\\ddag':'‡',
+    '\\%':'%','\\&':'&','\\$':'$','\\#':'#',
+  };
+
+  const SUP = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹',
+    '+':'⁺','-':'⁻','=':'⁼','(':'⁽',')':'⁾','n':'ⁿ','i':'ⁱ',
+    'a':'ᵃ','b':'ᵇ','c':'ᶜ','d':'ᵈ','e':'ᵉ','f':'ᶠ','g':'ᵍ','h':'ʰ',
+    'k':'ᵏ','l':'ˡ','m':'ᵐ','o':'ᵒ','p':'ᵖ','r':'ʳ','s':'ˢ','t':'ᵗ',
+    'u':'ᵘ','v':'ᵛ','w':'ʷ','x':'ˣ','y':'ʸ','z':'ᶻ'};
+  const SUB = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉',
+    '+':'₊','-':'₋','=':'₌','(':'₍',')':'₎',
+    'a':'ₐ','e':'ₑ','i':'ᵢ','o':'ₒ','r':'ᵣ','u':'ᵤ','v':'ᵥ','x':'ₓ','n':'ₙ'};
+
+  function _proc(inner) {
+    let r = inner;
+    // Named commands — longest-first to avoid partial matches
+    let cmds = Object.keys(MAP).sort((a,b) => b.length - a.length);
+    cmds.forEach(cmd => {
+      let esc = cmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      r = r.replace(new RegExp(esc + '(?![a-zA-Z])', 'g'), MAP[cmd]);
+    });
+    // \frac{a}{b} → a/b
+    r = r.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+    // \text{}, \mathrm{}, \mathbf{} etc → content
+    r = r.replace(/\\(?:text|math[a-z]+)\{([^}]*)\}/g, '$1');
+    // \overline{X} → X̄
+    r = r.replace(/\\overline\{([^}]{1,4})\}/g, '$1\u0305');
+    // Superscripts ^{ab} or ^x
+    r = r.replace(/\^\{([^}]+)\}/g, (_, g) => [...g].map(c => SUP[c]||c).join(''));
+    r = r.replace(/\^([0-9a-zA-Z+\-])/g, (_, c) => SUP[c] || '^'+c);
+    // Subscripts _{ab} or _x
+    r = r.replace(/_\{([^}]+)\}/g, (_, g) => [...g].map(c => SUB[c]||c).join(''));
+    r = r.replace(/_([0-9a-zA-Z])/g, (_, c) => SUB[c] || '_'+c);
+    // Strip remaining unknown \commands{} and bare braces
+    r = r.replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1');
+    r = r.replace(/\\[a-zA-Z]+/g, '');
+    r = r.replace(/[{}]/g, '');
+    return r.trim();
+  }
+
+  // $$...$$ display math → convert then unwrap
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, inner) => _proc(inner.trim()));
+  // $...$ inline math → convert then unwrap
+  text = text.replace(/\$([^$\n]+?)\$/g, (_, inner) => _proc(inner.trim()));
+  // Also convert bare \commands outside $...$ (common in Wikipedia plain-text copy)
+  text = _proc(text);
+  return text;
+}

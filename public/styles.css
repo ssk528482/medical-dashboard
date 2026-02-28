@@ -1962,6 +1962,21 @@ label {
 }
 .notes-unit-card:hover { border-color: var(--border-lt); }
 .notes-unit-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.notes-collapse-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  min-height: unset;
+  margin: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.notes-collapse-btn:hover { background: var(--card-hover, rgba(255,255,255,0.06)); color: var(--text); }
 .notes-unit-card-title { font-size: 13px; font-weight: 700; color: var(--text); }
 .notes-unit-card-preview { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 .notes-unit-card-img { max-width: 100%; max-height: 100px; object-fit: cover; border-radius: var(--radius-sm); margin-top: 8px; }
@@ -4760,4 +4775,132 @@ body.light .kbd-hint {
   background: #f4f7fb;
   border-color: #c4cfe0;
 }
+
+/* ════════════════════════════════════════════════════════════
+   LIGHT MODE — scheduler.js Smart Planner HTML overrides
+   (S1–S7, R1–R8, FC1–FC5, QBank IQ engine)
+   All new JS-generated inline styles targeted here.
+   ════════════════════════════════════════════════════════════ */
+
+/* Summary bar gradient (top + pre-exam version) */
+body.light [style*="background:linear-gradient(135deg,#1e293b,#0f172a)"],
+body.light [style*="background: linear-gradient(135deg, #1e293b, #0f172a)"] {
+  background: linear-gradient(135deg, #f1f5f9, #e8edf5) !important;
+  border-color: var(--border) !important;
+}
+
+/* Darkest navy #0a0f1a — Batch 2 dashed container */
+body.light [style*="background:#0a0f1a"],
+body.light [style*="background: #0a0f1a"] {
+  background: var(--card) !important;
+}
+body.light [style*="border:1px dashed #334155"],
+body.light [style*="border: 1px dashed #334155"] {
+  border-color: var(--border-lt) !important;
+}
+
+/* Deep purple navy #1e1a3a — QBank pairing banner */
+body.light [style*="background:#1e1a3a"],
+body.light [style*="background: #1e1a3a"] {
+  background: rgba(139,92,246,0.08) !important;
+}
+body.light [style*="border:1px solid #6d28d9"],
+body.light [style*="border: 1px solid #6d28d9"] {
+  border-color: rgba(139,92,246,0.40) !important;
+}
+
+/* Very dark navy #1a1a2e — Batch split banner + interleave block */
+body.light [style*="background:#1a1a2e"],
+body.light [style*="background: #1a1a2e"] {
+  background: rgba(99,102,241,0.06) !important;
+}
+body.light [style*="border:1px solid #4f46e5"],
+body.light [style*="border: 1px solid #4f46e5"] {
+  border-color: rgba(99,102,241,0.35) !important;
+}
+
+/* Dark orange #422006 — tomorrow warn, evening tag, FC split warn, overdue moderate */
+body.light [style*="background:#422006"],
+body.light [style*="background: #422006"] {
+  background: rgba(249,115,22,0.08) !important;
+  color: #c2410c !important;
+}
+
+/* Dark red #3b1515 — quality score 2 btn, EF low badge */
+body.light [style*="background:#3b1515"],
+body.light [style*="background: #3b1515"] {
+  background: rgba(239,68,68,0.08) !important;
+  color: #dc2626 !important;
+}
+
+/* Dark green #0f3a1a — quality score 4 btn */
+body.light [style*="background:#0f3a1a"],
+body.light [style*="background: #0f3a1a"] {
+  background: rgba(16,185,129,0.09) !important;
+  color: #047857 !important;
+}
+
+/* Dark teal-blue #0f2a3a — quality score 5 btn */
+body.light [style*="background:#0f2a3a"],
+body.light [style*="background: #0f2a3a"] {
+  background: rgba(59,130,246,0.09) !important;
+  color: #1d4ed8 !important;
+}
+
+/* Medium dark green #0f2a1a — FC same-session subject pill */
+body.light [style*="background:#0f2a1a"],
+body.light [style*="background: #0f2a1a"] {
+  background: rgba(16,185,129,0.10) !important;
+  color: #15803d !important;
+}
+
+/* Rev row bottom separator — border-bottom:#0f172a */
+body.light [style*="border-bottom:1px solid #0f172a"],
+body.light [style*="border-bottom: 1px solid #0f172a"] {
+  border-bottom-color: var(--border) !important;
+}
+
+/* Rev group header top border — border-top:#0f172a */
+body.light [style*="border-top:1px solid #0f172a"],
+body.light [style*="border-top: 1px solid #0f172a"] {
+  border-top-color: var(--border) !important;
+}
+
+/* Rev row "next revision date" badge — background:#1e293b;color:#93c5fd */
+body.light [style*="background:#1e293b;color:#93c5fd;padding:1px 5px;border-radius:4px"] {
+  background: rgba(59,130,246,0.1) !important;
+  color: #1d4ed8 !important;
+}
+
+/* Session order bar pills — background:#1e293b;color:#94a3b8;...border:1px solid #334155 */
+body.light [style*="background:#1e293b;color:#94a3b8;padding:3px 10px;border-radius:8px"] {
+  background: var(--card) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+
+/* First recall badge + Resume badge + "Continued" badge: bg:#1a3a1a already maps
+   to rgba(16,185,129,0.08) in existing rule — fix text color #4ade80 on light bg */
+body.light [style*="background:#1a3a1a;color:#4ade80"] {
+  color: #15803d !important;
+}
+body.light [style*="border:1px solid #166534"] {
+  border-color: #16a34a !important;
+}
+
+/* R8 memory-at-risk badge: bg:#450a0a (→ #fff1f2 from existing) + border fix */
+body.light [style*="border:1px solid #ef444433"] {
+  border-color: rgba(239,68,68,0.30) !important;
+}
+
+/* Light text colors that are illegible on light backgrounds */
+body.light [style*="color:#c4b5fd"] { color: #7c3aed !important; }  /* qbank banner text */
+body.light [style*="color:#a5b4fc"] { color: #4f46e5 !important; }  /* interleave header */
+body.light [style*="color:#6366f1"] { color: #4338ca !important; }  /* interleave sub-text */
+
+/* FC2 same-session note text color (#16a34a green) — stays readable on light */
+/* FC breakdown "other subject" pill already covered by #0a1628 / #1e293b rules */
+
+/* sec-subject divider label — color:#f59e0b stays readable */
+/* burnout/todProfile colors (#ef4444, #10b981, #f59e0b) — semantic, stay as-is */
 

@@ -29,7 +29,72 @@ let _findActive      = false;    // find-in-note overlay
 
 async function initNotes() {
   await _loadNotesMeta();
-  showSubjectsView(true); // don't push initial state
+
+  // ── Restore view from URL params (permalink / refresh support) ──
+  let p       = new URLSearchParams(window.location.search);
+  let view    = p.get('view');
+  let subject = p.get('subject');
+  let unit    = p.get('unit');
+  let chapter = p.get('chapter');
+  let noteType = p.get('noteType') || 'general';
+
+  let restored = false;
+  if (view && view !== 'subjects') {
+    try {
+      switch (view) {
+        case 'units':
+          if (subject) { showUnitsView(subject, true); restored = true; }
+          break;
+        case 'chapters':
+          if (subject && unit) { showChaptersView(subject, unit, true); restored = true; }
+          break;
+        case 'note-types':
+          if (subject && unit && chapter) { await showNoteTypesView(subject, unit, chapter, true); restored = true; }
+          break;
+        case 'unit-note-types':
+          if (subject && unit) { await showUnitNoteTypesView(subject, unit, true); restored = true; }
+          break;
+        case 'unit-notes-by-type':
+          if (subject && unit) { await openUnitNotesByType(subject, unit, noteType, true); restored = true; }
+          break;
+        case 'unit-stack':
+          if (subject && unit) { await openUnitView(subject, unit, true); restored = true; }
+          break;
+        case 'note':
+          if (subject && unit && chapter) { await openNote(subject, unit, chapter, noteType, true); restored = true; }
+          break;
+        case 'search':
+          // Can't restore a search — fall through to subjects
+          break;
+      }
+    } catch (e) {
+      console.warn('Notes: failed to restore view from URL', e);
+    }
+  }
+
+  if (!restored) showSubjectsView(true);
+
+  // ── Browser back / forward ──────────────────────────────────────
+  window.addEventListener('popstate', async function(e) {
+    let st = e.state;
+    if (!st || !st.view) { showSubjectsView(true); return; }
+    try {
+      switch (st.view) {
+        case 'subjects':           showSubjectsView(true); break;
+        case 'units':              showUnitsView(st.subject, true); break;
+        case 'chapters':           showChaptersView(st.subject, st.unit, true); break;
+        case 'note-types':         await showNoteTypesView(st.subject, st.unit, st.chapter, true); break;
+        case 'unit-note-types':    await showUnitNoteTypesView(st.subject, st.unit, true); break;
+        case 'unit-notes-by-type': await openUnitNotesByType(st.subject, st.unit, st.noteType || 'general', true); break;
+        case 'unit-stack':         await openUnitView(st.subject, st.unit, true); break;
+        case 'note':               await openNote(st.subject, st.unit, st.chapter, st.noteType || 'general', true); break;
+        default:                   showSubjectsView(true);
+      }
+    } catch (err) {
+      console.warn('Notes popstate restore failed:', err);
+      showSubjectsView(true);
+    }
+  });
 }
 
 async function _loadNotesMeta() {
@@ -57,7 +122,7 @@ function _pushState(view, subject, unit, chapter, noteType) {
   if (subject)  p.set('subject',  subject);
   if (unit)     p.set('unit',     unit);
   if (chapter)  p.set('chapter',  chapter);
-  if (noteType && noteType !== 'general') p.set('noteType', noteType);
+  if (noteType) p.set('noteType', noteType); // always store, including 'general'
   history.pushState({ view, subject, unit, chapter, noteType }, '',
     'notes.html?' + p.toString());
 }
@@ -404,15 +469,19 @@ async function openUnitNotesByType(subject, unit, noteType, skipPush) {
     card.style.borderColor = colorBorder;
 
     if (note && note.content) {
-      let rendered = typeof marked !== 'undefined' ? marked.parse(note.content) : note.content.replace(/\n/g, '<br>');
+      let _ltxContent = (typeof latexToUnicode === 'function') ? latexToUnicode(note.content) : note.content;
+      let rendered = typeof marked !== 'undefined' ? marked.parse(_ltxContent) : _ltxContent.replace(/\n/g, '<br>');
       card.innerHTML = `
-        <div class="notes-unit-card-header">
+        <div class="notes-unit-card-header" style="cursor:pointer;">
           <span class="note-color-dot ${color}"></span>
-          <div class="notes-unit-card-title">${typeIcon} ${_esc(chapter.name)}</div>
+          <div class="notes-unit-card-title" style="flex:1;">${typeIcon} ${_esc(chapter.name)}</div>
+          <button class="notes-collapse-btn" onclick="_toggleUnitCard(this,event)" title="Collapse/Expand">▾</button>
         </div>
-        ${note.tags?.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${note.tags.map(t => `<span style="background:rgba(59,130,246,0.12);color:var(--blue);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;">${_esc(t)}</span>`).join("")}</div>` : ""}
-        <div class="notes-read-body" style="margin-top:6px;">${rendered}</div>
-        <div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Updated: ${_formatDate(note.updated_at)}</div>
+        <div class="notes-unit-card-body">
+          ${note.tags?.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${note.tags.map(t => `<span style="background:rgba(59,130,246,0.12);color:var(--blue);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;">${_esc(t)}</span>`).join("")}</div>` : ""}
+          <div class="notes-read-body" style="margin-top:6px;">${rendered}</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Updated: ${_formatDate(note.updated_at)}</div>
+        </div>
       `;
     } else {
       card.innerHTML = `
@@ -428,6 +497,16 @@ async function openUnitNotesByType(subject, unit, noteType, skipPush) {
     card.onclick = () => openNote(subject, unit, chapter.name, noteType);
     container.appendChild(card);
   });
+}
+
+function _toggleUnitCard(btn, event) {
+  event.stopPropagation();
+  let body = btn.closest('.notes-unit-card')?.querySelector('.notes-unit-card-body');
+  if (!body) return;
+  let collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  btn.textContent = collapsed ? '▾' : '▸';
+  btn.title = collapsed ? 'Collapse' : 'Expand';
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -506,11 +585,14 @@ function _enterReadMode() {
   if (n2cBtn) n2cBtn.style.display = (note && note.content && note.content.trim()) ? "" : "none";
 
   if (note && note.content) {
-    let readEl = document.getElementById("notes-read-body");
+    let readEl  = document.getElementById("notes-read-body");
+    let content = (typeof latexToUnicode === 'function')
+      ? latexToUnicode(note.content)
+      : note.content;
     if (typeof marked !== "undefined") {
-      readEl.innerHTML = marked.parse(note.content);
+      readEl.innerHTML = marked.parse(content);
     } else {
-      readEl.innerHTML = note.content.replace(/\\n/g, "<br>");
+      readEl.innerHTML = content.replace(/\\n/g, "<br>");
     }
   } else {
     document.getElementById("notes-read-body").style.display  = "none";
@@ -844,10 +926,34 @@ async function handleNoteImageUpload(inputEl) {
 document.addEventListener("paste", async function (e) {
   let editorActive = document.activeElement === document.getElementById("note-content-editor");
   if (!editorActive) return;
+
+  // ── Image paste ──────────────────────────────────────────────
   let file = getImageFromClipboard(e);
-  if (!file) return;
-  e.preventDefault();
-  await _uploadAndInsertImage(file);
+  if (file) {
+    e.preventDefault();
+    await _uploadAndInsertImage(file);
+    return;
+  }
+
+  // ── Text paste — strip LaTeX math into readable Unicode ──────
+  let plain = e.clipboardData?.getData('text/plain');
+  if (plain && typeof latexToUnicode === 'function') {
+    let converted = latexToUnicode(plain);
+    if (converted !== plain) {
+      // Only intercept when something actually changed
+      e.preventDefault();
+      let editor = document.getElementById('note-content-editor');
+      let start  = editor.selectionStart;
+      let end    = editor.selectionEnd;
+      let before = editor.value.substring(0, start);
+      let after  = editor.value.substring(end);
+      editor.value = before + converted + after;
+      // Restore cursor after inserted text
+      let pos = start + converted.length;
+      editor.setSelectionRange(pos, pos);
+      markDirty();
+    }
+  }
 });
 
 async function _uploadAndInsertImage(file) {
@@ -916,7 +1022,8 @@ function _renderSearchResults(results, query) {
 
   container.innerHTML = `<div style="font-size:11px;color:var(--text-dim);padding:4px 0 10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;">${results.length} result${results.length !== 1 ? "s" : ""}</div>` +
     results.map(n => {
-      let preview = (n.content || "").substring(0, 80).replace(/[#*`\n]/g, " ");
+      let _rawContent = (typeof latexToUnicode === 'function') ? latexToUnicode(n.content || '') : (n.content || '');
+      let preview = _rawContent.substring(0, 80).replace(/[#*`\n]/g, " ");
       return `<div class="notes-search-result-item"
         onclick="openNote('${_jesc(n.subject)}','${_jesc(n.unit)}','${_jesc(n.chapter)}')">
         <div class="notes-search-result-title">${_esc(n.chapter)}</div>
@@ -930,11 +1037,11 @@ function _renderSearchResults(results, query) {
 // UNIT VIEW (stacked note cards)
 // ─────────────────────────────────────────────────────────────────
 
-async function openUnitView(subject, unit) {
+async function openUnitView(subject, unit, skipPush) {
   if (_isDirty) {
     showConfirm('Unsaved Changes', 'You have unsaved changes. Discard them?', () => {
       _isDirty = false;
-      openUnitView(subject, unit);
+      openUnitView(subject, unit, skipPush);
     }, 'Discard');
     return;
   }
@@ -944,6 +1051,7 @@ async function openUnitView(subject, unit) {
   _currentChapter = null;
   _currentNote    = null;
   _navStack       = ["subjects","units","unit-stack"];
+  if (!skipPush) _pushState('unit-stack', subject, unit);
 
   _setBreadcrumb(["📝 Notes", subject, unit, "All Notes"], true);
   _showUnitView();
@@ -989,7 +1097,8 @@ async function openUnitView(subject, unit) {
     card.style.borderColor = colorBorder;
 
     if (note) {
-      let preview  = (note.content || "").substring(0, 120).replace(/[#*`_\[\]!\n]/g, " ").trim();
+      let _ltxPreviewContent = (typeof latexToUnicode === 'function') ? latexToUnicode(note.content || '') : (note.content || '');
+      let preview  = _ltxPreviewContent.substring(0, 120).replace(/[#*`_\[\]!\n]/g, " ").trim();
       let imgMatch = (note.content || "").match(/!\[.*?\]\((https?:\/\/[^\)]+)\)/);
       let imgUrl   = imgMatch ? imgMatch[1] : null;
 
@@ -1024,51 +1133,97 @@ async function openUnitView(subject, unit) {
 // PDF EXPORT
 // ─────────────────────────────────────────────────────────────────
 
-function exportUnitPdf() {
-  // Use browser print with print-only CSS
-  let container = document.getElementById("unit-cards-container");
-  if (!container) return;
-
+async function exportUnitPdf() {
   let win = window.open("", "_blank");
-  win.document.write(`
-    <!DOCTYPE html><html><head>
+  if (!win) { showToast('Allow pop-ups to export PDF.', 'warn'); return; }
+
+  // Determine if we're exporting a single type or all types
+  const TYPE_LABELS = { general: 'General Notes', mnemonic: 'Mnemonics', high_yield: 'High Yield', summary: 'Summary' };
+  const TYPE_ICONS  = { general: '📝', mnemonic: '🧠', high_yield: '⭐', summary: '📋' };
+  // _currentNoteType is set when coming from openUnitNotesByType; null/undefined = All Notes
+  let filterType = (typeof _currentNoteType === 'string' && _currentNoteType &&
+                    document.getElementById('unit-view-title')?.textContent?.includes('—') &&
+                    !document.getElementById('unit-view-title')?.textContent?.includes('All Notes'))
+    ? _currentNoteType : null;
+
+  let pageTitle = filterType
+    ? `${_currentSubject} › ${_currentUnit} — ${TYPE_LABELS[filterType] || filterType}`
+    : `${_currentSubject} › ${_currentUnit} — All Notes`;
+
+  win.document.write(`<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
-    <title>${_esc(_currentSubject)} — ${_esc(_currentUnit)} Notes</title>
+    <title>${_esc(pageTitle)}</title>
     <style>
-      body { font-family: -apple-system, sans-serif; color: #111; margin: 32px; }
-      h1   { font-size: 18px; margin-bottom: 20px; }
-      .note-card { border: 1px solid #ccc; border-radius: 10px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid; }
-      .note-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-      .note-body  { font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
-      img { max-width: 100%; border-radius: 6px; margin-top: 8px; }
-      @media print { body { margin: 16px; } }
+      body { font-family: -apple-system, Georgia, serif; color: #111; margin: 36px auto; max-width: 740px; line-height: 1.7; }
+      h1   { font-size: 20px; margin-bottom: 4px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+      .subtitle { font-size: 12px; color: #666; margin-bottom: 32px; }
+      .chapter-card { border: 1px solid #ccc; border-radius: 10px; padding: 18px 20px; margin-bottom: 20px; page-break-inside: avoid; }
+      .chapter-title { font-size: 16px; font-weight: 800; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+      .type-section { margin-top: 12px; }
+      .type-label { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+      .type-divider { border: none; border-top: 1px dashed #ddd; margin: 12px 0; }
+      h2 { font-size: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 3px; margin-top: 18px; }
+      h3 { font-size: 14px; margin-top: 14px; }
+      code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 91%; }
+      pre  { background: #f4f4f4; padding: 12px; border-radius: 6px; overflow: auto; }
+      blockquote { border-left: 3px solid #3b82f6; padding: 4px 14px; color: #444; margin: 12px 0; }
+      img  { max-width: 100%; border-radius: 6px; margin: 8px 0; }
+      ul, ol { padding-left: 20px; }
+      .no-note { color: #999; font-style: italic; font-size: 13px; }
+      @media print { body { margin: 18px; } }
     </style>
     </head><body>
-    <h1>${_esc(_currentSubject)} › ${_esc(_currentUnit)}</h1>
+    <h1>${_esc(pageTitle)}</h1>
+    <div class="subtitle">Exported ${new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})}</div>
   `);
 
-  // Get chapters in order
+  // Fetch real note content (not _notesMeta which has no content)
+  let { data: allNotes } = await fetchUnitNotes(_currentSubject, _currentUnit);
+  allNotes = allNotes || [];
+
   let subjectData = studyData.subjects[_currentSubject];
   let unitData    = subjectData?.units.find(u => u.name === _currentUnit);
   let chapters    = unitData?.chapters || [];
-  let noteMap     = {};
-  _notesMeta.filter(n => n.subject === _currentSubject && n.unit === _currentUnit)
-    .forEach(n => { noteMap[n.chapter] = n; });
+
+  const ALL_TYPES = ['general', 'mnemonic', 'high_yield', 'summary'];
 
   chapters.forEach(ch => {
-    let note = noteMap[ch.name];
-    win.document.write(`
-      <div class="note-card">
-        <div class="note-title">${_esc(ch.name)}</div>
-        <div class="note-body">${note?.content ? _esc(note.content) : "(No note)"}</div>
-      </div>
-    `);
+    let chapterNotes = allNotes.filter(n => n.chapter === ch.name);
+    if (filterType) {
+      chapterNotes = chapterNotes.filter(n => (n.note_type || 'general') === filterType);
+    }
+    // Skip chapters with no notes at all
+    if (chapterNotes.length === 0) return;
+
+    win.document.write(`<div class="chapter-card"><div class="chapter-title">${_esc(ch.name)}</div>`);
+
+    let typesToShow = filterType ? [filterType] : ALL_TYPES;
+    let shownCount = 0;
+    typesToShow.forEach(type => {
+      let note = chapterNotes.find(n => (n.note_type || 'general') === type);
+      if (!note || !note.content) return;
+      let ltxContent = (typeof latexToUnicode === 'function') ? latexToUnicode(note.content) : note.content;
+      let rendered   = (typeof marked !== 'undefined') ? marked.parse(ltxContent) : ltxContent.replace(/\n/g, '<br>');
+      if (shownCount > 0) win.document.write(`<hr class="type-divider">`);
+      if (!filterType) {
+        win.document.write(`<div class="type-section"><div class="type-label">${TYPE_ICONS[type] || ''} ${TYPE_LABELS[type] || type}</div>${rendered}</div>`);
+      } else {
+        win.document.write(`<div class="type-section">${rendered}</div>`);
+      }
+      shownCount++;
+    });
+
+    win.document.write(`</div>`);
   });
+
+  if (chapters.every(ch => allNotes.filter(n => n.chapter === ch.name && (!filterType || (n.note_type||'general') === filterType)).length === 0)) {
+    win.document.write(`<p class="no-note">No notes found for this unit.</p>`);
+  }
 
   win.document.write("</body></html>");
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 600);
+  setTimeout(() => win.print(), 700);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -1643,7 +1798,8 @@ function exportCurrentNotePdf() {
   }
   let content   = _currentNote?.content || document.getElementById('note-content-editor')?.value || '';
   let title     = _currentNote?.title   || document.getElementById('note-title-input')?.value     || _currentChapter;
-  let rendered  = typeof marked !== 'undefined' ? marked.parse(content) : content.replace(/\n/g, '<br>');
+  let ltxContent = (typeof latexToUnicode === 'function') ? latexToUnicode(content) : content;
+  let rendered  = typeof marked !== 'undefined' ? marked.parse(ltxContent) : ltxContent.replace(/\n/g, '<br>');
   let noteTypeLabel = { general: 'General Notes', mnemonic: 'Mnemonics', high_yield: 'High Yield', summary: 'Summary' }[_currentNoteType] || '';
 
   let win = window.open('', '_blank');
