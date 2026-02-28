@@ -169,22 +169,22 @@ async function searchNotes(query) {
   // Supabase textSearch uses the GIN index we created on tsvector
   const { data, error } = await supabaseClient
     .from('notes')
-    .select('id, subject, unit, chapter, title, color, tags, updated_at, content')
+    .select('id, subject, unit, chapter, note_type, title, color, tags, updated_at, content')
     .eq('user_id', userId)
     .textSearch('content', q, { type: 'websearch', config: 'english' });
 
   // Also do a simple ilike on title for partial matches
   const { data: titleData } = await supabaseClient
     .from('notes')
-    .select('id, subject, unit, chapter, title, color, tags, updated_at, content')
+    .select('id, subject, unit, chapter, note_type, title, color, tags, updated_at, content')
     .eq('user_id', userId)
     .ilike('title', `%${q}%`);
 
-  // Merge and deduplicate by subject+unit+chapter (keep latest updated)
+  // Merge and deduplicate by subject+unit+chapter+note_type (each type is a distinct note)
   const merged = [...(data ?? []), ...(titleData ?? [])];
   const seen   = new Map();
   merged.forEach(n => {
-    const key = `${n.subject}||${n.unit}||${n.chapter}`;
+    const key = `${n.subject}||${n.unit}||${n.chapter}||${n.note_type || 'general'}`;
     if (!seen.has(key) || new Date(n.updated_at) > new Date(seen.get(key).updated_at)) {
       seen.set(key, n);
     }

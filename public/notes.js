@@ -467,6 +467,11 @@ async function openUnitNotesByType(subject, unit, noteType, skipPush) {
     let card = document.createElement("div");
     card.className = "notes-unit-card";
     card.style.borderColor = colorBorder;
+    card.dataset.chapter = chapter.name;
+
+    let _collapseKey = `notes_collapse_${subject}__${unit}__${noteType}`;
+    let _collapsed   = _getCollapsedSet(_collapseKey);
+    let isCollapsed  = _collapsed.has(chapter.name);
 
     if (note && note.content) {
       let _ltxContent = (typeof latexToUnicode === 'function') ? latexToUnicode(note.content) : note.content;
@@ -475,9 +480,9 @@ async function openUnitNotesByType(subject, unit, noteType, skipPush) {
         <div class="notes-unit-card-header" style="cursor:pointer;">
           <span class="note-color-dot ${color}"></span>
           <div class="notes-unit-card-title" style="flex:1;">${typeIcon} ${_esc(chapter.name)}</div>
-          <button class="notes-collapse-btn" onclick="_toggleUnitCard(this,event)" title="Collapse/Expand">▾</button>
+          <button class="notes-collapse-btn" onclick="_toggleUnitCard(this,event)" title="${isCollapsed ? 'Expand' : 'Collapse'}">${isCollapsed ? '▸' : '▾'}</button>
         </div>
-        <div class="notes-unit-card-body">
+        <div class="notes-unit-card-body"${isCollapsed ? ' style="display:none;"' : ''}>
           ${note.tags?.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${note.tags.map(t => `<span style="background:rgba(59,130,246,0.12);color:var(--blue);border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;">${_esc(t)}</span>`).join("")}</div>` : ""}
           <div class="notes-read-body" style="margin-top:6px;">${rendered}</div>
           <div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Updated: ${_formatDate(note.updated_at)}</div>
@@ -499,14 +504,33 @@ async function openUnitNotesByType(subject, unit, noteType, skipPush) {
   });
 }
 
+function _getCollapsedSet(key) {
+  try {
+    let raw = localStorage.getItem(key);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch(e) { return new Set(); }
+}
+function _saveCollapsedSet(key, set) {
+  try { localStorage.setItem(key, JSON.stringify([...set])); } catch(e) {}
+}
+
 function _toggleUnitCard(btn, event) {
   event.stopPropagation();
-  let body = btn.closest('.notes-unit-card')?.querySelector('.notes-unit-card-body');
+  let card = btn.closest('.notes-unit-card');
+  let body = card?.querySelector('.notes-unit-card-body');
   if (!body) return;
   let collapsed = body.style.display === 'none';
   body.style.display = collapsed ? '' : 'none';
   btn.textContent = collapsed ? '▾' : '▸';
   btn.title = collapsed ? 'Collapse' : 'Expand';
+  // Persist state
+  let chapter = card.dataset.chapter;
+  if (chapter) {
+    let key = `notes_collapse_${_currentSubject}__${_currentUnit}__${_currentNoteType}`;
+    let set = _getCollapsedSet(key);
+    if (collapsed) set.delete(chapter); else set.add(chapter);
+    _saveCollapsedSet(key, set);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────

@@ -28,6 +28,14 @@
           <span style="font-size:11px;color:#334155;background:#1e293b;
             border-radius:4px;padding:2px 6px;cursor:pointer;" onclick="gsClose()">ESC</span>
         </div>
+        <style>
+          .gs-note-body h1,.gs-note-body h2,.gs-note-body h3,.gs-note-body h4{color:#cbd5e1;margin:6px 0 3px;font-size:12px;}
+          .gs-note-body p{margin:3px 0;}.gs-note-body ul,.gs-note-body ol{margin:3px 0;padding-left:16px;}
+          .gs-note-body li{margin:1px 0;}.gs-note-body code{background:rgba(255,255,255,0.08);border-radius:3px;padding:0 3px;font-size:11px;}
+          .gs-note-body strong{color:#e2e8f0;}.gs-note-body blockquote{border-left:2px solid #3b82f6;padding-left:8px;color:#64748b;margin:4px 0;}
+          .gs-note-body mark{background:rgba(251,191,36,0.3);color:#fbbf24;border-radius:2px;padding:0 2px;}
+          .gs-note-body img{max-width:100%;border-radius:4px;}
+        </style>
         <div id="gs-results" style="
           overflow-y:auto;padding:8px 0;
           max-height:calc(100vh - 220px);
@@ -155,13 +163,20 @@
         let cardResults = (cards || []).filter(c => {
           let hay = [c.front_text, c.back_text, c.subject, c.chapter].join(' ').toLowerCase();
           return hay.includes(ql);
-        }).slice(0, 6).map(c => ({
-          type: 'card',
-          icon: c.card_type === 'cloze' ? '📝' : '🃏',
-          title: (c.front_text || '').slice(0, 70) + ((c.front_text || '').length > 70 ? '…' : ''),
-          sub:   (c.subject || '') + (c.chapter ? ' › ' + c.chapter : ''),
-          url:   'browse.html?subject=' + encodeURIComponent(c.subject||'') + '&unit=' + encodeURIComponent(c.unit||'') + '&chapter=' + encodeURIComponent(c.chapter||'')
-        }));
+        }).slice(0, 6).map(c => {
+          // show back_text as snippet if match is there, otherwise front
+          let frontMatch = (c.front_text||'').toLowerCase().includes(ql);
+          let snippetSrc = frontMatch ? (c.back_text || '') : (c.front_text || '');
+          let snippet    = _contentSnippet(snippetSrc, ql, 100);
+          return {
+            type:    'card',
+            icon:    c.card_type === 'cloze' ? '📝' : '🃏',
+            title:   (c.front_text || '').slice(0, 80) + ((c.front_text||'').length > 80 ? '…' : ''),
+            sub:     (c.subject || '') + (c.chapter ? ' › ' + c.chapter : ''),
+            snippet,
+            url:     'browse.html?subject=' + encodeURIComponent(c.subject||'') + '&unit=' + encodeURIComponent(c.unit||'') + '&chapter=' + encodeURIComponent(c.chapter||'')
+          };
+        });
         combined = combined.concat(cardResults);
       } catch (_) {}
     }
@@ -170,13 +185,26 @@
     if (typeof searchNotes === 'function') {
       try {
         let { data: notes } = await searchNotes(q);
-        let noteResults = (notes || []).slice(0, 5).map(n => ({
-          type: 'note',
-          icon: '📝',
-          title: n.title || (n.chapter || 'Note'),
-          sub:   (n.subject || '') + (n.chapter ? ' › ' + n.chapter : ''),
-          url:   'notes.html?subject=' + encodeURIComponent(n.subject||'') + '&unit=' + encodeURIComponent(n.unit||'') + '&chapter=' + encodeURIComponent(n.chapter||'')
-        }));
+        let ql = q.toLowerCase();
+        const NOTE_TYPE_ICONS = { general: '📝', mnemonic: '🧠', high_yield: '⭐', summary: '📋' };
+        let noteResults = (notes || []).slice(0, 6).map(n => {
+          let noteType = n.note_type || 'general';
+          let icon = NOTE_TYPE_ICONS[noteType] || '📝';
+          let rawContent = n.content || '';
+          let ltxContent = (typeof latexToUnicode === 'function') ? latexToUnicode(rawContent) : rawContent;
+          let noteBody = _noteBodyChunk(ltxContent, ql);
+          return {
+            type:     'note',
+            icon,
+            title:    n.title || n.chapter || 'Note',
+            sub:      (n.subject || '') + (n.unit ? ' › ' + n.unit : '') + (n.chapter ? ' › ' + n.chapter : ''),
+            noteBody,
+            url:      'notes.html?view=note&subject=' + encodeURIComponent(n.subject||'') +
+                      '&unit='    + encodeURIComponent(n.unit||'') +
+                      '&chapter=' + encodeURIComponent(n.chapter||'') +
+                      '&noteType=' + encodeURIComponent(noteType)
+          };
+        });
         combined = combined.concat(noteResults);
       } catch (_) {}
     }
@@ -203,15 +231,23 @@
       if (!g.length) return;
       html += '<div style="padding:6px 12px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#475569;">' + label + '</div>';
       g.forEach(r => {
+        let snippetHtml = '';
+        if (r.noteBody) {
+          // Full rendered note body block
+          snippetHtml = '<div style="margin-top:7px;padding:8px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:7px;font-size:12px;color:#94a3b8;line-height:1.65;max-height:220px;overflow-y:auto;cursor:auto;" onclick="event.stopPropagation()" class="gs-note-body">' + r.noteBody + '</div>';
+        } else if (r.snippet) {
+          snippetHtml = '<div style="font-size:11px;color:#64748b;margin-top:3px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + r.snippet + '</div>';
+        }
         html += '<div data-result="1" data-url="' + r.url + '" ' +
           'onclick="gsNavigate(this)" ' +
           'style="display:flex;align-items:flex-start;gap:10px;padding:9px 16px;cursor:pointer;' +
           'border-bottom:1px solid #0f172a;transition:background 0.1s;"' +
-          ' onmouseenter="this.style.background=\'rgba(59,130,246,0.1)\'" onmouseleave="this.style.background=\'\'">' +
-          '<span style="font-size:16px;flex-shrink:0;line-height:1.4;">' + r.icon + '</span>' +
+          ' onmouseenter="this.style.background=\'rgba(59,130,246,0.1)\'" onmouseleave="this.style.background=\'\'\'">' +
+          '<span style="font-size:16px;flex-shrink:0;line-height:1.4;padding-top:2px;">' + r.icon + '</span>' +
           '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:13px;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _esc(r.title) + '</div>' +
           '<div style="font-size:11px;color:#475569;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _esc(r.sub) + '</div>' +
+          snippetHtml +
           '</div></div>';
       });
     });
@@ -231,6 +267,56 @@
 
   function _esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Extract a ~maxLen char plain-text snippet around the first match, with match bolded (for cards)
+  function _contentSnippet(text, ql, maxLen) {
+    if (!text || !ql) return '';
+    let plain = text.replace(/!\[.*?\]\(.*?\)/g,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1')
+      .replace(/#{1,6}\s/g,'').replace(/[*_`~>]/g,'').replace(/\n+/g,' ').trim();
+    let idx = plain.toLowerCase().indexOf(ql);
+    if (idx === -1) return _esc(plain.slice(0, maxLen)) + (plain.length > maxLen ? '…' : '');
+    let half  = Math.floor((maxLen - ql.length) / 2);
+    let start = Math.max(0, idx - half);
+    let end   = Math.min(plain.length, start + maxLen);
+    let pre   = (start > 0 ? '…' : '') + _esc(plain.slice(start, idx));
+    let match = '<mark style="background:rgba(251,191,36,0.25);color:#fbbf24;border-radius:2px;padding:0 2px;">' + _esc(plain.slice(idx, idx + ql.length)) + '</mark>';
+    let post  = _esc(plain.slice(idx + ql.length, end)) + (end < plain.length ? '…' : '');
+    return pre + match + post;
+  }
+
+  // Render ~1/5th of note body (markdown→HTML) centered on match, with match highlighted
+  function _noteBodyChunk(text, ql) {
+    if (!text) return '';
+    let chunkLen = Math.min(1200, Math.max(400, Math.ceil(text.length / 5)));
+    let idx = ql ? text.toLowerCase().indexOf(ql) : -1;
+    let start, end;
+    if (idx === -1) {
+      start = 0;
+      end   = Math.min(text.length, chunkLen);
+    } else {
+      let half = Math.floor(chunkLen / 2);
+      start = Math.max(0, idx - half);
+      end   = Math.min(text.length, start + chunkLen);
+      if (end - start < chunkLen) start = Math.max(0, end - chunkLen);
+    }
+    // Snap start forward to a newline so we don't cut mid-word/mid-heading
+    if (start > 0) {
+      let nl = text.indexOf('\n', start);
+      if (nl !== -1 && nl < start + 80) start = nl + 1;
+    }
+    let chunk = text.slice(start, end);
+    // Render markdown
+    let rendered = (typeof marked !== 'undefined') ? marked.parse(chunk) : chunk.replace(/\n/g, '<br>');
+    // Highlight query term in rendered HTML (only outside tags)
+    if (ql) {
+      let escaped = ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      rendered = rendered.replace(
+        new RegExp('(?![^<]*>)(' + escaped + ')', 'gi'),
+        '<mark style="background:rgba(251,191,36,0.3);color:#fbbf24;border-radius:2px;padding:0 2px;">$1</mark>'
+      );
+    }
+    return rendered;
   }
 
   // ── Boot ───────────────────────────────────────────────────────
